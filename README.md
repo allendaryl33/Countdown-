@@ -50,6 +50,20 @@ quoted price and shows what it's running over or under once the tech adds
 parts. Job types that normally want a waiver say so on the job record until one
 is signed.
 
+**Payment tracking** — each job records whether it's been invoiced and paid, how
+much came in, by what method, the invoice reference, and a link to the payment
+page. The dashboard shows **Ready to invoice** and **Awaiting payment** as running
+totals, and clicking either opens that list. Partial payments and deposits show
+the balance owing.
+
+This is deliberately manual. Stripe (or whoever you invoice through) stays the
+system of record and keeps doing what it's good at — this just indexes the
+outcome so the office can answer "what's outstanding?" without leaving the app.
+Nothing here talks to a payment processor, so there is no integration to break,
+no keys to rotate, and no API version to keep up with. Same idea on a signed
+waiver: there's a field to link an external copy if you ever send one through
+DocuSign.
+
 **Customers** — contact details, service address, site notes (gate codes, dogs,
 parking, billing quirks), full service history, and lifetime billed.
 
@@ -130,8 +144,10 @@ wrong with it. The things it does *not* do, in rough order of who'll ask first:
 - **Shared data.** Techs and office on the same board needs a backend.
 - **A mobile view** for the truck — logging arrival, photos, signature capture.
 - **Customer notifications** — "your tech is on the way" texts.
-- **Real invoicing** — estimates carry an agreed price and jobs total parts and
-  labor against it, but nothing here sends an invoice or takes payment.
+- **Real invoicing** — estimates carry an agreed price, jobs total against it,
+  and payment status is tracked by hand, but nothing here sends an invoice or
+  moves money. Wiring up Stripe would need a backend, since an API key can never
+  live in a browser-only app.
 - **Authentication** — anyone at the machine can see and change everything.
 - **Signature integrity** — signatures are stored as images alongside the frozen
   text, which is good practice, but there is no tamper-evident audit trail or

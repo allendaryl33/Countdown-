@@ -171,6 +171,13 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
   font-size:12.5px;line-height:1.6;color:#7a5a25;margin-bottom:16px;
 }
 .legal-note strong{color:#5e441a}
+.pay-unbilled{background:#eef2f6;color:#54687a}
+.pay-invoiced{background:var(--orange-soft);color:#b95b12}
+.pay-paid{background:var(--green-soft);color:var(--green)}
+.pay-partial{background:var(--orange-soft);color:#b95b12}
+.money-row{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-bottom:1px solid #f2f5f8}
+.money-row .mr-label{font-size:12.5px;color:var(--muted)}
+.money-row .mr-val{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:650}
 .tpl-card{border:1px solid var(--line);border-radius:8px;background:#fff;padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column}
 .tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
 .tpl-card .tc-cat{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--blue)}
@@ -420,6 +427,14 @@ const LINE_KINDS = [
 ];
 const KIND_UNIT = Object.fromEntries(LINE_KINDS.map(k => [k.id, k.unit]));
 
+const PAY_STATUSES = [
+  { id:"unbilled", label:"Not invoiced" },
+  { id:"invoiced", label:"Invoiced" },
+  { id:"paid",     label:"Paid" }
+];
+const PAY_LABEL = Object.fromEntries(PAY_STATUSES.map(p => [p.id, p.label]));
+const PAY_METHODS = ["", "Card", "ACH / bank transfer", "Check", "Cash", "Other"];
+
 const WAIVER_CATEGORIES = ["Drain & Sewer","Gas","Boiler & Hydronic","Plumbing","All trades"];
 
 /* Job types that normally want a signed acknowledgment before the tech starts.
@@ -505,6 +520,15 @@ function fmtPhone(p){
   if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
   return p || "";
 }
+function blankPayment(){
+  return { status:"unbilled", amountPaid:0, method:"", ref:"", url:"", invoicedAt:null, paidAt:null };
+}
+function payBadge(job){
+  const st = Store.payState(job);
+  const label = st === "partial" ? "Part paid" : PAY_LABEL[st];
+  return `<span class="badge pay-${st}"><span class="dot"></span>${esc(label)}</span>`;
+}
+
 function toast(msg, kind){
   const el = document.createElement("div");
   el.className = "toast" + (kind ? " " + kind : "");
@@ -540,6 +564,8 @@ const Store = {
           this.data.waiverTemplates = this.data.waiverTemplates || seedWaiverTemplates();
           this.data.signedWaivers   = this.data.signedWaivers   || [];
           this.data.counterWaiver   = this.data.counterWaiver   || 5000;
+          // Added with payment tracking — older jobs have no payment block.
+          this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
           return;
         }
       } catch(e){ console.warn("Saved data was unreadable; starting fresh.", e); }
@@ -625,6 +651,7 @@ const Store = {
       window: opts.window || "Anytime",
       techId: null, status: "new", completedAt: null,
       laborHours: 0, laborRate: this.data.settings.laborRate,
+      payment: blankPayment(),
       parts: (e.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
       estimateId: e.id, quotedTotal: total,
       log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no} · quoted ${money(total)}` }]
@@ -647,6 +674,42 @@ const Store = {
 
   deleteEstimate(id){
     this.data.estimates = this.data.estimates.filter(e => e.id !== id);
+    this.save();
+  },
+
+  /* Payment tracking. Deliberately manual: Stripe (or whoever) stays the system
+     of record, this just indexes it so the office can see what's outstanding. */
+  balance(job){
+    return Math.max(0, this.jobTotal(job) - (Number(job.payment && job.payment.amountPaid) || 0));
+  },
+  payState(job){
+    const pay = job.payment || blankPayment();
+    if (pay.status === "paid") return "paid";
+    if (pay.status === "invoiced" && (Number(pay.amountPaid) || 0) > 0) return "partial";
+    return pay.status;
+  },
+  /* Finished work nobody has billed yet. */
+  toInvoice(){
+    return this.data.jobs.filter(j => j.status === "complete" &&
+      (!j.payment || j.payment.status === "unbilled"));
+  },
+  /* Billed and still waiting on the money. */
+  outstanding(){
+    return this.data.jobs.filter(j => j.payment && j.payment.status === "invoiced");
+  },
+  setPayment(job, fields){
+    const prev = job.payment ? job.payment.status : "unbilled";
+    job.payment = Object.assign(blankPayment(), job.payment, fields);
+    if (job.payment.status === "invoiced" && !job.payment.invoicedAt) job.payment.invoicedAt = Date.now();
+    if (job.payment.status === "paid"){
+      if (!job.payment.paidAt) job.payment.paidAt = Date.now();
+      // Marking paid with no figure entered means paid in full.
+      if (!(Number(job.payment.amountPaid) > 0)) job.payment.amountPaid = this.jobTotal(job);
+    }
+    if (job.payment.status === "unbilled"){ job.payment.invoicedAt = null; job.payment.paidAt = null; }
+    if (prev !== job.payment.status){
+      this.addLog(job, `Payment: ${PAY_LABEL[prev]} → ${PAY_LABEL[job.payment.status]}`);
+    }
     this.save();
   },
 
@@ -805,7 +868,8 @@ function seedData(){
   let n = 1000;
   const mk = (o) => Object.assign({
     id: uid("job"), no: ++n, createdAt: Date.now(), log: [], parts: [],
-    laborHours: 0, laborRate: 145, status:"new", techId:null, completedAt:null
+    laborHours: 0, laborRate: 145, status:"new", techId:null, completedAt:null,
+    payment: blankPayment()
   }, o);
 
   const jobs = [
@@ -859,6 +923,14 @@ function seedData(){
          scheduledDate:addDays(t,-2), window:"2:00–4:00", techId:"tech_3", status:"complete",
          laborHours:1, completedAt: Date.now()-172800000 })
   ];
+
+  // Finished work in two different money states, so the outstanding view has
+  // something in it on first open.
+  const done = jobs.filter(j => j.status === "complete");
+  if (done[0]) done[0].payment = { status:"invoiced", amountPaid:0, method:"", ref:"INV-1042",
+    url:"", invoicedAt: Date.now()-86400000, paidAt:null };
+  if (done[1]) done[1].payment = { status:"paid", amountPaid:145, method:"Card", ref:"INV-1039",
+    url:"", invoicedAt: Date.now()-172800000, paidAt: Date.now()-120000000 };
 
   // One estimate already went to work, so the estimate → job link is visible.
   const scoped = jobs.find(j => j.type === "Sewer / Camera");
@@ -1310,7 +1382,7 @@ function isOpen(j){ return !["complete","cancelled"].includes(j.status); }
 function jobRows(list, opts){
   opts = opts || {};
   if (!list.length){
-    return `<tr><td colspan="7"><div class="empty"><div class="big">🗒</div>${esc(opts.emptyMsg||"No jobs match this view.")}</div></td></tr>`;
+    return `<tr><td colspan="8"><div class="empty"><div class="big">🗒</div>${esc(opts.emptyMsg||"No jobs match this view.")}</div></td></tr>`;
   }
   return list.map(j => `
     <tr class="clickable" data-job="${j.id}">
@@ -1326,12 +1398,13 @@ function jobRows(list, opts){
       </td>
       <td>${techPill(j.techId)}</td>
       <td>${statusBadge(j.status)}</td>
+      <td>${j.status==="complete"||Store.payState(j)!=="unbilled" ? payBadge(j) : ""}</td>
       <td class="num t-sub">${j.status==="complete" ? esc(money(Store.jobTotal(j))) : ""}</td>
     </tr>`).join("");
 }
 
 const JOB_TABLE_HEAD = `<thead><tr>
-  <th>Job</th><th>Customer</th><th>Type</th><th>Scheduled</th><th>Technician</th><th>Status</th><th class="num">Total</th>
+  <th>Job</th><th>Customer</th><th>Type</th><th>Scheduled</th><th>Technician</th><th>Status</th><th>Payment</th><th class="num">Total</th>
 </tr></thead>`;
 
 /* ============================================================
@@ -1454,6 +1527,28 @@ function viewDashboard(){
             </div>`).join("")}
         </div>
       </div>` : ""}
+
+      ${(() => {
+        const toBill = Store.toInvoice();
+        const owed = Store.outstanding();
+        const toBillSum = toBill.reduce((s,j) => s + Store.jobTotal(j), 0);
+        const owedSum = owed.reduce((s,j) => s + Store.balance(j), 0);
+        if (!toBill.length && !owed.length) return "";
+        return `
+        <div class="card" style="margin-top:16px">
+          <div class="card-head"><h3>Money</h3></div>
+          <div class="card-body" style="padding:8px 0">
+            <div class="money-row clickable" data-money="tobill" style="cursor:pointer">
+              <span class="mr-label">Ready to invoice</span>
+              <span class="mr-val">${esc(money(toBillSum))}<span class="t-sub" style="font-weight:400"> · ${toBill.length}</span></span>
+            </div>
+            <div class="money-row clickable" data-money="unpaid" style="cursor:pointer;border-bottom:0">
+              <span class="mr-label">Awaiting payment</span>
+              <span class="mr-val" style="color:${owedSum>0.005?"var(--orange)":"inherit"}">${esc(money(owedSum))}<span class="t-sub" style="font-weight:400"> · ${owed.length}</span></span>
+            </div>
+          </div>
+        </div>`;
+      })()}
 
       <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Quick actions</h3></div>
@@ -1767,6 +1862,8 @@ function viewJobs(){
   if (f.when === "today")    list = list.filter(j => j.scheduledDate === t);
   if (f.when === "upcoming") list = list.filter(j => isOpen(j));
   if (f.when === "past")     list = list.filter(j => !isOpen(j));
+  if (f.when === "tobill")   list = Store.toInvoice();
+  if (f.when === "unpaid")   list = Store.outstanding();
   if (f.status) list = list.filter(j => j.status === f.status);
   if (f.techId) list = list.filter(j => (j.techId||"") === (f.techId === "none" ? "" : f.techId));
   if (f.type)   list = list.filter(j => j.type === f.type);
@@ -1784,13 +1881,17 @@ function viewJobs(){
     <select id="f-when">
       ${opt("upcoming","Open jobs",f.when)}${opt("today","Today only",f.when)}
       ${opt("past","Closed jobs",f.when)}${opt("all","All jobs",f.when)}
+      ${opt("tobill","Ready to invoice",f.when)}${opt("unpaid","Awaiting payment",f.when)}
     </select>
     <select id="f-status">${opt("","Any status",f.status)}${STATUSES.map(s=>opt(s.id,s.label,f.status)).join("")}</select>
     <select id="f-tech">${opt("","Any technician",f.techId)}${opt("none","— Unassigned —",f.techId)}${Store.data.techs.map(x=>opt(x.id,x.name,f.techId)).join("")}</select>
     <select id="f-type">${opt("","Any job type",f.type)}${JOB_TYPES.map(x=>opt(x,x,f.type)).join("")}</select>
     <button class="btn sm ghost" data-action="clear-filters">Clear</button>
     <div style="flex:1"></div>
-    <span class="filter-note">${list.length} job${list.length===1?"":"s"}</span>
+    <span class="filter-note">${list.length} job${list.length===1?"":"s"}${
+      (f.when==="tobill"||f.when==="unpaid")
+        ? ` · ${esc(money(list.reduce((sum,j) => sum + (f.when==="unpaid"?Store.balance(j):Store.jobTotal(j)), 0)))}`
+        : ""}</span>
     <button class="btn sm accent" data-action="new-job">＋ New Job</button>
   </div>
   <div class="card"><table>${JOB_TABLE_HEAD}<tbody>${jobRows(list)}</tbody></table></div>`;
@@ -2076,7 +2177,7 @@ function openJob(id){
         <h2>${esc(j.type)} — ${esc(c ? c.name : "(deleted customer)")}</h2>
       </div>
       <div class="spacer"></div>
-      ${priorityBadge(j.priority)} ${statusBadge(j.status)}
+      ${priorityBadge(j.priority)} ${statusBadge(j.status)} ${payBadge(j)}
       <button class="x" data-close>×</button>
     </div>
     <div class="modal-body">
@@ -2157,6 +2258,53 @@ function openJob(id){
           })() : ""}
         </tbody>
       </table>
+
+      <div class="section-title" style="margin-top:22px">Payment</div>
+      ${(() => {
+        const pay = j.payment || blankPayment();
+        const total = Store.jobTotal(j);
+        const bal = Store.balance(j);
+        return `
+        <div class="card" style="margin-bottom:12px">
+          <div class="money-row"><span class="mr-label">Job total</span>
+            <span class="mr-val">${esc(money(total))}</span></div>
+          <div class="money-row"><span class="mr-label">Received</span>
+            <span class="mr-val">${esc(money(pay.amountPaid||0))}</span></div>
+          <div class="money-row" style="border-bottom:0">
+            <span class="mr-label">Balance</span>
+            <span class="mr-val" style="color:${bal>0.005?"var(--orange)":"var(--green)"}">${esc(money(bal))}</span></div>
+        </div>
+        <div class="row3">
+          <div class="field"><label>Status</label>
+            <select class="input" id="pay-status">
+              ${PAY_STATUSES.map(x=>`<option value="${x.id}"${x.id===pay.status?" selected":""}>${esc(x.label)}</option>`).join("")}
+            </select></div>
+          <div class="field"><label>Amount received</label>
+            <input class="input" id="pay-amount" type="number" min="0" step="0.01" value="${esc(pay.amountPaid||0)}">
+            <div class="hint">Leave at 0 and mark Paid to record payment in full.</div></div>
+          <div class="field"><label>Method</label>
+            <select class="input" id="pay-method">
+              ${PAY_METHODS.map(m=>`<option value="${esc(m)}"${m===pay.method?" selected":""}>${esc(m||"—")}</option>`).join("")}
+            </select></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Invoice reference</label>
+            <input class="input" id="pay-ref" value="${esc(pay.ref)}" placeholder="Stripe invoice no., check no."></div>
+          <div class="field"><label>Payment link</label>
+            <input class="input" id="pay-url" value="${esc(pay.url)}" placeholder="Paste the Stripe payment link">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn primary sm" data-save-pay="${j.id}">Save payment</button>
+          ${pay.url?`<a class="btn sm" href="${esc(pay.url)}" target="_blank" rel="noopener noreferrer">Open payment link ↗</a>`:""}
+          ${pay.invoicedAt?`<span class="t-sub">Invoiced ${esc(fmtStamp(pay.invoicedAt))}</span>`:""}
+          ${pay.paidAt?`<span class="t-sub">· Paid ${esc(fmtStamp(pay.paidAt))}</span>`:""}
+        </div>
+        <p class="t-sub" style="margin:10px 0 0">
+          Payments are taken in Stripe (or wherever you invoice) — this records the outcome so the
+          office can see what's outstanding without leaving the app.
+        </p>`;
+      })()}
 
       <div class="section-title" style="margin-top:22px">Waivers</div>
       ${(() => {
@@ -2318,7 +2466,7 @@ function saveJobFromForm(id){
       id: uid("job"), no: Store.nextJobNo(), createdAt: Date.now(),
       status: "new", techId: null, completedAt: null,
       laborHours: 0, laborRate: Store.data.settings.laborRate,
-      parts: [], log: [{ ts: Date.now(), text: "Job created" }]
+      parts: [], payment: blankPayment(), log: [{ ts: Date.now(), text: "Job created" }]
     }, fields);
     Store.data.jobs.push(j);
     if (techId) Store.assign(j, techId);
@@ -2992,6 +3140,15 @@ function openSignedWaiver(id){
       <div class="section-title">Acknowledged</div>
       <ul class="ack-list">${w.acks.map(a => `<li><span style="color:var(--green);font-weight:700">✓</span><label>${esc(a)}</label></li>`).join("")}</ul>
 
+      <div class="field" style="margin-top:18px">
+        <label>External copy (DocuSign envelope, scanned original)</label>
+        <div style="display:flex;gap:8px">
+          <input class="input" id="wv-ext" value="${esc(w.externalUrl||"")}" placeholder="Paste a link to the signed copy held elsewhere">
+          <button class="btn" data-save-ext="${w.id}">Save</button>
+          ${w.externalUrl?`<a class="btn" href="${esc(w.externalUrl)}" target="_blank" rel="noopener noreferrer">Open ↗</a>`:""}
+        </div>
+      </div>
+
       <div class="section-title">Signature</div>
       ${w.signature
         ? `<div style="border:1px solid var(--line);border-radius:7px;padding:10px;background:#fff">
@@ -3481,14 +3638,19 @@ function exportJson(){
 }
 
 function exportCsv(){
-  const head = ["Job","Date","Window","Status","Priority","Type","Customer","Phone","Address","Technician","Labor hrs","Total","Description"];
+  const head = ["Job","Date","Window","Status","Priority","Type","Customer","Phone","Address","Technician","Labor hrs","Total","Payment","Received","Balance","Method","Invoice ref","Description"];
   const rows = Store.data.jobs.map(j => {
     const c = Store.customer(j.customerId);
     return [
       j.no, j.scheduledDate||"", j.window||"", STATUS_LABEL[j.status]||j.status, j.priority, j.type,
       c?c.name:"", c?fmtPhone(c.phone):"", custAddr(j.customerId),
       Store.tech(j.techId)?.name || "", j.laborHours||0,
-      (Store.jobTotal(j)).toFixed(2), (j.description||"").replace(/\s+/g," ")
+      (Store.jobTotal(j)).toFixed(2),
+      PAY_LABEL[(j.payment||blankPayment()).status],
+      (Number((j.payment||{}).amountPaid)||0).toFixed(2),
+      Store.balance(j).toFixed(2),
+      (j.payment||{}).method || "", (j.payment||{}).ref || "",
+      (j.description||"").replace(/\s+/g," ")
     ];
   });
   const q = v => `"${String(v).replace(/"/g,'""')}"`;
@@ -3570,6 +3732,34 @@ document.addEventListener("click", e => {
     Store.save(); openJob(jid);
     return;
   }
+  const savePay = hit("[data-save-pay]");
+  if (savePay){
+    const j = Store.job(savePay.dataset.savePay);
+    Store.setPayment(j, {
+      status: $("#pay-status").value,
+      amountPaid: Number($("#pay-amount").value) || 0,
+      method: $("#pay-method").value,
+      ref: $("#pay-ref").value.trim(),
+      url: $("#pay-url").value.trim()
+    });
+    render(); openJob(j.id);
+    toast("Payment updated", "ok");
+    return;
+  }
+  const money$ = hit("[data-money]");
+  if (money$){
+    App.filters = { status:"", techId:"", type:"", when: money$.dataset.money };
+    return go("jobs");
+  }
+  const saveExt = hit("[data-save-ext]");
+  if (saveExt){
+    const w = Store.signedWaiver(saveExt.dataset.saveExt);
+    w.externalUrl = $("#wv-ext").value.trim();
+    Store.save(); openSignedWaiver(w.id);
+    toast(w.externalUrl ? "External copy linked" : "Link cleared", "ok");
+    return;
+  }
+
   const saveLabor = hit("[data-save-labor]");
   if (saveLabor){
     const j = Store.job(saveLabor.dataset.saveLabor);
