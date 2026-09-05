@@ -147,6 +147,20 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .p-High{background:var(--orange-soft);color:#b95b12}
 .p-Normal{background:#eef2f6;color:#54687a}
 .p-Low{background:#eef2f6;color:#8b98a4}
+.e-draft{background:#eef2f6;color:#54687a}
+.e-sent{background:var(--orange-soft);color:#b95b12}
+.e-approved{background:var(--green-soft);color:var(--green)}
+.e-declined{background:var(--red-soft);color:var(--red)}
+.money-lg{font-size:19px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.linkish{color:var(--blue);cursor:pointer;font-weight:600}
+.linkish:hover{text-decoration:underline}
+.pick-row{display:flex;gap:8px;align-items:flex-end;margin-bottom:10px}
+.pick-row .field{margin-bottom:0}
+.opt-card{border:1px solid var(--line);border-radius:7px;padding:12px 14px;margin-bottom:10px;cursor:pointer;background:#fff}
+.opt-card:hover{border-color:#c6d2de}
+.opt-card.on{border-color:var(--blue);background:var(--blue-soft);box-shadow:0 0 0 3px rgba(29,111,165,.1)}
+.opt-card .oc-t{font-weight:650;font-size:13.5px;display:flex;align-items:center;gap:7px}
+.opt-card .oc-s{font-size:12px;color:var(--muted);margin-top:2px}
 .chip{
   display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:5px;
   background:#eef2f6;color:#54687a;font-weight:550;
@@ -266,7 +280,14 @@ textarea.input{resize:vertical;min-height:76px}
   .ticket h1{font-size:20px}
   .ticket .tk-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px;display:flex}
   .ticket table{margin-top:10px}
-  .ticket .sig{margin-top:44px;border-top:1px solid #000;width:280px;padding-top:5px;font-size:12px}
+  .ticket .sig,.estdoc .sig{margin-top:44px;border-top:1px solid #000;width:280px;padding-top:5px;font-size:12px}
+  .estdoc{page-break-after:always;padding:28px 4px}
+  .estdoc h1{font-size:20px}
+  .estdoc .ed-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px;display:flex}
+  .estdoc table{margin-top:10px;width:100%;border-collapse:collapse}
+  .estdoc th,.estdoc td{border-bottom:1px solid #ccc;padding:6px 4px;font-size:12.5px}
+  .estdoc .tot{font-weight:700;font-size:15px;border-top:2px solid #000}
+  .estdoc .terms{margin-top:24px;font-size:11.5px;color:#333;line-height:1.6}
 }
 </style>
 </head>
@@ -300,6 +321,7 @@ textarea.input{resize:vertical;min-height:76px}
         <span class="si">🔍</span>
         <input id="global-search" type="search" placeholder="Search jobs, customers, phone…" autocomplete="off">
       </div>
+      <button class="btn" id="btn-new-estimate">＋ Estimate</button>
       <button class="btn accent" id="btn-new-job">＋ New Job</button>
     </header>
     <main class="content" id="view"></main>
@@ -348,6 +370,22 @@ const WINDOWS = [
   "8:00–10:00","10:00–12:00","12:00–2:00","2:00–4:00","4:00–6:00",
   "Anytime","ASAP / Emergency"
 ];
+
+const EST_STATUSES = [
+  { id:"draft",    label:"Draft" },
+  { id:"sent",     label:"Sent" },
+  { id:"approved", label:"Approved" },
+  { id:"declined", label:"Declined" }
+];
+const EST_STATUS_LABEL = Object.fromEntries(EST_STATUSES.map(s => [s.id, s.label]));
+
+// Line kinds price-book items and estimate lines are grouped by.
+const LINE_KINDS = [
+  { id:"labor", label:"Labor",     unit:"hr" },
+  { id:"part",  label:"Part",      unit:"ea" },
+  { id:"flat",  label:"Flat rate", unit:"job" }
+];
+const KIND_UNIT = Object.fromEntries(LINE_KINDS.map(k => [k.id, k.unit]));
 
 const TECH_COLORS = ["#1d6fa5","#e2701f","#1f8a4c","#5b4bb5","#c0392b","#0d7c8f","#8a6d1f","#b8407e"];
 
@@ -433,6 +471,10 @@ const Store = {
           this.data.techs     = this.data.techs     || [];
           this.data.customers = this.data.customers || [];
           this.data.counter   = this.data.counter   || 1000;
+          // Added with estimates — older saved data won't have these.
+          this.data.estimates  = this.data.estimates  || [];
+          this.data.priceBook  = this.data.priceBook  || seedPriceBook();
+          this.data.counterEst = this.data.counterEst || 2000;
           return;
         }
       } catch(e){ console.warn("Saved data was unreadable; starting fresh.", e); }
@@ -459,6 +501,11 @@ const Store = {
     return this.data.counter;
   },
 
+  nextEstNo(){
+    this.data.counterEst = (this.data.counterEst || 2000) + 1;
+    return this.data.counterEst;
+  },
+
   /* --- lookups --- */
   tech(id){ return this.data.techs.find(t => t.id === id) || null; },
   customer(id){ return this.data.customers.find(c => c.id === id) || null; },
@@ -467,6 +514,88 @@ const Store = {
   jobsForCustomer(cid){
     return this.data.jobs.filter(j => j.customerId === cid)
       .sort((a,b) => (b.scheduledDate||"").localeCompare(a.scheduledDate||""));
+  },
+  estimate(id){ return this.data.estimates.find(e => e.id === id) || null; },
+  estimatesForCustomer(cid){
+    return this.data.estimates.filter(e => e.customerId === cid)
+      .sort((a,b) => b.createdAt - a.createdAt);
+  },
+  openEstimates(){ return this.data.estimates.filter(e => e.status === "draft" || e.status === "sent"); },
+
+  /* An estimate is quoted either to a saved customer or to a loose contact
+     ("lead") that only becomes a customer if the work is approved. */
+  estContact(e){
+    const c = e.customerId ? this.customer(e.customerId) : null;
+    return c || e.lead || { name:"(no contact)", phone:"", email:"", address:"", city:"" };
+  },
+  estimateTotal(e){
+    return (e.items || []).reduce((s,i) => s + (Number(i.qty)||0) * (Number(i.price)||0), 0);
+  },
+
+  addEstLog(e, text){
+    e.log = e.log || [];
+    e.log.push({ ts: Date.now(), text });
+  },
+
+  setEstStatus(e, status){
+    if (e.status === status) return;
+    const from = EST_STATUS_LABEL[e.status] || e.status;
+    e.status = status;
+    if (status === "sent" && !e.sentAt) e.sentAt = Date.now();
+    if (status === "approved" || status === "declined") e.decidedAt = Date.now();
+    this.addEstLog(e, `Status: ${from} → ${EST_STATUS_LABEL[status]}`);
+    this.save();
+  },
+
+  /* Approved work becomes a real job. Line items and the agreed price carry
+     over, so the board shows what was quoted, not a blank job. */
+  convertEstimate(e, opts){
+    const total = this.estimateTotal(e);
+    const job = {
+      id: uid("job"), no: this.nextJobNo(), createdAt: Date.now(),
+      customerId: opts.customerId,
+      type: e.type, priority: opts.priority || "Normal",
+      description: e.description,
+      scheduledDate: opts.scheduledDate || null,
+      window: opts.window || "Anytime",
+      techId: null, status: "new", completedAt: null,
+      laborHours: 0, laborRate: this.data.settings.laborRate,
+      parts: (e.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
+      estimateId: e.id, quotedTotal: total,
+      log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no} · quoted ${money(total)}` }]
+    };
+    this.data.jobs.push(job);
+    if (opts.techId) this.assign(job, opts.techId);
+    else if (job.scheduledDate){ job.status = "scheduled"; this.addLog(job, "Scheduled, awaiting a technician"); }
+
+    e.customerId = opts.customerId;
+    e.lead = null;
+    e.jobId = job.id;
+    if (e.status !== "approved"){
+      e.status = "approved";
+      e.decidedAt = Date.now();
+    }
+    this.addEstLog(e, `Approved and converted to job #${job.no}`);
+    this.save();
+    return job;
+  },
+
+  deleteEstimate(id){
+    this.data.estimates = this.data.estimates.filter(e => e.id !== id);
+    this.save();
+  },
+
+  /* Price book — the reusable list estimates are built from. */
+  addPriceItem(item){
+    const it = Object.assign({ id: uid("pb") }, item);
+    this.data.priceBook.push(it);
+    this.save();
+    return it;
+  },
+  priceItem(id){ return this.data.priceBook.find(i => i.id === id) || null; },
+  deletePriceItem(id){
+    this.data.priceBook = this.data.priceBook.filter(i => i.id !== id);
+    this.save();
   },
 
   /* --- mutations --- */
@@ -588,12 +717,99 @@ function seedData(){
          laborHours:1, completedAt: Date.now()-172800000 })
   ];
 
+  // One estimate already went to work, so the estimate → job link is visible.
+  const scoped = jobs.find(j => j.type === "Sewer / Camera");
+  let en = 2000;
+  const estimates = [
+    { id:uid("est"), no:++en, customerId:"cus_2", lead:null,
+      type:"Boiler / Radiant Heat", status:"sent",
+      description:"Replace the failing building-B boiler. Existing unit is 22 years old and short-cycling; quote covers removal, new condensing unit, near-boiler piping, and a new expansion tank.",
+      validDays:30, createdAt:Date.now()-6*86400000, sentAt:Date.now()-5*86400000, decidedAt:null, jobId:null,
+      items:[
+        { desc:"Condensing boiler, 120k BTU — unit", qty:1, price:4650, kind:"part" },
+        { desc:"Near-boiler piping & fittings",       qty:1, price:780,  kind:"part" },
+        { desc:"Expansion tank, 4.4 gal",             qty:1, price:118,  kind:"part" },
+        { desc:"Install labor",                       qty:14, price:145, kind:"labor" },
+        { desc:"Haul-away of old unit",               qty:1, price:150,  kind:"flat" }
+      ],
+      log:[{ts:Date.now()-6*86400000,text:"Estimate created"},{ts:Date.now()-5*86400000,text:"Status: Draft → Sent"}] },
+
+    { id:uid("est"), no:++en, customerId:null,
+      lead:{ name:"Cassie Moreau", phone:"4355550567", email:"cassie.moreau@example.com", address:"215 Aspen Springs Dr", city:"Park City" },
+      type:"Water Heater", status:"draft",
+      description:"Called about a 12-year-old 50gal gas unit making noise. Wants a price on straight replacement before committing.",
+      validDays:30, createdAt:Date.now()-2*86400000, sentAt:null, decidedAt:null, jobId:null,
+      items:[
+        { desc:"Water heater, 50 gal gas — installed", qty:1, price:1850, kind:"flat" },
+        { desc:"Expansion tank, 2 gal",                qty:1, price:68,   kind:"part" },
+        { desc:"Haul-away of old unit",                qty:1, price:75,   kind:"flat" }
+      ],
+      log:[{ts:Date.now()-2*86400000,text:"Estimate created"}] },
+
+    { id:uid("est"), no:++en, customerId:"cus_3", lead:null,
+      type:"Sewer / Camera", status:"approved",
+      description:"Recurring backups twice this year. Scope the main line from the cleanout to the street and report on what's causing it.",
+      validDays:30, createdAt:Date.now()-4*86400000, sentAt:Date.now()-4*86400000, decidedAt:Date.now()-86400000,
+      jobId: scoped ? scoped.id : null,
+      items:[
+        { desc:"Sewer camera inspection", qty:1, price:295, kind:"flat" },
+        { desc:"Locate & mark line",      qty:1, price:85,  kind:"flat" }
+      ],
+      log:[{ts:Date.now()-4*86400000,text:"Estimate created"},{ts:Date.now()-4*86400000,text:"Status: Draft → Sent"},{ts:Date.now()-86400000,text:"Approved and converted to job #" + (scoped?scoped.no:"—")}] },
+
+    { id:uid("est"), no:++en, customerId:"cus_5", lead:null,
+      type:"Remodel Rough-in", status:"declined",
+      description:"Rough-in for a new guest bath in the lower level — three fixtures plus a relocated laundry box.",
+      validDays:30, createdAt:Date.now()-20*86400000, sentAt:Date.now()-19*86400000, decidedAt:Date.now()-9*86400000, jobId:null,
+      items:[
+        { desc:"Rough-in labor",              qty:22, price:145, kind:"labor" },
+        { desc:"PEX, 1/2in — per ft",         qty:180, price:1.35, kind:"part" },
+        { desc:"DWV fittings & pipe",         qty:1, price:640, kind:"part" },
+        { desc:"Laundry box relocation",      qty:1, price:310, kind:"flat" }
+      ],
+      log:[{ts:Date.now()-20*86400000,text:"Estimate created"},{ts:Date.now()-19*86400000,text:"Status: Draft → Sent"},{ts:Date.now()-9*86400000,text:"Status: Sent → Declined"},{ts:Date.now()-9*86400000,text:"Went with another bid — follow up in spring"}] }
+  ];
+
+  if (scoped){
+    scoped.estimateId = estimates[2].id;
+    scoped.quotedTotal = 380;
+  }
+
   return {
-    version: 1,
+    version: 2,
     counter: n,
+    counterEst: en,
     settings: { company:"Park City Plumbing", laborRate:145, phone:"(435) 555-0100" },
-    techs, customers, jobs
+    techs, customers, jobs, estimates,
+    priceBook: seedPriceBook()
   };
+}
+
+/* The reusable list estimates are built from. Everything here is editable
+   under Price Book — these are just a starting point. */
+function seedPriceBook(){
+  const mk = (desc, price, kind) => ({ id: uid("pb"), desc, price, kind });
+  return [
+    mk("Service call / diagnostic (first hour)", 145,  "flat"),
+    mk("Standard labor",                         145,  "labor"),
+    mk("After-hours / emergency labor",          218,  "labor"),
+    mk("Apprentice labor",                       85,   "labor"),
+    mk("Drain cleaning, main line to 100ft",     385,  "flat"),
+    mk("Drain cleaning, secondary fixture",      185,  "flat"),
+    mk("Sewer camera inspection",                295,  "flat"),
+    mk("Backflow test & certification",          165,  "flat"),
+    mk("Boiler annual service",                  240,  "flat"),
+    mk("Frozen pipe thaw & assess",              225,  "flat"),
+    mk("Toilet replacement, customer-supplied",  285,  "flat"),
+    mk("Water heater, 50 gal gas — installed",   1850, "flat"),
+    mk("Haul-away of old unit",                  75,   "flat"),
+    mk("Expansion tank, 2 gal",                  68,   "part"),
+    mk("1/4-turn angle stop, 1/2in",             18.40,"part"),
+    mk("Braided supply line, 20in",              11.75,"part"),
+    mk("Wax ring kit",                           9.50, "part"),
+    mk("Sharkbite coupling, 3/4in",              12.50,"part"),
+    mk("PEX, 1/2in — per ft",                    1.35, "part")
+  ];
 }
 
 /* ============================================================
@@ -604,16 +820,19 @@ const App = {
   date: todayStr(),
   search: "",
   filters: { status:"", techId:"", type:"", when:"upcoming" },
+  estFilter: "open",
   customerSort: "name"
 };
 
 const VIEWS = [
   { id:"dashboard", label:"Dashboard", icon:"▦",  crumb:"Dispatch" },
   { id:"schedule",  label:"Schedule",  icon:"🗓", crumb:"Dispatch" },
+  { id:"estimates", label:"Estimates", icon:"📋", crumb:"Work" },
   { id:"jobs",      label:"Jobs",      icon:"🧾", crumb:"Work" },
   { id:"customers", label:"Customers", icon:"👤", crumb:"Work" },
-  { id:"techs",     label:"Technicians", icon:"🔧", crumb:"Team" },
-  { id:"data",      label:"Data & Setup", icon:"⚙", crumb:"Team" }
+  { id:"techs",     label:"Technicians", icon:"🔧", crumb:"Setup" },
+  { id:"pricebook", label:"Price Book", icon:"🏷", crumb:"Setup" },
+  { id:"data",      label:"Data & Setup", icon:"⚙", crumb:"Setup" }
 ];
 
 function go(view){
@@ -633,6 +852,8 @@ function render(){
   else {
     switch(App.view){
       case "schedule":  host.innerHTML = viewSchedule();  break;
+      case "estimates": host.innerHTML = viewEstimates(); break;
+      case "pricebook": host.innerHTML = viewPriceBook(); break;
       case "jobs":      host.innerHTML = viewJobs();      break;
       case "customers": host.innerHTML = viewCustomers(); break;
       case "techs":     host.innerHTML = viewTechs();     break;
@@ -648,9 +869,11 @@ function renderNav(){
   const t = todayStr();
   const counts = {
     schedule: jobs.filter(j => j.scheduledDate === t && j.status !== "cancelled").length,
+    estimates: Store.openEstimates().length,
     jobs: jobs.filter(j => !["complete","cancelled"].includes(j.status)).length,
     customers: Store.data.customers.length,
-    techs: Store.activeTechs().length
+    techs: Store.activeTechs().length,
+    pricebook: Store.data.priceBook.length
   };
   const unassigned = jobs.filter(j => !j.techId && !["complete","cancelled"].includes(j.status)).length;
 
@@ -668,13 +891,16 @@ function renderNav(){
 
   $("#nav").innerHTML =
     group("Dispatch", ["dashboard","schedule"]) +
-    group("Work", ["jobs","customers"]) +
-    group("Team", ["techs","data"]);
+    group("Work", ["estimates","jobs","customers"]) +
+    group("Setup", ["techs","pricebook","data"]);
 }
 
 /* ---------- shared render bits ---------- */
 function statusBadge(s){
   return `<span class="badge s-${s}"><span class="dot"></span>${esc(STATUS_LABEL[s]||s)}</span>`;
+}
+function estBadge(st){
+  return `<span class="badge e-${st}"><span class="dot"></span>${esc(EST_STATUS_LABEL[st]||st)}</span>`;
 }
 function priorityBadge(p){
   if (p === "Normal" || !p) return `<span class="chip">${esc(p||"Normal")}</span>`;
@@ -733,6 +959,10 @@ function viewDashboard(){
   const billedWeek = doneWeek.reduce((s,j) => s + Store.jobTotal(j), 0);
   const inProgress = today.filter(j => j.status === "in_progress").length;
 
+  const estSent = Store.data.estimates.filter(e => e.status === "sent");
+  const estValue = estSent.reduce((sum,e) => sum + Store.estimateTotal(e), 0);
+  const estReady = Store.data.estimates.filter(e => e.status === "approved" && !e.jobId);
+
   const needs = [...emergencies.filter(j => !j.techId), ...unassigned.filter(j => j.priority !== "Emergency")]
     .filter((j,i,a) => a.indexOf(j) === i)
     .sort((a,b) => (a.scheduledDate||"9999").localeCompare(b.scheduledDate||"9999"))
@@ -757,6 +987,8 @@ function viewDashboard(){
       <div class="foot">${esc(money(billedWeek))} billed</div></div>
     <div class="stat"><div class="label">Open work</div><div class="value">${jobs.filter(isOpen).length}</div>
       <div class="foot">across ${Store.data.customers.length} customers</div></div>
+    <div class="stat"><div class="label">Estimates out</div><div class="value">${estSent.length}</div>
+      <div class="foot">${esc(money(estValue))} awaiting a yes</div></div>
   </div>
 
   <div class="two-col">
@@ -822,10 +1054,23 @@ function viewDashboard(){
         </div>
       </div>
 
+      ${estReady.length ? `
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Approved, not scheduled</h3></div>
+        <div class="card-body" style="padding:8px 0">
+          ${estReady.map(e => `
+            <div class="clickable" data-estimate="${e.id}" style="padding:10px 16px;border-bottom:1px solid #f2f5f8;cursor:pointer">
+              <div class="t-strong">${esc(Store.estContact(e).name)}</div>
+              <div class="t-sub">${esc(e.type)} · ${esc(money(Store.estimateTotal(e)))} — needs converting to a job</div>
+            </div>`).join("")}
+        </div>
+      </div>` : ""}
+
       <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Quick actions</h3></div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
           <button class="btn accent" data-action="new-job">＋ Take a new service call</button>
+          <button class="btn" data-action="new-estimate">＋ Write an estimate</button>
           <button class="btn" data-nav="schedule">Assign today's board</button>
           <button class="btn" data-action="print-day">🖨 Print today's dispatch tickets</button>
         </div>
@@ -932,6 +1177,113 @@ function wireBoard(){
       toast(techId ? `#${job.no} → ${Store.tech(techId).name}` : `#${job.no} moved to Unassigned`, "ok");
     });
   });
+}
+
+/* ============================================================
+   View: Estimates
+   ============================================================ */
+function viewEstimates(){
+  const f = App.estFilter;
+  const all = Store.data.estimates;
+  let list = all.slice();
+  if (f === "open")     list = list.filter(e => e.status === "draft" || e.status === "sent");
+  if (f === "approved") list = list.filter(e => e.status === "approved");
+  if (f === "declined") list = list.filter(e => e.status === "declined");
+  list.sort((a,b) => b.createdAt - a.createdAt);
+
+  const sent = all.filter(e => e.status === "sent");
+  const outValue = sent.reduce((s,e) => s + Store.estimateTotal(e), 0);
+  const won = all.filter(e => e.status === "approved");
+  const wonValue = won.reduce((s,e) => s + Store.estimateTotal(e), 0);
+  const decided = won.length + all.filter(e => e.status === "declined").length;
+  const winRate = decided ? Math.round(won.length / decided * 100) : null;
+
+  const tab = (id, label, n) =>
+    `<button class="btn sm ${f===id?"primary":""}" data-est-filter="${id}">${esc(label)}${n!=null?` (${n})`:""}</button>`;
+
+  return `
+  <div class="stat-row">
+    <div class="stat ${sent.length?"alert":""}"><div class="label">Out for decision</div>
+      <div class="value">${sent.length}</div><div class="foot">${esc(money(outValue))} pending</div></div>
+    <div class="stat"><div class="label">Drafts</div>
+      <div class="value">${all.filter(e=>e.status==="draft").length}</div><div class="foot">not sent yet</div></div>
+    <div class="stat"><div class="label">Approved</div>
+      <div class="value">${won.length}</div><div class="foot">${esc(money(wonValue))} won</div></div>
+    <div class="stat"><div class="label">Win rate</div>
+      <div class="value">${winRate==null?"—":winRate+"%"}</div>
+      <div class="foot">${decided} decided</div></div>
+  </div>
+
+  <div class="toolbar">
+    ${tab("open","Open", Store.openEstimates().length)}
+    ${tab("approved","Approved", won.length)}
+    ${tab("declined","Declined", all.filter(e=>e.status==="declined").length)}
+    ${tab("all","All", all.length)}
+    <div style="flex:1"></div>
+    <button class="btn sm accent" data-action="new-estimate">＋ New Estimate</button>
+  </div>
+
+  <div class="card"><table>
+    <thead><tr>
+      <th>Estimate</th><th>Customer</th><th>Work</th><th>Created</th><th>Status</th><th class="num">Amount</th><th></th>
+    </tr></thead>
+    <tbody>
+      ${list.length ? list.map(e => {
+        const c = Store.estContact(e);
+        const job = e.jobId ? Store.job(e.jobId) : null;
+        return `<tr class="clickable" data-estimate="${e.id}">
+          <td class="t-sub" style="font-variant-numeric:tabular-nums">EST-${e.no}</td>
+          <td>
+            <div class="t-strong">${esc(c.name)}</div>
+            <div class="t-sub">${esc([c.address,c.city].filter(Boolean).join(", "))}${e.customerId?"":" · not yet a customer"}</div>
+          </td>
+          <td><div>${esc(e.type)}</div><div class="t-sub">${(e.items||[]).length} line${(e.items||[]).length===1?"":"s"}</div></td>
+          <td class="t-sub">${esc(fmtStamp(e.createdAt).split(" · ")[0])}</td>
+          <td>${estBadge(e.status)}${job?`<div class="t-sub" style="margin-top:3px">→ job #${job.no}</div>`:""}</td>
+          <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
+          <td class="num" style="white-space:nowrap">
+            ${e.status==="sent"||e.status==="draft"
+              ? `<button class="btn sm primary" data-convert="${e.id}">Approve &amp; convert →</button>`
+              : (e.status==="approved" && !e.jobId
+                  ? `<button class="btn sm primary" data-convert="${e.id}">Convert to job →</button>` : "")}
+          </td>
+        </tr>`;
+      }).join("")
+      : `<tr><td colspan="7"><div class="empty"><div class="big">📋</div>No estimates in this view.</div></td></tr>`}
+    </tbody>
+  </table></div>`;
+}
+
+/* ============================================================
+   View: Price book
+   ============================================================ */
+function viewPriceBook(){
+  const book = Store.data.priceBook;
+  const groups = LINE_KINDS.map(k => ({ k, items: book.filter(i => i.kind === k.id) }));
+
+  return `
+  <div class="toolbar">
+    <span class="filter-note">${book.length} saved item${book.length===1?"":"s"} · used to build estimates without retyping</span>
+    <div style="flex:1"></div>
+    <button class="btn sm accent" data-action="new-price">＋ Add item</button>
+  </div>
+  ${groups.map(g => `
+    <div class="section-title">${esc(g.k.label)}</div>
+    <div class="card"><table>
+      <thead><tr><th>Description</th><th class="num" style="width:140px">Price</th><th style="width:110px"></th></tr></thead>
+      <tbody>
+        ${g.items.length ? g.items.map(i => `
+          <tr>
+            <td>${esc(i.desc)}</td>
+            <td class="num t-strong">${esc(money(i.price))} <span class="t-sub">/ ${esc(g.k.unit)}</span></td>
+            <td class="num" style="white-space:nowrap">
+              <button class="btn sm" data-edit-price="${i.id}">Edit</button>
+              <button class="btn sm ghost" data-del-price="${i.id}" title="Remove">×</button>
+            </td>
+          </tr>`).join("")
+        : `<tr><td colspan="3"><div class="empty" style="padding:20px">Nothing saved under ${esc(g.k.label.toLowerCase())} yet.</div></td></tr>`}
+      </tbody>
+    </table></div>`).join("")}`;
 }
 
 /* ============================================================
@@ -1094,6 +1446,7 @@ function viewData(){
             <button class="btn primary" data-action="export">⬇ Export JSON backup</button>
             <button class="btn" data-action="import">⬆ Import backup</button>
             <button class="btn" data-action="export-csv">⬇ Export jobs as CSV</button>
+            <button class="btn" data-action="export-est-csv">⬇ Export estimates as CSV</button>
           </div>
           <input type="file" id="import-file" accept="application/json,.json" style="display:none">
         </div>
@@ -1113,6 +1466,8 @@ function viewData(){
         <div class="card-head"><h3>What's stored</h3></div>
         <div class="card-body">
           <div class="dl"><dt>Jobs</dt><dd>${d.jobs.length}</dd></div>
+          <div class="dl"><dt>Estimates</dt><dd>${d.estimates.length} <span class="t-sub">· ${Store.openEstimates().length} open</span></dd></div>
+          <div class="dl"><dt>Price book items</dt><dd>${d.priceBook.length}</dd></div>
           <div class="dl"><dt>Customers</dt><dd>${d.customers.length}</dd></div>
           <div class="dl"><dt>Technicians</dt><dd>${d.techs.length}</dd></div>
           <div class="dl"><dt>Storage used</dt><dd>${esc(storageSize())}</dd></div>
@@ -1163,9 +1518,20 @@ function viewSearch(){
     (j.description||"").toLowerCase().includes(q)
   ).sort((a,b) => (b.scheduledDate||"").localeCompare(a.scheduledDate||""));
 
+  const estimates = Store.data.estimates.filter(e => {
+    const c = Store.estContact(e);
+    return custIds.has(e.customerId) ||
+      (c.name||"").toLowerCase().includes(q) ||
+      (c.address||"").toLowerCase().includes(q) ||
+      (digits.length >= 3 && String(c.phone||"").replace(/\D/g,"").includes(digits)) ||
+      String(e.no).includes(q.replace(/[^0-9]/g,"")) && q.replace(/[^0-9]/g,"") !== "" ||
+      (e.type||"").toLowerCase().includes(q) ||
+      (e.description||"").toLowerCase().includes(q);
+  }).sort((a,b) => b.createdAt - a.createdAt);
+
   return `
   <div class="toolbar">
-    <span class="filter-note">Results for “${esc(App.search)}” — ${jobs.length} job${jobs.length===1?"":"s"}, ${customers.length} customer${customers.length===1?"":"s"}</span>
+    <span class="filter-note">Results for “${esc(App.search)}” — ${jobs.length} job${jobs.length===1?"":"s"}, ${estimates.length} estimate${estimates.length===1?"":"s"}, ${customers.length} customer${customers.length===1?"":"s"}</span>
     <div style="flex:1"></div>
     <button class="btn sm ghost" data-action="clear-search">Clear search</button>
   </div>
@@ -1179,6 +1545,19 @@ function viewSearch(){
           <td>${esc(fmtPhone(c.phone))}</td>
           <td>${esc([c.address,c.city].filter(Boolean).join(", "))}</td>
           <td class="num">${Store.jobsForCustomer(c.id).length}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>` : ""}
+  ${estimates.length ? `
+    <div class="section-title">Estimates</div>
+    <div class="card"><table>
+      <thead><tr><th>Estimate</th><th>Customer</th><th>Work</th><th>Status</th><th class="num">Amount</th></tr></thead>
+      <tbody>${estimates.map(e => `
+        <tr class="clickable" data-estimate="${e.id}">
+          <td class="t-sub">EST-${e.no}</td>
+          <td class="t-strong">${esc(Store.estContact(e).name)}</td>
+          <td>${esc(e.type)}</td>
+          <td>${estBadge(e.status)}</td>
+          <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
         </tr>`).join("")}</tbody>
     </table></div>` : ""}
   <div class="section-title">Jobs</div>
@@ -1290,6 +1669,20 @@ function openJob(id){
             <td colspan="3" class="t-strong" style="text-align:right">Job total</td>
             <td class="num t-strong">${esc(money(partsTotal + laborTotal))}</td><td></td>
           </tr>
+          ${j.quotedTotal != null ? (() => {
+            const est = j.estimateId ? Store.estimate(j.estimateId) : null;
+            const diff = (partsTotal + laborTotal) - j.quotedTotal;
+            const over = diff > 0.005, under = diff < -0.005;
+            return `<tr>
+              <td colspan="3" class="t-sub" style="text-align:right">
+                Quoted${est?` on <span class="linkish" data-estimate="${est.id}">EST-${est.no}</span>`:""}</td>
+              <td class="num t-sub">${esc(money(j.quotedTotal))}</td><td></td>
+            </tr>
+            ${over || under ? `<tr>
+              <td colspan="3" class="t-sub" style="text-align:right">${over?"Over quote":"Under quote"}</td>
+              <td class="num t-strong" style="color:${over?"var(--red)":"var(--green)"}">${over?"+":"−"}${esc(money(Math.abs(diff)))}</td><td></td>
+            </tr>` : ""}`;
+          })() : ""}
         </tbody>
       </table>
 
@@ -1445,6 +1838,423 @@ function saveJobFromForm(id){
   }
 }
 
+/* ---------- Estimate detail ---------- */
+function openEstimate(id){
+  const e = Store.estimate(id);
+  if (!e) return;
+  const c = Store.estContact(e);
+  const total = Store.estimateTotal(e);
+  const job = e.jobId ? Store.job(e.jobId) : null;
+  const items = e.items || [];
+  const book = Store.data.priceBook;
+
+  const actions = [];
+  if (e.status === "draft")  actions.push(`<button class="btn sm" data-est-status="${e.id}:sent">Mark as Sent</button>`);
+  if (e.status === "draft" || e.status === "sent"){
+    actions.push(`<button class="btn primary sm" data-convert="${e.id}">Approve &amp; convert →</button>`);
+    actions.push(`<button class="btn sm" data-est-status="${e.id}:declined">Customer declined</button>`);
+  }
+  if (e.status === "approved" && !e.jobId)
+    actions.push(`<button class="btn primary sm" data-convert="${e.id}">Convert to job →</button>`);
+  if (e.status === "declined")
+    actions.push(`<button class="btn sm" data-est-status="${e.id}:sent">Reopen as Sent</button>`);
+
+  openModal(`
+    <div class="modal-head">
+      <div>
+        <div class="t-sub">Estimate EST-${e.no} · created ${esc(fmtStamp(e.createdAt))}</div>
+        <h2>${esc(e.type)} — ${esc(c.name)}</h2>
+      </div>
+      <div class="spacer"></div>
+      ${estBadge(e.status)}
+      <button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="status-steps" style="margin-bottom:16px">
+        ${actions.join("")}
+        <button class="btn sm" data-edit-estimate="${e.id}">Edit details</button>
+        <button class="btn sm" data-print-estimate="${e.id}">🖨 Print estimate</button>
+      </div>
+
+      ${job ? `<div class="opt-card on" style="cursor:default;margin-bottom:16px">
+        <div class="oc-t">✅ Converted to job #${job.no}</div>
+        <div class="oc-s">${esc(STATUS_LABEL[job.status])} · <span class="linkish" data-job="${job.id}">open the job →</span></div>
+      </div>` : ""}
+
+      <div class="detail-grid">
+        <div>
+          <div class="dl"><dt>${e.customerId ? "Customer" : "Quoted to"}</dt><dd>
+            <div class="t-strong">${esc(c.name)}</div>
+            <div>${esc(fmtPhone(c.phone))}</div>
+            ${c.email?`<div class="t-sub">${esc(c.email)}</div>`:""}
+            ${e.customerId
+              ? `<div class="t-sub linkish" data-customer="${e.customerId}" style="margin-top:3px">view customer →</div>`
+              : `<div class="t-sub" style="margin-top:3px">Not a customer yet — added on approval.</div>`}
+          </dd></div>
+        </div>
+        <div>
+          <div class="dl"><dt>Service address</dt><dd>${esc([c.address,c.city].filter(Boolean).join(", ")) || "—"}</dd></div>
+          <div class="dl"><dt>Valid for</dt><dd>${esc(e.validDays||30)} days${e.sentAt?` · sent ${esc(fmtStamp(e.sentAt))}`:""}</dd></div>
+        </div>
+      </div>
+
+      <div class="dl"><dt>Scope of work</dt><dd style="white-space:pre-wrap">${esc(e.description)||"—"}</dd></div>
+
+      <div class="section-title" style="margin-top:22px">Line items</div>
+      <table style="border:1px solid var(--line);border-radius:6px">
+        <thead><tr>
+          <th>Description</th><th style="width:90px">Kind</th><th class="num" style="width:70px">Qty</th>
+          <th class="num" style="width:110px">Unit price</th><th class="num" style="width:110px">Line</th><th style="width:40px"></th>
+        </tr></thead>
+        <tbody>
+          ${items.map((it,i) => `<tr>
+            <td>${esc(it.desc)}</td>
+            <td class="t-sub">${esc((LINE_KINDS.find(k=>k.id===it.kind)||{}).label || it.kind || "")}</td>
+            <td class="num">${esc(it.qty)}</td>
+            <td class="num">${esc(money(it.price))}</td>
+            <td class="num">${esc(money((Number(it.qty)||0)*(Number(it.price)||0)))}</td>
+            <td class="num"><button class="btn sm ghost" data-del-line="${e.id}:${i}" title="Remove">×</button></td>
+          </tr>`).join("")}
+          ${items.length ? "" : `<tr><td colspan="6"><div class="empty" style="padding:18px">No lines yet — pick from the price book below.</div></td></tr>`}
+          <tr>
+            <td colspan="6" style="background:#fafcfd;padding:12px">
+              <div class="field" style="margin-bottom:10px">
+                <label>Add from price book</label>
+                <select class="input" id="pb-pick">
+                  <option value="">— pick a saved item, or just type below —</option>
+                  ${LINE_KINDS.map(k => {
+                    const its = book.filter(b => b.kind === k.id);
+                    return its.length ? `<optgroup label="${esc(k.label)}">${its.map(b =>
+                      `<option value="${b.id}">${esc(b.desc)} — ${esc(money(b.price))}/${esc(k.unit)}</option>`).join("")}</optgroup>` : "";
+                  }).join("")}
+                </select>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 110px 80px 110px auto;gap:8px;align-items:end">
+                <div class="field" style="margin-bottom:0"><label>Description</label>
+                  <input class="input" id="line-desc" placeholder="What's being done or supplied"></div>
+                <div class="field" style="margin-bottom:0"><label>Kind</label>
+                  <select class="input" id="line-kind">${LINE_KINDS.map(k=>`<option value="${k.id}">${esc(k.label)}</option>`).join("")}</select></div>
+                <div class="field" style="margin-bottom:0"><label>Qty</label>
+                  <input class="input" id="line-qty" type="number" min="0" step="0.25" value="1"></div>
+                <div class="field" style="margin-bottom:0"><label>Unit price</label>
+                  <input class="input" id="line-price" type="number" min="0" step="0.01" placeholder="0.00"></div>
+                <button class="btn primary" data-add-line="${e.id}">Add line</button>
+              </div>
+              <label style="display:flex;gap:7px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--muted)">
+                <input type="checkbox" id="line-save"> Also save this to the price book for next time
+              </label>
+            </td>
+          </tr>
+          <tr>
+            <td colspan="4" class="t-strong" style="text-align:right">Estimate total</td>
+            <td class="num money-lg">${esc(money(total))}</td><td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title" style="margin-top:22px">Activity</div>
+      <div class="field" style="display:flex;gap:8px;margin-bottom:14px">
+        <input class="input" id="est-note" placeholder="Add a note — who you spoke to, what they're weighing, when to follow up…">
+        <button class="btn" data-est-note="${e.id}">Add note</button>
+      </div>
+      <ul class="timeline">
+        ${(e.log||[]).slice().reverse().map(l => `<li>${esc(l.text)}<span class="ts">${esc(fmtStamp(l.ts))}</span></li>`).join("")
+          || `<li class="t-sub">Estimate created.<span class="ts">${esc(fmtStamp(e.createdAt))}</span></li>`}
+      </ul>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger sm" data-del-estimate="${e.id}">Delete estimate</button>
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+    </div>`, { wide:true, noFocus:true });
+}
+
+/* ---------- Estimate create / edit ---------- */
+function openEstimateForm(id){
+  const e = id ? Store.estimate(id) : null;
+  const custs = Store.data.customers.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const lead = e && e.lead ? e.lead : null;
+  const sel = (v, cur) => v === cur ? " selected" : "";
+  const mode = e ? (e.customerId ? "existing" : "lead") : "lead";
+
+  openModal(`
+    <div class="modal-head">
+      <h2>${e ? "Edit estimate EST-" + e.no : "New estimate"}</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Who is this quote for?</label>
+        <div class="opt-card ${mode==="lead"?"on":""}" data-who="lead">
+          <div class="oc-t">📇 A new contact</div>
+          <div class="oc-s">Quote someone who isn't in your customer list. They're added as a customer only if they approve — so quoting ten people doesn't leave ten names behind.</div>
+        </div>
+        <div class="opt-card ${mode==="existing"?"on":""}" data-who="existing">
+          <div class="oc-t">👤 An existing customer</div>
+          <div class="oc-s">Pick from the ${custs.length} customer${custs.length===1?"":"s"} already on file.</div>
+        </div>
+        <input type="hidden" id="who" value="${mode}">
+      </div>
+
+      <div id="who-lead" style="display:${mode==="lead"?"block":"none"};border:1px solid var(--line);border-radius:7px;padding:14px;background:#fafcfd;margin-bottom:14px">
+        <div class="row2">
+          <div class="field"><label>Name *</label><input class="input" id="l-name" value="${esc(lead?lead.name:"")}" placeholder="Homeowner or business"></div>
+          <div class="field"><label>Phone</label><input class="input" id="l-phone" value="${esc(lead?fmtPhone(lead.phone):"")}"></div>
+        </div>
+        <div class="field"><label>Email</label><input class="input" id="l-email" value="${esc(lead?lead.email:"")}"></div>
+        <div class="row2">
+          <div class="field" style="margin-bottom:0"><label>Service address</label><input class="input" id="l-address" value="${esc(lead?lead.address:"")}"></div>
+          <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="l-city" value="${esc(lead?lead.city:"Park City")}"></div>
+        </div>
+      </div>
+
+      <div class="field" id="who-existing" style="display:${mode==="existing"?"block":"none"}">
+        <label>Customer *</label>
+        <select class="input" id="e-customer">
+          <option value="">— Select a customer —</option>
+          ${custs.map(c => `<option value="${c.id}"${sel(c.id, e?e.customerId:"")}>${esc(c.name)} — ${esc(c.address)}</option>`).join("")}
+        </select>
+      </div>
+      <div class="err" id="e-who" style="display:none">Say who this quote is for.</div>
+
+      <div class="row2">
+        <div class="field"><label>Work type</label>
+          <select class="input" id="e-type">${JOB_TYPES.map(t=>`<option${sel(t,e?e.type:"Water Heater")}>${esc(t)}</option>`).join("")}</select></div>
+        <div class="field"><label>Valid for (days)</label>
+          <input class="input" id="e-valid" type="number" min="1" step="1" value="${esc(e?(e.validDays||30):30)}"></div>
+      </div>
+
+      <div class="field">
+        <label>Scope of work *</label>
+        <textarea class="input" id="e-desc" placeholder="What the quote covers, in the words you'd put in front of the customer.">${esc(e?e.description:"")}</textarea>
+        <div class="err" id="e-edesc" style="display:none">Describe what you're quoting.</div>
+      </div>
+      ${e ? "" : `<p class="t-sub" style="margin:0">You'll add the priced lines next, from your price book.</p>`}
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-estimate="${e?e.id:""}">${e?"Save changes":"Create estimate"}</button>
+    </div>`);
+
+  $$("[data-who]").forEach(card => card.addEventListener("click", () => {
+    const w = card.dataset.who;
+    $("#who").value = w;
+    $$("[data-who]").forEach(x => x.classList.toggle("on", x.dataset.who === w));
+    $("#who-lead").style.display     = w === "lead" ? "block" : "none";
+    $("#who-existing").style.display = w === "existing" ? "block" : "none";
+  }));
+}
+
+function saveEstimateFromForm(id){
+  const who = $("#who").value;
+  const desc = $("#e-desc").value.trim();
+  let ok = true;
+  $("#e-who").style.display = "none";
+  $("#e-edesc").style.display = "none";
+
+  let customerId = null, lead = null;
+  if (who === "existing"){
+    customerId = $("#e-customer").value || null;
+    if (!customerId){ $("#e-who").style.display = "block"; ok = false; }
+  } else {
+    const name = $("#l-name").value.trim();
+    if (!name){ $("#l-name").classList.add("invalid"); $("#e-who").style.display = "block"; ok = false; }
+    else lead = {
+      name, phone: $("#l-phone").value.trim(), email: $("#l-email").value.trim(),
+      address: $("#l-address").value.trim(), city: $("#l-city").value.trim() || "Park City"
+    };
+  }
+  if (!desc){ $("#e-edesc").style.display = "block"; ok = false; }
+  if (!ok) return;
+
+  const fields = {
+    customerId, lead,
+    type: $("#e-type").value,
+    validDays: Number($("#e-valid").value) || 30,
+    description: desc
+  };
+
+  if (id){
+    const e = Store.estimate(id);
+    Object.assign(e, fields);
+    Store.addEstLog(e, "Estimate details updated");
+    Store.save(); closeModal(); render(); openEstimate(e.id);
+    toast("Estimate updated", "ok");
+  } else {
+    const e = Object.assign({
+      id: uid("est"), no: Store.nextEstNo(), createdAt: Date.now(),
+      status: "draft", items: [], sentAt: null, decidedAt: null, jobId: null,
+      log: [{ ts: Date.now(), text: "Estimate created" }]
+    }, fields);
+    Store.data.estimates.push(e);
+    Store.save(); closeModal(); render(); openEstimate(e.id);
+    toast(`Estimate EST-${e.no} created — add your lines`, "ok");
+  }
+}
+
+/* ---------- Approve & convert to a job ---------- */
+function openConvert(id){
+  const e = Store.estimate(id);
+  if (!e) return;
+  const c = Store.estContact(e);
+  const custs = Store.data.customers.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const total = Store.estimateTotal(e);
+  const linked = !!e.customerId;
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">EST-${e.no} · ${esc(money(total))}</div>
+        <h2>Convert to a scheduled job</h2></div>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      ${linked ? `
+        <div class="field">
+          <label>Customer</label>
+          <div class="opt-card on" style="cursor:default">
+            <div class="oc-t">👤 ${esc(c.name)}</div>
+            <div class="oc-s">${esc([c.address,c.city].filter(Boolean).join(", "))} · already on file</div>
+          </div>
+          <input type="hidden" id="cv-mode" value="existing">
+          <input type="hidden" id="cv-customer" value="${esc(e.customerId)}">
+        </div>`
+      : `
+        <div class="field">
+          <label>This quote went to a contact who isn't a customer yet</label>
+          <div class="opt-card on" data-cv="new">
+            <div class="oc-t">＋ Add ${esc(c.name)} as a customer</div>
+            <div class="oc-s">Creates the customer record from the quote's contact details. Edit them below if anything changed.</div>
+          </div>
+          <div class="opt-card" data-cv="existing">
+            <div class="oc-t">👤 Link to someone already on file</div>
+            <div class="oc-s">Use when they're in your list under a different name — a spouse, a property manager, an LLC.</div>
+          </div>
+          <input type="hidden" id="cv-mode" value="new">
+        </div>
+
+        <div id="cv-new" style="border:1px solid var(--line);border-radius:7px;padding:14px;background:#fafcfd;margin-bottom:14px">
+          <div class="row2">
+            <div class="field"><label>Name *</label><input class="input" id="cv-name" value="${esc(c.name)}"></div>
+            <div class="field"><label>Phone</label><input class="input" id="cv-phone" value="${esc(fmtPhone(c.phone))}"></div>
+          </div>
+          <div class="field"><label>Email</label><input class="input" id="cv-email" value="${esc(c.email||"")}"></div>
+          <div class="row2">
+            <div class="field" style="margin-bottom:0"><label>Service address</label><input class="input" id="cv-address" value="${esc(c.address||"")}"></div>
+            <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="cv-city" value="${esc(c.city||"Park City")}"></div>
+          </div>
+        </div>
+
+        <div class="field" id="cv-existing" style="display:none">
+          <label>Existing customer *</label>
+          <select class="input" id="cv-customer">
+            <option value="">— Select a customer —</option>
+            ${custs.map(x => `<option value="${x.id}">${esc(x.name)} — ${esc(x.address)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="err" id="cv-err" style="display:none">Pick or name the customer this job belongs to.</div>`}
+
+      <div class="section-title" style="margin-top:6px">Put it on the schedule</div>
+      <div class="row3">
+        <div class="field"><label>Date</label>
+          <input class="input" id="cv-date" type="date" value="">
+          <div class="hint">Leave blank to hold it unscheduled.</div></div>
+        <div class="field"><label>Arrival window</label>
+          <select class="input" id="cv-window">${WINDOWS.map(w=>`<option${w==="8:00–10:00"?" selected":""}>${esc(w)}</option>`).join("")}</select></div>
+        <div class="field"><label>Technician</label>
+          <select class="input" id="cv-tech"><option value="">— Unassigned —</option>
+            ${Store.activeTechs().map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select></div>
+      </div>
+      <div class="field" style="max-width:200px"><label>Priority</label>
+        <select class="input" id="cv-priority">${PRIORITIES.map(x=>`<option${x==="Normal"?" selected":""}>${esc(x)}</option>`).join("")}</select></div>
+
+      <div class="opt-card on" style="cursor:default">
+        <div class="oc-t">The job carries the quoted price</div>
+        <div class="oc-s">${(e.items||[]).length} line${(e.items||[]).length===1?"":"s"} copy across, and <strong>${esc(money(total))}</strong> is recorded as the agreed price. Anything the tech adds on site shows up as a difference against it.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-do-convert="${e.id}">Approve &amp; create the job</button>
+    </div>`, { wide:true, noFocus:true });
+
+  $$("[data-cv]").forEach(card => card.addEventListener("click", () => {
+    const m = card.dataset.cv;
+    $("#cv-mode").value = m;
+    $$("[data-cv]").forEach(x => x.classList.toggle("on", x.dataset.cv === m));
+    $("#cv-new").style.display      = m === "new" ? "block" : "none";
+    $("#cv-existing").style.display = m === "existing" ? "block" : "none";
+  }));
+}
+
+function doConvert(id){
+  const e = Store.estimate(id);
+  if (!e) return;
+  const mode = $("#cv-mode").value;
+  let customerId = null;
+
+  if (mode === "existing"){
+    customerId = ($("#cv-customer") || {}).value || null;
+    if (!customerId){ const err = $("#cv-err"); if (err) err.style.display = "block"; return; }
+  } else {
+    const name = $("#cv-name").value.trim();
+    if (!name){ $("#cv-name").classList.add("invalid"); return; }
+    const c = {
+      id: uid("cus"), name,
+      phone: $("#cv-phone").value.trim(), email: $("#cv-email").value.trim(),
+      address: $("#cv-address").value.trim(), city: $("#cv-city").value.trim() || "Park City",
+      notes: "", createdAt: Date.now()
+    };
+    Store.data.customers.push(c);
+    customerId = c.id;
+  }
+
+  const job = Store.convertEstimate(e, {
+    customerId,
+    scheduledDate: $("#cv-date").value || null,
+    window: $("#cv-window").value,
+    techId: $("#cv-tech").value || null,
+    priority: $("#cv-priority").value
+  });
+
+  closeModal(); render(); openJob(job.id);
+  toast(`EST-${e.no} approved → job #${job.no}`, "ok");
+}
+
+/* ---------- Price book item ---------- */
+function openPriceForm(id){
+  const i = id ? Store.priceItem(id) : null;
+  openModal(`
+    <div class="modal-head"><h2>${i?"Edit price book item":"Add to price book"}</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Description *</label>
+        <input class="input" id="pb-desc" value="${esc(i?i.desc:"")}" placeholder="Water heater, 50 gal gas — installed"></div>
+      <div class="row2">
+        <div class="field"><label>Kind</label>
+          <select class="input" id="pb-kind">${LINE_KINDS.map(k=>`<option value="${k.id}"${i&&i.kind===k.id?" selected":""}>${esc(k.label)} (per ${esc(k.unit)})</option>`).join("")}</select></div>
+        <div class="field"><label>Price *</label>
+          <input class="input" id="pb-price" type="number" min="0" step="0.01" value="${esc(i?i.price:"")}"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-price="${i?i.id:""}">${i?"Save":"Add item"}</button>
+    </div>`);
+}
+
+function savePriceFromForm(id){
+  const desc = $("#pb-desc").value.trim();
+  const price = Number($("#pb-price").value);
+  if (!desc){ $("#pb-desc").classList.add("invalid"); $("#pb-desc").focus(); return; }
+  if (!(price >= 0)){ $("#pb-price").classList.add("invalid"); $("#pb-price").focus(); return; }
+  const fields = { desc, price, kind: $("#pb-kind").value };
+  if (id){ Object.assign(Store.priceItem(id), fields); toast("Price updated", "ok"); }
+  else { Store.addPriceItem(fields); toast("Added to price book", "ok"); }
+  Store.save(); closeModal(); render();
+}
+
 /* ---------- Customer detail / form ---------- */
 function openCustomer(id){
   const c = Store.customer(id);
@@ -1471,11 +2281,28 @@ function openCustomer(id){
         </div>
       </div>
       ${c.notes?`<div class="dl"><dt>Site notes</dt><dd style="white-space:pre-wrap">${esc(c.notes)}</dd></div>`:""}
+      ${(() => {
+        const es = Store.estimatesForCustomer(c.id);
+        return es.length ? `
+          <div class="section-title">Estimates</div>
+          <div class="card"><table>
+            <thead><tr><th>Estimate</th><th>Work</th><th>Created</th><th>Status</th><th class="num">Amount</th></tr></thead>
+            <tbody>${es.map(e => `
+              <tr class="clickable" data-estimate="${e.id}">
+                <td class="t-sub">EST-${e.no}</td>
+                <td>${esc(e.type)}</td>
+                <td class="t-sub">${esc(fmtStamp(e.createdAt).split(" · ")[0])}</td>
+                <td>${estBadge(e.status)}</td>
+                <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
+              </tr>`).join("")}</tbody>
+          </table></div>` : "";
+      })()}
       <div class="section-title">Service history</div>
       <div class="card"><table>${JOB_TABLE_HEAD}<tbody>${jobRows(js,{emptyMsg:"No jobs on file yet."})}</tbody></table></div>
     </div>
     <div class="modal-foot">
-      <button class="btn sm accent" data-new-job-for="${c.id}">＋ New job for this customer</button>
+      <button class="btn sm accent" data-new-job-for="${c.id}">＋ New job</button>
+      <button class="btn sm" data-new-est-for="${c.id}">＋ New estimate</button>
       <div class="spacer"></div>
       <button class="btn" data-close>Close</button>
     </div>`, { wide:true, noFocus:true });
@@ -1489,7 +2316,7 @@ function openCustomerForm(id){
     <div class="modal-body">
       <div class="row2">
         <div class="field"><label>Name *</label><input class="input" id="c-name" value="${esc(c?c.name:"")}" placeholder="Homeowner or business"></div>
-        <div class="field"><label>Phone</label><input class="input" id="c-phone" value="${esc(c?c.phone:"")}"></div>
+        <div class="field"><label>Phone</label><input class="input" id="c-phone" value="${esc(c?fmtPhone(c.phone):"")}"></div>
       </div>
       <div class="field"><label>Email</label><input class="input" id="c-email" value="${esc(c?c.email:"")}"></div>
       <div class="row2">
@@ -1526,7 +2353,7 @@ function openTechForm(id){
     <div class="modal-body">
       <div class="row2">
         <div class="field"><label>Name *</label><input class="input" id="t-name" value="${esc(t?t.name:"")}"></div>
-        <div class="field"><label>Phone</label><input class="input" id="t-phone" value="${esc(t?t.phone:"")}"></div>
+        <div class="field"><label>Phone</label><input class="input" id="t-phone" value="${esc(t?fmtPhone(t.phone):"")}"></div>
       </div>
       <div class="field"><label>Level / specialty</label>
         <input class="input" id="t-skill" value="${esc(t?t.skill:"")}" placeholder="Journeyman · Drains"></div>
@@ -1595,6 +2422,91 @@ function ticketHtml(j){
       <div class="sig">Hours on site</div>
     </div>
   </div>`;
+}
+
+/* A customer-facing estimate — this is the page they get handed or emailed. */
+function estimateDocHtml(e){
+  const c = Store.estContact(e);
+  const st = Store.data.settings;
+  const total = Store.estimateTotal(e);
+  const valid = e.validDays || 30;
+  return `
+  <div class="estdoc">
+    <div class="ed-head">
+      <div style="flex:1">
+        <h1>${esc(st.company)}</h1>
+        <div>${esc(st.phone)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:22px;font-weight:700">Estimate</div>
+        <div>EST-${e.no}</div>
+        <div>${esc(fmtStamp(e.createdAt).split(" · ")[0])}</div>
+      </div>
+    </div>
+
+    <table style="margin-bottom:14px">
+      <tr><td style="width:130px"><strong>Prepared for</strong></td>
+          <td>${esc(c.name)}${c.phone?` · ${esc(fmtPhone(c.phone))}`:""}</td></tr>
+      <tr><td><strong>Address</strong></td><td>${esc([c.address,c.city].filter(Boolean).join(", "))}</td></tr>
+      <tr><td><strong>Work</strong></td><td>${esc(e.type)}</td></tr>
+      <tr><td valign="top"><strong>Scope</strong></td><td>${esc(e.description)}</td></tr>
+    </table>
+
+    <table>
+      <thead><tr>
+        <th style="text-align:left">Description</th>
+        <th style="text-align:right;width:60px">Qty</th>
+        <th style="text-align:right;width:90px">Unit</th>
+        <th style="text-align:right;width:100px">Amount</th>
+      </tr></thead>
+      <tbody>
+        ${(e.items||[]).map(i => `<tr>
+          <td>${esc(i.desc)}</td>
+          <td style="text-align:right">${esc(i.qty)}${esc(KIND_UNIT[i.kind]==="hr"?" hr":"")}</td>
+          <td style="text-align:right">${esc(money(i.price))}</td>
+          <td style="text-align:right">${esc(money((Number(i.qty)||0)*(Number(i.price)||0)))}</td>
+        </tr>`).join("")}
+        <tr class="tot">
+          <td colspan="3" style="text-align:right">Total</td>
+          <td style="text-align:right">${esc(money(total))}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="terms">
+      Valid for ${esc(valid)} days from the date above. Price covers the scope described;
+      anything found once work is open — concealed damage, code corrections, parts that turn out
+      to be obsolete — is quoted separately before we proceed. Permit and inspection fees are billed
+      at cost where they apply.
+    </div>
+    <div style="display:flex;gap:40px">
+      <div class="sig">Customer approval</div>
+      <div class="sig">Date</div>
+    </div>
+  </div>`;
+}
+
+function printEstimate(e){
+  if (!e) return;
+  $("#print-area").innerHTML = estimateDocHtml(e);
+  window.print();
+}
+
+function exportEstimatesCsv(){
+  const head = ["Estimate","Created","Status","Type","Customer","Phone","Address","Is customer","Lines","Amount","Converted job","Scope"];
+  const rows = Store.data.estimates.map(e => {
+    const c = Store.estContact(e);
+    const job = e.jobId ? Store.job(e.jobId) : null;
+    return [
+      "EST-" + e.no, fmtStamp(e.createdAt).split(" · ")[0], EST_STATUS_LABEL[e.status]||e.status,
+      e.type, c.name, fmtPhone(c.phone), [c.address,c.city].filter(Boolean).join(", "),
+      e.customerId ? "yes" : "no", (e.items||[]).length,
+      Store.estimateTotal(e).toFixed(2), job ? "#" + job.no : "",
+      (e.description||"").replace(/\s+/g," ")
+    ];
+  });
+  const q = v => `"${String(v).replace(/"/g,'""')}"`;
+  download(`pcp-estimates-${todayStr()}.csv`, [head, ...rows].map(r => r.map(q).join(",")).join("\r\n"), "text/csv");
 }
 
 function printJobs(list, label){
@@ -1733,10 +2645,93 @@ document.addEventListener("click", e => {
     return;
   }
 
+  /* --- estimate actions --- */
+  const estF = hit("[data-est-filter]");
+  if (estF){ App.estFilter = estF.dataset.estFilter; return render(); }
+
+  const conv = hit("[data-convert]");
+  if (conv) return openConvert(conv.dataset.convert);
+
+  const doConv = hit("[data-do-convert]");
+  if (doConv) return doConvert(doConv.dataset.doConvert);
+
+  const estSt = hit("[data-est-status]");
+  if (estSt){
+    const [eid, st] = estSt.dataset.estStatus.split(":");
+    const e = Store.estimate(eid);
+    Store.setEstStatus(e, st);
+    render(); openEstimate(eid);
+    toast(`EST-${e.no} → ${EST_STATUS_LABEL[st]}`, "ok");
+    return;
+  }
+  const editEst = hit("[data-edit-estimate]");
+  if (editEst) return openEstimateForm(editEst.dataset.editEstimate);
+
+  const printEst = hit("[data-print-estimate]");
+  if (printEst) return printEstimate(Store.estimate(printEst.dataset.printEstimate));
+
+  const addLine = hit("[data-add-line]");
+  if (addLine){
+    const e = Store.estimate(addLine.dataset.addLine);
+    const desc = $("#line-desc").value.trim();
+    if (!desc){ $("#line-desc").classList.add("invalid"); $("#line-desc").focus(); return; }
+    const item = {
+      desc,
+      kind:  $("#line-kind").value,
+      qty:   Number($("#line-qty").value) || 1,
+      price: Number($("#line-price").value) || 0
+    };
+    e.items = e.items || [];
+    e.items.push(item);
+    Store.addEstLog(e, `Line added: ${desc}`);
+    if ($("#line-save").checked){
+      Store.addPriceItem({ desc: item.desc, price: item.price, kind: item.kind });
+      toast("Added to the price book too", "ok");
+    }
+    Store.save(); openEstimate(e.id);
+    return;
+  }
+  const delLine = hit("[data-del-line]");
+  if (delLine){
+    const [eid, idx] = delLine.dataset.delLine.split(":");
+    const e = Store.estimate(eid);
+    e.items.splice(Number(idx), 1);
+    Store.save(); openEstimate(eid);
+    return;
+  }
+  const estNote = hit("[data-est-note]");
+  if (estNote){
+    const e = Store.estimate(estNote.dataset.estNote);
+    const text = $("#est-note").value.trim();
+    if (!text) return;
+    Store.addEstLog(e, text); Store.save(); openEstimate(e.id);
+    return;
+  }
+  const delEst = hit("[data-del-estimate]");
+  if (delEst){
+    const e = Store.estimate(delEst.dataset.delEstimate);
+    if (!confirm(`Delete estimate EST-${e.no} for ${Store.estContact(e).name}?\n\nThis cannot be undone.`)) return;
+    Store.deleteEstimate(e.id); closeModal(); render(); toast("Estimate deleted");
+    return;
+  }
+
+  /* --- price book --- */
+  const editPrice = hit("[data-edit-price]");
+  if (editPrice) return openPriceForm(editPrice.dataset.editPrice);
+  const delPrice = hit("[data-del-price]");
+  if (delPrice){
+    const i = Store.priceItem(delPrice.dataset.delPrice);
+    if (!confirm(`Remove "${i.desc}" from the price book?\n\nEstimates already using it keep their line.`)) return;
+    Store.deletePriceItem(i.id); render(); toast("Removed from price book");
+    return;
+  }
+
   /* --- form saves --- */
   const sj = hit("[data-save-job]");      if (sj) return saveJobFromForm(sj.dataset.saveJob || null);
   const sc = hit("[data-save-customer]"); if (sc) return saveCustomerFromForm(sc.dataset.saveCustomer || null);
   const st = hit("[data-save-tech]");     if (st) return saveTechFromForm(st.dataset.saveTech || null);
+  const se = hit("[data-save-estimate]"); if (se) return saveEstimateFromForm(se.dataset.saveEstimate || null);
+  const sp = hit("[data-save-price]");    if (sp) return savePriceFromForm(sp.dataset.savePrice || null);
 
   /* --- customers / techs --- */
   const ec = hit("[data-edit-customer]"); if (ec) return openCustomerForm(ec.dataset.editCustomer);
@@ -1749,6 +2744,14 @@ document.addEventListener("click", e => {
     t.active = !t.active; Store.save(); render();
     return;
   }
+  const nef = hit("[data-new-est-for]");
+  if (nef){
+    const cid = nef.dataset.newEstFor;
+    openEstimateForm(null);
+    $("[data-who='existing']").click();
+    $("#e-customer").value = cid;
+    return;
+  }
   const njf = hit("[data-new-job-for]");
   if (njf){
     const cid = njf.dataset.newJobFor;
@@ -1758,6 +2761,7 @@ document.addEventListener("click", e => {
   }
 
   /* --- generic row / card open (last) --- */
+  const estEl = hit("[data-estimate]"); if (estEl) return openEstimate(estEl.dataset.estimate);
   const jobEl = hit("[data-job]");   if (jobEl) return openJob(jobEl.dataset.job);
   const cusEl = hit("[data-customer]"); if (cusEl) return openCustomer(cusEl.dataset.customer);
 
@@ -1766,6 +2770,9 @@ document.addEventListener("click", e => {
   if (!act) return;
   switch(act.dataset.action){
     case "new-job":      openJobForm(null); break;
+    case "new-estimate": openEstimateForm(null); break;
+    case "new-price":    openPriceForm(null); break;
+    case "export-est-csv": exportEstimatesCsv(); break;
     case "new-customer": openCustomerForm(null); break;
     case "new-tech":     openTechForm(null); break;
     case "clear-filters":
@@ -1806,6 +2813,18 @@ document.addEventListener("change", e => {
   if (t.id === "f-tech")  { App.filters.techId = t.value; return render(); }
   if (t.id === "f-type")  { App.filters.type   = t.value; return render(); }
 
+  if (t.id === "pb-pick"){
+    const i = Store.priceItem(t.value);
+    if (i){
+      $("#line-desc").value  = i.desc;
+      $("#line-price").value = i.price;
+      $("#line-kind").value  = i.kind;
+      $("#line-qty").focus();
+      $("#line-qty").select();
+    }
+    return;
+  }
+
   if (t.dataset.setstatus){
     const j = Store.job(t.dataset.setstatus);
     Store.setStatus(j, t.value); render(); openJob(j.id);
@@ -1827,7 +2846,11 @@ document.addEventListener("keydown", e => {
     $("[data-add-part]", modal)?.click(); e.preventDefault(); return;
   }
   if (e.target.id === "note-text"){ $("[data-add-note]", modal)?.click(); e.preventDefault(); return; }
-  const save = $("[data-save-job],[data-save-customer],[data-save-tech]", modal);
+  if (e.target.id === "est-note"){ $("[data-est-note]", modal)?.click(); e.preventDefault(); return; }
+  if (["line-desc","line-qty","line-price"].includes(e.target.id)){
+    $("[data-add-line]", modal)?.click(); e.preventDefault(); return;
+  }
+  const save = $("[data-save-job],[data-save-customer],[data-save-tech],[data-save-estimate],[data-save-price]", modal);
   if (save && e.target.closest(".modal-body")){ save.click(); e.preventDefault(); }
 });
 
@@ -1839,6 +2862,7 @@ $("#global-search").addEventListener("input", e => {
 });
 
 $("#btn-new-job").addEventListener("click", () => openJobForm(null));
+$("#btn-new-estimate").addEventListener("click", () => openEstimateForm(null));
 
 /* ============================================================
    Boot
