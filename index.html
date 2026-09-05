@@ -1,0 +1,1852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Park City Plumbing — Service Dispatch</title>
+<style>
+:root{
+  --navy:#0f2740; --navy-2:#16354f;
+  --blue:#1d6fa5; --blue-soft:#e8f1f8;
+  --orange:#e2701f; --orange-soft:#fdf0e5;
+  --bg:#f3f6f9; --card:#fff; --line:#e1e7ed;
+  --text:#16222e; --muted:#6b7c8c; --muted-2:#93a2b0;
+  --green:#1f8a4c; --green-soft:#e6f4ec;
+  --red:#c0392b; --red-soft:#fbeae8;
+  --purple:#5b4bb5; --purple-soft:#eeecfa;
+  --radius:8px;
+  --shadow:0 1px 2px rgba(16,36,56,.06),0 2px 8px rgba(16,36,56,.05);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{margin:0;font-weight:650;letter-spacing:-.01em}
+button{font:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+a{color:var(--blue)}
+
+/* ---------- App shell ---------- */
+#app{display:flex;min-height:100vh}
+#sidebar{
+  width:216px;flex:0 0 216px;background:var(--navy);color:#cfdcea;
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;
+}
+.brand{padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.09)}
+.brand .mark{display:flex;align-items:center;gap:9px}
+.brand .logo{
+  width:30px;height:30px;border-radius:7px;background:var(--orange);
+  display:grid;place-items:center;font-size:16px;flex:0 0 30px;
+}
+.brand .name{color:#fff;font-weight:700;font-size:14px;line-height:1.15;letter-spacing:-.01em}
+.brand .sub{font-size:11px;color:#8ba2b9;letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
+nav{padding:10px 10px;flex:1;overflow:auto}
+nav .nav-label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#6f88a1;padding:12px 8px 6px}
+nav button{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  background:none;border:0;color:#cfdcea;padding:8px 10px;border-radius:6px;
+  font-size:13.5px;margin-bottom:1px;
+}
+nav button:hover{background:rgba(255,255,255,.07);color:#fff}
+nav button.active{background:var(--blue);color:#fff;font-weight:600}
+nav button .ico{width:18px;text-align:center;font-size:14px;opacity:.95}
+nav button .count{
+  margin-left:auto;background:rgba(255,255,255,.14);color:#fff;font-size:11px;
+  padding:1px 6px;border-radius:9px;font-weight:600;
+}
+nav button.active .count{background:rgba(255,255,255,.25)}
+nav button .count.alert{background:var(--orange);color:#fff}
+.sidebar-foot{padding:12px 16px;border-top:1px solid rgba(255,255,255,.09);font-size:11px;color:#728ca6}
+
+#main{flex:1;min-width:0;display:flex;flex-direction:column}
+header.topbar{
+  background:var(--card);border-bottom:1px solid var(--line);padding:14px 24px;
+  display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20;
+}
+.topbar h1{font-size:19px}
+.topbar .crumb{font-size:12px;color:var(--muted);margin-bottom:1px}
+.topbar .spacer{flex:1}
+.search{position:relative}
+.search input{
+  width:250px;padding:8px 10px 8px 30px;border:1px solid var(--line);border-radius:6px;
+  background:var(--bg);outline:none;
+}
+.search input:focus{border-color:var(--blue);background:#fff}
+.search .si{position:absolute;left:9px;top:7px;color:var(--muted-2);font-size:13px}
+main.content{padding:22px 24px 60px;flex:1}
+
+/* ---------- Buttons ---------- */
+.btn{
+  border:1px solid var(--line);background:#fff;color:var(--text);
+  padding:8px 13px;border-radius:6px;font-size:13.5px;font-weight:550;
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+}
+.btn:hover{background:#f7f9fb;border-color:#cfd8e1}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.primary:hover{background:#1a6193;border-color:#1a6193}
+.btn.accent{background:var(--orange);border-color:var(--orange);color:#fff}
+.btn.accent:hover{background:#cc6317;border-color:#cc6317}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{background:#eef2f6;color:var(--text)}
+.btn.danger{color:var(--red);border-color:#f0d4d0}
+.btn.danger:hover{background:var(--red-soft)}
+.btn.sm{padding:5px 9px;font-size:12.5px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+/* ---------- Cards / layout ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card-head{
+  padding:13px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;
+}
+.card-head h3{font-size:14.5px}
+.card-head .spacer{flex:1}
+.card-body{padding:16px}
+.grid{display:grid;gap:16px}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.stat .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.stat .value{font-size:27px;font-weight:700;margin-top:5px;letter-spacing:-.02em}
+.stat .foot{font-size:12px;color:var(--muted);margin-top:2px}
+.stat.alert{border-color:#f3c9a8;background:linear-gradient(180deg,#fff9f3,#fff)}
+.stat.alert .value{color:var(--orange)}
+.section-title{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650;margin:26px 0 10px}
+.two-col{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+@media(max-width:1080px){.two-col{grid-template-columns:1fr}}
+
+/* ---------- Tables ---------- */
+table{width:100%;border-collapse:collapse}
+th{
+  text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:650;padding:9px 12px;border-bottom:1px solid var(--line);background:#fafcfd;white-space:nowrap;
+}
+td{padding:11px 12px;border-bottom:1px solid #eef2f6;vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+tbody tr.clickable{cursor:pointer}
+tbody tr.clickable:hover{background:#f7fafc}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.t-strong{font-weight:600}
+.t-sub{font-size:12px;color:var(--muted)}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.empty .big{font-size:26px;opacity:.5;margin-bottom:8px}
+
+/* ---------- Badges ---------- */
+.badge{
+  display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+  padding:3px 8px;border-radius:20px;white-space:nowrap;line-height:1.4;
+}
+.badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-new{background:#eef2f6;color:#54687a}
+.s-scheduled{background:var(--blue-soft);color:#175f8e}
+.s-dispatched{background:var(--purple-soft);color:var(--purple)}
+.s-in_progress{background:var(--orange-soft);color:#b95b12}
+.s-complete{background:var(--green-soft);color:var(--green)}
+.s-cancelled{background:#f0f2f4;color:#8b98a4;text-decoration:line-through}
+.p-Emergency{background:var(--red-soft);color:var(--red)}
+.p-High{background:var(--orange-soft);color:#b95b12}
+.p-Normal{background:#eef2f6;color:#54687a}
+.p-Low{background:#eef2f6;color:#8b98a4}
+.chip{
+  display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:5px;
+  background:#eef2f6;color:#54687a;font-weight:550;
+}
+.tech-pill{display:inline-flex;align-items:center;gap:6px;font-size:13px}
+.avatar{
+  width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  font-size:10px;font-weight:700;color:#fff;flex:0 0 22px;letter-spacing:.02em;
+}
+.avatar.lg{width:32px;height:32px;font-size:12px;flex-basis:32px}
+
+/* ---------- Forms ---------- */
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:600;color:#455565;margin-bottom:5px}
+.field .hint{font-size:11.5px;color:var(--muted-2);margin-top:4px}
+.input,select.input,textarea.input{
+  width:100%;padding:8px 10px;border:1px solid #d5dde5;border-radius:6px;background:#fff;outline:none;
+}
+.input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(29,111,165,.12)}
+textarea.input{resize:vertical;min-height:76px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:640px){.row2,.row3{grid-template-columns:1fr}}
+.err{color:var(--red);font-size:12px;margin-top:4px}
+.input.invalid{border-color:var(--red)}
+
+/* ---------- Modal ---------- */
+.overlay{
+  position:fixed;inset:0;background:rgba(15,39,64,.45);z-index:100;
+  display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;
+}
+.modal{
+  background:#fff;border-radius:10px;width:100%;max-width:720px;
+  box-shadow:0 12px 40px rgba(10,25,45,.28);animation:pop .13s ease-out;
+}
+.modal.wide{max-width:860px}
+@keyframes pop{from{transform:translateY(-8px);opacity:.6}to{transform:none;opacity:1}}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.modal-head h2{font-size:16.5px}
+.modal-head .spacer{flex:1}
+.modal-body{padding:20px;max-height:calc(100vh - 220px);overflow:auto}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:9px;align-items:center;background:#fafcfd;border-radius:0 0 10px 10px}
+.modal-foot .spacer{flex:1}
+.x{border:0;background:none;font-size:20px;color:var(--muted);line-height:1;padding:2px 6px;border-radius:5px}
+.x:hover{background:#eef2f6;color:var(--text)}
+
+/* ---------- Schedule board ---------- */
+.board-bar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.datenav{display:flex;align-items:center;gap:2px;background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px}
+.datenav button{border:0;background:none;padding:6px 10px;border-radius:4px;color:var(--muted)}
+.datenav button:hover{background:#eef2f6;color:var(--text)}
+.datenav .today-lbl{padding:0 10px;font-weight:650;font-size:13.5px;min-width:180px;text-align:center}
+.board{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
+.col{
+  flex:1 1 238px;min-width:238px;max-width:340px;background:#eaeff4;border-radius:8px;padding:8px;min-height:180px;
+  border:1px solid #dfe6ed;
+}
+.col.unassigned{background:var(--orange-soft);border-color:#f2d7bd}
+.col.dragover{outline:2px dashed var(--blue);outline-offset:-3px;background:#e2eef7}
+.col-head{display:flex;align-items:center;gap:8px;padding:4px 4px 10px}
+.col-head .nm{font-weight:650;font-size:13px}
+.col-head .ct{margin-left:auto;font-size:11px;color:var(--muted);font-weight:600;background:#fff;padding:1px 7px;border-radius:10px}
+.jobcard{
+  background:#fff;border:1px solid var(--line);border-radius:7px;padding:10px;margin-bottom:8px;
+  cursor:grab;box-shadow:0 1px 2px rgba(16,36,56,.07);border-left:3px solid var(--blue);
+}
+.jobcard:hover{border-color:#c6d2de;box-shadow:0 2px 8px rgba(16,36,56,.1)}
+.jobcard:active{cursor:grabbing}
+.jobcard.dragging{opacity:.4}
+.jobcard.pri-Emergency{border-left-color:var(--red)}
+.jobcard.pri-High{border-left-color:var(--orange)}
+.jobcard.pri-Low{border-left-color:#c3ccd6}
+.jobcard.st-complete{border-left-color:var(--green);background:#fbfdfc}
+.jobcard.st-cancelled{opacity:.55}
+.jobcard .jc-top{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.jobcard .jc-win{font-size:11px;font-weight:700;color:var(--navy);letter-spacing:.01em}
+.jobcard .jc-id{margin-left:auto;font-size:10.5px;color:var(--muted-2);font-variant-numeric:tabular-nums}
+.jobcard .jc-cust{font-weight:600;font-size:13px;margin-bottom:2px}
+.jobcard .jc-meta{font-size:11.5px;color:var(--muted);line-height:1.45}
+.jobcard .jc-foot{display:flex;align-items:center;gap:6px;margin-top:7px}
+.col-empty{text-align:center;color:var(--muted-2);font-size:12px;padding:18px 6px}
+
+/* ---------- Detail drawer ---------- */
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}
+.dl{margin-bottom:13px}
+.dl dt{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:650;margin-bottom:3px}
+.dl dd{margin:0;font-size:13.5px}
+.timeline{list-style:none;margin:0;padding:0}
+.timeline li{padding:9px 0 9px 18px;border-left:2px solid var(--line);position:relative;font-size:13px}
+.timeline li:before{
+  content:"";position:absolute;left:-5px;top:14px;width:8px;height:8px;border-radius:50%;
+  background:var(--blue);border:2px solid #fff;
+}
+.timeline li .ts{font-size:11.5px;color:var(--muted-2);display:block;margin-top:1px}
+.status-steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.toolbar select,.toolbar input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.filter-note{font-size:12.5px;color:var(--muted)}
+
+/* ---------- Toast ---------- */
+#toasts{position:fixed;bottom:20px;right:20px;z-index:300;display:flex;flex-direction:column;gap:8px}
+.toast{
+  background:var(--navy);color:#fff;padding:11px 15px;border-radius:7px;font-size:13.5px;
+  box-shadow:0 6px 20px rgba(10,25,45,.3);animation:slidein .18s ease-out;max-width:330px;
+}
+.toast.ok{background:var(--green)}
+.toast.err{background:var(--red)}
+@keyframes slidein{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
+
+/* ---------- Print (dispatch ticket) ---------- */
+#print-area{display:none}
+@media print{
+  #app,.overlay,#toasts,.no-print{display:none!important}
+  body{background:#fff}
+  #print-area{display:block;padding:0}
+  .ticket{page-break-after:always;padding:28px 4px}
+  .ticket h1{font-size:20px}
+  .ticket .tk-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px;display:flex}
+  .ticket table{margin-top:10px}
+  .ticket .sig{margin-top:44px;border-top:1px solid #000;width:280px;padding-top:5px;font-size:12px}
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="mark">
+        <div class="logo">🔧</div>
+        <div>
+          <div class="name">Park City<br>Plumbing</div>
+        </div>
+      </div>
+      <div class="sub">Service Dispatch</div>
+    </div>
+    <nav id="nav"></nav>
+    <div class="sidebar-foot">
+      <div id="storage-note">Local prototype · data on this device</div>
+    </div>
+  </aside>
+
+  <div id="main">
+    <header class="topbar">
+      <div>
+        <div class="crumb" id="crumb">Dispatch</div>
+        <h1 id="page-title">Dashboard</h1>
+      </div>
+      <div class="spacer"></div>
+      <div class="search">
+        <span class="si">🔍</span>
+        <input id="global-search" type="search" placeholder="Search jobs, customers, phone…" autocomplete="off">
+      </div>
+      <button class="btn accent" id="btn-new-job">＋ New Job</button>
+    </header>
+    <main class="content" id="view"></main>
+  </div>
+</div>
+
+<div id="modal-root"></div>
+<div id="toasts"></div>
+<div id="print-area"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Park City Plumbing — Service Dispatch
+   Single-file prototype. All data persists to localStorage.
+   ============================================================ */
+
+/* ---------- Constants ---------- */
+const STORAGE_KEY = "pcp.dispatch.v1";
+
+const STATUSES = [
+  { id:"new",         label:"Unscheduled" },
+  { id:"scheduled",   label:"Scheduled" },
+  { id:"dispatched",  label:"Dispatched" },
+  { id:"in_progress", label:"In Progress" },
+  { id:"complete",    label:"Complete" },
+  { id:"cancelled",   label:"Cancelled" }
+];
+const STATUS_LABEL = Object.fromEntries(STATUSES.map(s => [s.id, s.label]));
+
+// The normal forward path a job walks. Cancel is always available separately.
+const NEXT_STATUS = {
+  new:"scheduled", scheduled:"dispatched", dispatched:"in_progress",
+  in_progress:"complete", complete:null, cancelled:null
+};
+
+const JOB_TYPES = [
+  "Drain Cleaning","Leak Repair","Water Heater","Boiler / Radiant Heat",
+  "Frozen Pipe","Fixture Install","Sewer / Camera","Remodel Rough-in",
+  "Backflow Test","Gas Line","Well / Pump","Other"
+];
+
+const PRIORITIES = ["Emergency","High","Normal","Low"];
+
+const WINDOWS = [
+  "8:00–10:00","10:00–12:00","12:00–2:00","2:00–4:00","4:00–6:00",
+  "Anytime","ASAP / Emergency"
+];
+
+const TECH_COLORS = ["#1d6fa5","#e2701f","#1f8a4c","#5b4bb5","#c0392b","#0d7c8f","#8a6d1f","#b8407e"];
+
+/* ---------- Tiny helpers ---------- */
+const $  = (sel, root=document) => root.querySelector(sel);
+const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+function esc(v){
+  return String(v == null ? "" : v)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function uid(prefix){
+  return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+}
+function todayStr(){
+  const d = new Date();
+  return ymd(d);
+}
+function ymd(d){
+  return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+}
+function parseYmd(s){
+  const [y,m,d] = String(s || "").split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m-1, d);
+}
+function addDays(s, n){
+  const d = parseYmd(s) || new Date();
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+}
+function fmtDate(s, opts){
+  const d = parseYmd(s);
+  if (!d) return "—";
+  return d.toLocaleDateString(undefined, opts || { weekday:"short", month:"short", day:"numeric" });
+}
+function fmtDateLong(s){
+  return fmtDate(s, { weekday:"long", month:"long", day:"numeric", year:"numeric" });
+}
+function fmtStamp(ts){
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return d.toLocaleDateString(undefined,{month:"short",day:"numeric"}) + " · " +
+         d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
+}
+function money(n){
+  const v = Number(n) || 0;
+  return "$" + v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function initials(name){
+  return String(name||"?").trim().split(/\s+/).slice(0,2).map(w => w[0]).join("").toUpperCase();
+}
+function fmtPhone(p){
+  const d = String(p||"").replace(/\D/g,"");
+  if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+  return p || "";
+}
+function toast(msg, kind){
+  const el = document.createElement("div");
+  el.className = "toast" + (kind ? " " + kind : "");
+  el.textContent = msg;
+  $("#toasts").appendChild(el);
+  setTimeout(() => el.remove(), 2800);
+}
+
+/* ============================================================
+   Store — everything lives in one object, saved to localStorage
+   ============================================================ */
+const Store = {
+  data: null,
+
+  load(){
+    let raw = null;
+    try { raw = localStorage.getItem(STORAGE_KEY); }
+    catch(e){ console.warn("localStorage unavailable, running in-memory", e); }
+
+    if (raw){
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.jobs)){
+          this.data = parsed;
+          this.data.techs     = this.data.techs     || [];
+          this.data.customers = this.data.customers || [];
+          this.data.counter   = this.data.counter   || 1000;
+          return;
+        }
+      } catch(e){ console.warn("Saved data was unreadable; starting fresh.", e); }
+    }
+    this.data = seedData();
+    this.save();
+  },
+
+  save(){
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data)); }
+    catch(e){
+      // Quota or private-mode failure: keep working in memory, but say so once.
+      if (!this._warned){ this._warned = true; toast("Couldn't save to this browser — changes are in memory only.", "err"); }
+    }
+  },
+
+  reset(){
+    this.data = seedData();
+    this.save();
+  },
+
+  nextJobNo(){
+    this.data.counter = (this.data.counter || 1000) + 1;
+    return this.data.counter;
+  },
+
+  /* --- lookups --- */
+  tech(id){ return this.data.techs.find(t => t.id === id) || null; },
+  customer(id){ return this.data.customers.find(c => c.id === id) || null; },
+  job(id){ return this.data.jobs.find(j => j.id === id) || null; },
+  activeTechs(){ return this.data.techs.filter(t => t.active); },
+  jobsForCustomer(cid){
+    return this.data.jobs.filter(j => j.customerId === cid)
+      .sort((a,b) => (b.scheduledDate||"").localeCompare(a.scheduledDate||""));
+  },
+
+  /* --- mutations --- */
+  addLog(job, text){
+    job.log = job.log || [];
+    job.log.push({ ts: Date.now(), text });
+  },
+
+  setStatus(job, status){
+    if (job.status === status) return;
+    const from = STATUS_LABEL[job.status] || job.status;
+    job.status = status;
+    if (status === "complete" && !job.completedAt) job.completedAt = Date.now();
+    if (status !== "complete") job.completedAt = null;
+    this.addLog(job, `Status: ${from} → ${STATUS_LABEL[status]}`);
+    this.save();
+  },
+
+  assign(job, techId){
+    const prev = job.techId;
+    if (prev === techId) return;
+    job.techId = techId || null;
+    const name = techId ? (this.tech(techId)?.name || "Unknown") : null;
+    this.addLog(job, name ? `Assigned to ${name}` : "Unassigned");
+    // Assigning a brand-new job is what actually schedules it.
+    if (techId && job.status === "new" && job.scheduledDate) job.status = "scheduled";
+    if (!techId && job.status === "scheduled") job.status = "new";
+    this.save();
+  },
+
+  deleteJob(id){
+    this.data.jobs = this.data.jobs.filter(j => j.id !== id);
+    this.save();
+  },
+
+  jobTotal(job){
+    const parts = (job.parts || []).reduce((s,p) => s + (Number(p.qty)||0) * (Number(p.price)||0), 0);
+    const labor = (Number(job.laborHours)||0) * (Number(job.laborRate)|| this.data.settings.laborRate || 0);
+    return parts + labor;
+  }
+};
+
+/* ============================================================
+   Seed data — a realistic day so the app is usable immediately
+   ============================================================ */
+function seedData(){
+  const t = todayStr();
+  const techs = [
+    { id:"tech_1", name:"Marco Reyes",   phone:"4355550118", color:TECH_COLORS[0], skill:"Journeyman · Boilers", active:true },
+    { id:"tech_2", name:"Dana Whitfield",phone:"4355550142", color:TECH_COLORS[1], skill:"Master · Service",     active:true },
+    { id:"tech_3", name:"Sam Okafor",    phone:"4355550176", color:TECH_COLORS[2], skill:"Journeyman · Drains",  active:true },
+    { id:"tech_4", name:"Ellie Nakamura",phone:"4355550193", color:TECH_COLORS[3], skill:"Apprentice",           active:true }
+  ];
+
+  const customers = [
+    { id:"cus_1", name:"Holly Bennett",       phone:"4355550231", email:"holly.bennett@example.com", address:"482 Deer Valley Dr",   city:"Park City",  notes:"Gate code 4417. Dog is friendly." },
+    { id:"cus_2", name:"Silver Ridge HOA",    phone:"4355550288", email:"manager@silverridge.example", address:"1200 Silver Ridge Rd", city:"Park City", notes:"Bill to HOA management. Unit access via front office." },
+    { id:"cus_3", name:"Tomás Delgado",       phone:"4355550304", email:"tdelgado@example.com",      address:"77 Empire Ave",        city:"Park City",  notes:"" },
+    { id:"cus_4", name:"Wasatch Brew Co.",    phone:"4355550377", email:"ops@wasatchbrew.example",   address:"1650 Bonanza Dr",      city:"Park City",  notes:"Commercial. Prefers before 10am — kitchen opens at 11." },
+    { id:"cus_5", name:"Priya Raghunathan",   phone:"4355550412", email:"priya.r@example.com",       address:"3390 Pinebrook Blvd",  city:"Park City",  notes:"Second home — often vacant, call before rolling." },
+    { id:"cus_6", name:"Grant Halvorsen",     phone:"4355550455", email:"",                          address:"908 Woodside Ave",     city:"Park City",  notes:"" }
+  ];
+
+  let n = 1000;
+  const mk = (o) => Object.assign({
+    id: uid("job"), no: ++n, createdAt: Date.now(), log: [], parts: [],
+    laborHours: 0, laborRate: 145, status:"new", techId:null, completedAt:null
+  }, o);
+
+  const jobs = [
+    mk({ customerId:"cus_4", type:"Drain Cleaning", priority:"Emergency",
+         description:"Kitchen floor drain backing up under the three-comp sink. Standing water — they cannot open at 11 without it clear.",
+         scheduledDate:t, window:"ASAP / Emergency", techId:"tech_3", status:"in_progress",
+         log:[{ts:Date.now()-5400000,text:"Job created from phone call"},{ts:Date.now()-4200000,text:"Assigned to Sam Okafor"},{ts:Date.now()-1800000,text:"Status: Dispatched → In Progress"}] }),
+
+    mk({ customerId:"cus_1", type:"Water Heater", priority:"High",
+         description:"No hot water since last night. 50gal gas unit, ~11 years old. Pilot will not stay lit.",
+         scheduledDate:t, window:"10:00–12:00", techId:"tech_2", status:"dispatched",
+         log:[{ts:Date.now()-7200000,text:"Job created"},{ts:Date.now()-6000000,text:"Assigned to Dana Whitfield"}] }),
+
+    mk({ customerId:"cus_2", type:"Boiler / Radiant Heat", priority:"Normal",
+         description:"Annual boiler service, buildings A and B. Two units, check expansion tanks and bleed zones.",
+         scheduledDate:t, window:"12:00–2:00", techId:"tech_1", status:"scheduled" }),
+
+    mk({ customerId:"cus_6", type:"Leak Repair", priority:"High",
+         description:"Water staining on the ceiling below the upstairs bathroom. Suspect shower pan or supply line.",
+         scheduledDate:t, window:"2:00–4:00", techId:"tech_2", status:"scheduled" }),
+
+    mk({ customerId:"cus_3", type:"Fixture Install", priority:"Normal",
+         description:"Install customer-supplied Kohler widespread lavatory faucet in the hall bath.",
+         scheduledDate:t, window:"Anytime", techId:"tech_4", status:"scheduled" }),
+
+    mk({ customerId:"cus_5", type:"Frozen Pipe", priority:"Emergency",
+         description:"Caretaker reports no water at the guest wing. Crawlspace line likely frozen — no visible break yet.",
+         scheduledDate:t, window:"ASAP / Emergency", techId:null, status:"new" }),
+
+    mk({ customerId:"cus_3", type:"Sewer / Camera", priority:"Normal",
+         description:"Recurring backups twice this year. Wants the main line scoped from the cleanout to the street.",
+         scheduledDate:addDays(t,1), window:"8:00–10:00", techId:"tech_3", status:"scheduled" }),
+
+    mk({ customerId:"cus_1", type:"Backflow Test", priority:"Low",
+         description:"Annual backflow certification on the irrigation RPZ. Paperwork goes to the water district.",
+         scheduledDate:addDays(t,1), window:"10:00–12:00", techId:null, status:"new" }),
+
+    mk({ customerId:"cus_4", type:"Gas Line", priority:"Normal",
+         description:"Run a new 3/4in gas line for the second fryer. Needs permit and inspection.",
+         scheduledDate:addDays(t,2), window:"8:00–10:00", techId:"tech_1", status:"scheduled" }),
+
+    mk({ customerId:"cus_2", type:"Leak Repair", priority:"Normal",
+         description:"Unit 14C — dripping angle stop under the kitchen sink. Replaced stop and supply line.",
+         scheduledDate:addDays(t,-1), window:"10:00–12:00", techId:"tech_2", status:"complete",
+         laborHours:1.5, completedAt: Date.now()-86400000,
+         parts:[{desc:"1/4-turn angle stop, 1/2in",qty:1,price:18.40},{desc:"Braided supply line 20in",qty:1,price:11.75}],
+         log:[{ts:Date.now()-172800000,text:"Job created"},{ts:Date.now()-90000000,text:"Assigned to Dana Whitfield"},{ts:Date.now()-86400000,text:"Status: In Progress → Complete"}] }),
+
+    mk({ customerId:"cus_6", type:"Drain Cleaning", priority:"Normal",
+         description:"Slow tub drain, second floor. Cabled 25ft, pulled hair mass. Runs clear.",
+         scheduledDate:addDays(t,-2), window:"2:00–4:00", techId:"tech_3", status:"complete",
+         laborHours:1, completedAt: Date.now()-172800000 })
+  ];
+
+  return {
+    version: 1,
+    counter: n,
+    settings: { company:"Park City Plumbing", laborRate:145, phone:"(435) 555-0100" },
+    techs, customers, jobs
+  };
+}
+
+/* ============================================================
+   App state + routing
+   ============================================================ */
+const App = {
+  view: "dashboard",
+  date: todayStr(),
+  search: "",
+  filters: { status:"", techId:"", type:"", when:"upcoming" },
+  customerSort: "name"
+};
+
+const VIEWS = [
+  { id:"dashboard", label:"Dashboard", icon:"▦",  crumb:"Dispatch" },
+  { id:"schedule",  label:"Schedule",  icon:"🗓", crumb:"Dispatch" },
+  { id:"jobs",      label:"Jobs",      icon:"🧾", crumb:"Work" },
+  { id:"customers", label:"Customers", icon:"👤", crumb:"Work" },
+  { id:"techs",     label:"Technicians", icon:"🔧", crumb:"Team" },
+  { id:"data",      label:"Data & Setup", icon:"⚙", crumb:"Team" }
+];
+
+function go(view){
+  App.view = view;
+  render();
+  window.scrollTo(0,0);
+}
+
+function render(){
+  renderNav();
+  const v = VIEWS.find(x => x.id === App.view) || VIEWS[0];
+  $("#crumb").textContent = v.crumb;
+  $("#page-title").textContent = v.label;
+
+  const host = $("#view");
+  if (App.search.trim()) { host.innerHTML = viewSearch(); }
+  else {
+    switch(App.view){
+      case "schedule":  host.innerHTML = viewSchedule();  break;
+      case "jobs":      host.innerHTML = viewJobs();      break;
+      case "customers": host.innerHTML = viewCustomers(); break;
+      case "techs":     host.innerHTML = viewTechs();     break;
+      case "data":      host.innerHTML = viewData();      break;
+      default:          host.innerHTML = viewDashboard();
+    }
+  }
+  if (App.view === "schedule" && !App.search.trim()) wireBoard();
+}
+
+function renderNav(){
+  const jobs = Store.data.jobs;
+  const t = todayStr();
+  const counts = {
+    schedule: jobs.filter(j => j.scheduledDate === t && j.status !== "cancelled").length,
+    jobs: jobs.filter(j => !["complete","cancelled"].includes(j.status)).length,
+    customers: Store.data.customers.length,
+    techs: Store.activeTechs().length
+  };
+  const unassigned = jobs.filter(j => !j.techId && !["complete","cancelled"].includes(j.status)).length;
+
+  const group = (label, ids) => `
+    <div class="nav-label">${label}</div>
+    ${ids.map(id => {
+      const v = VIEWS.find(x => x.id === id);
+      const c = counts[id];
+      const alert = id === "schedule" && unassigned > 0;
+      return `<button class="${App.view===id?'active':''}" data-nav="${id}">
+        <span class="ico">${v.icon}</span><span>${esc(v.label)}</span>
+        ${c ? `<span class="count${alert?' alert':''}">${alert?unassigned+' ⚠':c}</span>` : ""}
+      </button>`;
+    }).join("")}`;
+
+  $("#nav").innerHTML =
+    group("Dispatch", ["dashboard","schedule"]) +
+    group("Work", ["jobs","customers"]) +
+    group("Team", ["techs","data"]);
+}
+
+/* ---------- shared render bits ---------- */
+function statusBadge(s){
+  return `<span class="badge s-${s}"><span class="dot"></span>${esc(STATUS_LABEL[s]||s)}</span>`;
+}
+function priorityBadge(p){
+  if (p === "Normal" || !p) return `<span class="chip">${esc(p||"Normal")}</span>`;
+  return `<span class="badge p-${esc(p)}">${p==="Emergency"?"🚨 ":""}${esc(p)}</span>`;
+}
+function techPill(techId, size){
+  const t = Store.tech(techId);
+  if (!t) return `<span class="t-sub">Unassigned</span>`;
+  return `<span class="tech-pill"><span class="avatar${size==='lg'?' lg':''}" style="background:${esc(t.color)}">${esc(initials(t.name))}</span>${esc(t.name)}</span>`;
+}
+function custName(id){ return Store.customer(id)?.name || "(deleted customer)"; }
+function custAddr(id){
+  const c = Store.customer(id);
+  return c ? [c.address, c.city].filter(Boolean).join(", ") : "";
+}
+function isOpen(j){ return !["complete","cancelled"].includes(j.status); }
+
+function jobRows(list, opts){
+  opts = opts || {};
+  if (!list.length){
+    return `<tr><td colspan="7"><div class="empty"><div class="big">🗒</div>${esc(opts.emptyMsg||"No jobs match this view.")}</div></td></tr>`;
+  }
+  return list.map(j => `
+    <tr class="clickable" data-job="${j.id}">
+      <td class="t-sub" style="font-variant-numeric:tabular-nums">#${j.no}</td>
+      <td>
+        <div class="t-strong">${esc(custName(j.customerId))}</div>
+        <div class="t-sub">${esc(custAddr(j.customerId))}</div>
+      </td>
+      <td><div>${esc(j.type)}</div><div class="t-sub">${priorityBadge(j.priority)}</div></td>
+      <td>
+        <div>${j.scheduledDate ? esc(fmtDate(j.scheduledDate)) : '<span class="t-sub">Not scheduled</span>'}</div>
+        <div class="t-sub">${esc(j.window||"")}</div>
+      </td>
+      <td>${techPill(j.techId)}</td>
+      <td>${statusBadge(j.status)}</td>
+      <td class="num t-sub">${j.status==="complete" ? esc(money(Store.jobTotal(j))) : ""}</td>
+    </tr>`).join("");
+}
+
+const JOB_TABLE_HEAD = `<thead><tr>
+  <th>Job</th><th>Customer</th><th>Type</th><th>Scheduled</th><th>Technician</th><th>Status</th><th class="num">Total</th>
+</tr></thead>`;
+
+/* ============================================================
+   View: Dashboard
+   ============================================================ */
+function viewDashboard(){
+  const t = todayStr();
+  const jobs = Store.data.jobs;
+  const today = jobs.filter(j => j.scheduledDate === t && j.status !== "cancelled");
+  const unassigned = jobs.filter(j => !j.techId && isOpen(j));
+  const emergencies = jobs.filter(j => j.priority === "Emergency" && isOpen(j));
+  const weekAgo = addDays(t, -7);
+  const doneWeek = jobs.filter(j => j.status === "complete" && (j.scheduledDate||"") >= weekAgo);
+  const billedWeek = doneWeek.reduce((s,j) => s + Store.jobTotal(j), 0);
+  const inProgress = today.filter(j => j.status === "in_progress").length;
+
+  const needs = [...emergencies.filter(j => !j.techId), ...unassigned.filter(j => j.priority !== "Emergency")]
+    .filter((j,i,a) => a.indexOf(j) === i)
+    .sort((a,b) => (a.scheduledDate||"9999").localeCompare(b.scheduledDate||"9999"))
+    .slice(0,6);
+
+  const byTech = Store.activeTechs().map(tech => {
+    const list = today.filter(j => j.techId === tech.id)
+      .sort((a,b) => WINDOWS.indexOf(a.window) - WINDOWS.indexOf(b.window));
+    return { tech, list };
+  });
+  const unassignedToday = today.filter(j => !j.techId);
+
+  return `
+  <div class="stat-row">
+    <div class="stat"><div class="label">Jobs today</div><div class="value">${today.length}</div>
+      <div class="foot">${inProgress} in progress</div></div>
+    <div class="stat ${unassigned.length?'alert':''}"><div class="label">Needs a tech</div><div class="value">${unassigned.length}</div>
+      <div class="foot">${unassignedToday.length} of them today</div></div>
+    <div class="stat ${emergencies.length?'alert':''}"><div class="label">Open emergencies</div><div class="value">${emergencies.length}</div>
+      <div class="foot">${emergencies.filter(j=>!j.techId).length} unassigned</div></div>
+    <div class="stat"><div class="label">Completed · 7 days</div><div class="value">${doneWeek.length}</div>
+      <div class="foot">${esc(money(billedWeek))} billed</div></div>
+    <div class="stat"><div class="label">Open work</div><div class="value">${jobs.filter(isOpen).length}</div>
+      <div class="foot">across ${Store.data.customers.length} customers</div></div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-head">
+          <h3>Today · ${esc(fmtDateLong(t))}</h3>
+          <div class="spacer"></div>
+          <button class="btn sm" data-nav="schedule">Open board →</button>
+        </div>
+        <div class="card-body" style="padding:12px 16px">
+          ${byTech.map(({tech,list}) => `
+            <div style="display:flex;gap:14px;padding:10px 0;border-bottom:1px solid #eef2f6">
+              <div style="flex:0 0 165px;display:flex;gap:8px;align-items:flex-start;padding-top:2px">
+                <span class="avatar lg" style="background:${esc(tech.color)}">${esc(initials(tech.name))}</span>
+                <div><div class="t-strong">${esc(tech.name)}</div>
+                  <div class="t-sub">${list.length} job${list.length===1?"":"s"}</div></div>
+              </div>
+              <div style="flex:1;min-width:0">
+                ${list.length ? list.map(j => `
+                  <div class="clickable" data-job="${j.id}" style="display:flex;gap:10px;align-items:baseline;padding:4px 0;cursor:pointer">
+                    <span class="chip" style="flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(j.window)}</span>
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                      <strong>${esc(custName(j.customerId))}</strong> <span class="t-sub">· ${esc(j.type)}</span></span>
+                    ${statusBadge(j.status)}
+                  </div>`).join("")
+                : `<div class="t-sub" style="padding:6px 0">No jobs scheduled — available.</div>`}
+              </div>
+            </div>`).join("")}
+          ${unassignedToday.length ? `
+            <div style="display:flex;gap:14px;padding:10px 0">
+              <div style="flex:0 0 165px;display:flex;gap:8px;align-items:flex-start;padding-top:2px">
+                <span class="avatar lg" style="background:#b0bcc8">?</span>
+                <div><div class="t-strong">Unassigned</div><div class="t-sub">${unassignedToday.length} today</div></div>
+              </div>
+              <div style="flex:1;min-width:0">
+                ${unassignedToday.map(j => `
+                  <div class="clickable" data-job="${j.id}" style="display:flex;gap:10px;align-items:baseline;padding:4px 0;cursor:pointer">
+                    <span class="chip">${esc(j.window)}</span>
+                    <span style="flex:1"><strong>${esc(custName(j.customerId))}</strong> <span class="t-sub">· ${esc(j.type)}</span></span>
+                    ${priorityBadge(j.priority)}
+                  </div>`).join("")}
+              </div>
+            </div>` : ""}
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-head"><h3>Needs attention</h3></div>
+        <div class="card-body" style="padding:8px 0">
+          ${needs.length ? needs.map(j => `
+            <div class="clickable" data-job="${j.id}" style="padding:10px 16px;border-bottom:1px solid #f2f5f8;cursor:pointer">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:3px">
+                ${priorityBadge(j.priority)}
+                <span class="t-sub" style="margin-left:auto">${j.scheduledDate?esc(fmtDate(j.scheduledDate)):"unscheduled"}</span>
+              </div>
+              <div class="t-strong">${esc(custName(j.customerId))}</div>
+              <div class="t-sub">${esc(j.type)} · no technician assigned</div>
+            </div>`).join("")
+          : `<div class="empty" style="padding:26px"><div class="big">✅</div>Everything is assigned.</div>`}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Quick actions</h3></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn accent" data-action="new-job">＋ Take a new service call</button>
+          <button class="btn" data-nav="schedule">Assign today's board</button>
+          <button class="btn" data-action="print-day">🖨 Print today's dispatch tickets</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   View: Schedule board (drag a job onto a technician)
+   ============================================================ */
+function viewSchedule(){
+  const d = App.date;
+  const dayJobs = Store.data.jobs.filter(j => j.scheduledDate === d);
+  const cols = [
+    { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
+    ...Store.activeTechs().map(t => ({ key:t.id, name:t.name, color:t.color, skill:t.skill }))
+  ];
+  const sortJobs = list => list.slice().sort((a,b) => {
+    const w = WINDOWS.indexOf(a.window) - WINDOWS.indexOf(b.window);
+    return w !== 0 ? w : PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
+  });
+
+  return `
+  <div class="board-bar">
+    <div class="datenav">
+      <button data-date="prev" title="Previous day">‹</button>
+      <span class="today-lbl">${esc(fmtDateLong(d))}</span>
+      <button data-date="next" title="Next day">›</button>
+    </div>
+    <button class="btn sm" data-date="today">Today</button>
+    <input class="input" type="date" style="width:auto" id="board-date" value="${esc(d)}">
+    <div class="spacer" style="flex:1"></div>
+    <span class="filter-note">${dayJobs.length} job${dayJobs.length===1?"":"s"} · drag a card onto a technician to assign</span>
+    <button class="btn sm" data-action="print-board">🖨 Tickets</button>
+    <button class="btn sm accent" data-action="new-job">＋ New Job</button>
+  </div>
+
+  <div class="board">
+    ${cols.map(c => {
+      const list = sortJobs(dayJobs.filter(j => (j.techId||"") === c.key));
+      return `
+      <div class="col ${c.unassigned?'unassigned':''}" data-col="${esc(c.key)}">
+        <div class="col-head">
+          <span class="avatar" style="background:${esc(c.color)}">${c.unassigned?"?":esc(initials(c.name))}</span>
+          <div>
+            <div class="nm">${esc(c.name)}</div>
+            ${c.skill?`<div class="t-sub" style="font-size:11px">${esc(c.skill)}</div>`:""}
+          </div>
+          <span class="ct">${list.length}</span>
+        </div>
+        ${list.length ? list.map(j => jobCardHtml(j)).join("")
+          : `<div class="col-empty">${c.unassigned?"Nothing waiting":"Open day"}</div>`}
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+function jobCardHtml(j){
+  return `
+  <div class="jobcard pri-${esc(j.priority)} st-${esc(j.status)}" draggable="true" data-job="${j.id}">
+    <div class="jc-top">
+      <span class="jc-win">${esc(j.window)}</span>
+      <span class="jc-id">#${j.no}</span>
+    </div>
+    <div class="jc-cust">${esc(custName(j.customerId))}</div>
+    <div class="jc-meta">${esc(custAddr(j.customerId))}</div>
+    <div class="jc-meta" style="margin-top:3px">${esc(j.type)}</div>
+    <div class="jc-foot">${statusBadge(j.status)}${j.priority!=="Normal"?priorityBadge(j.priority):""}</div>
+  </div>`;
+}
+
+function wireBoard(){
+  let draggedId = null;
+
+  $$(".jobcard").forEach(card => {
+    card.addEventListener("dragstart", e => {
+      draggedId = card.dataset.job;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      // Some browsers need data set for the drag to start at all.
+      try { e.dataTransfer.setData("text/plain", draggedId); } catch(_){}
+    });
+    card.addEventListener("dragend", () => {
+      draggedId = null;
+      card.classList.remove("dragging");
+      $$(".col").forEach(c => c.classList.remove("dragover"));
+    });
+  });
+
+  $$(".col").forEach(col => {
+    col.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect="move"; col.classList.add("dragover"); });
+    col.addEventListener("dragleave", () => col.classList.remove("dragover"));
+    col.addEventListener("drop", e => {
+      e.preventDefault();
+      col.classList.remove("dragover");
+      const id = draggedId || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
+      const job = id && Store.job(id);
+      if (!job) return;
+      const techId = col.dataset.col || null;
+      if ((job.techId||"") === (techId||"")) return;
+      Store.assign(job, techId);
+      render();
+      toast(techId ? `#${job.no} → ${Store.tech(techId).name}` : `#${job.no} moved to Unassigned`, "ok");
+    });
+  });
+}
+
+/* ============================================================
+   View: Jobs list
+   ============================================================ */
+function viewJobs(){
+  const f = App.filters;
+  const t = todayStr();
+  let list = Store.data.jobs.slice();
+
+  if (f.when === "today")    list = list.filter(j => j.scheduledDate === t);
+  if (f.when === "upcoming") list = list.filter(j => isOpen(j));
+  if (f.when === "past")     list = list.filter(j => !isOpen(j));
+  if (f.status) list = list.filter(j => j.status === f.status);
+  if (f.techId) list = list.filter(j => (j.techId||"") === (f.techId === "none" ? "" : f.techId));
+  if (f.type)   list = list.filter(j => j.type === f.type);
+
+  list.sort((a,b) => {
+    const A = a.scheduledDate || "9999-99-99", B = b.scheduledDate || "9999-99-99";
+    if (A !== B) return f.when === "past" ? B.localeCompare(A) : A.localeCompare(B);
+    return WINDOWS.indexOf(a.window) - WINDOWS.indexOf(b.window);
+  });
+
+  const opt = (v,label,cur) => `<option value="${esc(v)}"${cur===v?" selected":""}>${esc(label)}</option>`;
+
+  return `
+  <div class="toolbar">
+    <select id="f-when">
+      ${opt("upcoming","Open jobs",f.when)}${opt("today","Today only",f.when)}
+      ${opt("past","Closed jobs",f.when)}${opt("all","All jobs",f.when)}
+    </select>
+    <select id="f-status">${opt("","Any status",f.status)}${STATUSES.map(s=>opt(s.id,s.label,f.status)).join("")}</select>
+    <select id="f-tech">${opt("","Any technician",f.techId)}${opt("none","— Unassigned —",f.techId)}${Store.data.techs.map(x=>opt(x.id,x.name,f.techId)).join("")}</select>
+    <select id="f-type">${opt("","Any job type",f.type)}${JOB_TYPES.map(x=>opt(x,x,f.type)).join("")}</select>
+    <button class="btn sm ghost" data-action="clear-filters">Clear</button>
+    <div style="flex:1"></div>
+    <span class="filter-note">${list.length} job${list.length===1?"":"s"}</span>
+    <button class="btn sm accent" data-action="new-job">＋ New Job</button>
+  </div>
+  <div class="card"><table>${JOB_TABLE_HEAD}<tbody>${jobRows(list)}</tbody></table></div>`;
+}
+
+/* ============================================================
+   View: Customers
+   ============================================================ */
+function viewCustomers(){
+  const rows = Store.data.customers.map(c => {
+    const js = Store.jobsForCustomer(c.id);
+    const open = js.filter(isOpen).length;
+    const spend = js.filter(j=>j.status==="complete").reduce((s,j)=>s+Store.jobTotal(j),0);
+    const last = js.find(j => j.status === "complete");
+    return { c, count: js.length, open, spend, last };
+  }).sort((a,b) => a.c.name.localeCompare(b.c.name));
+
+  return `
+  <div class="toolbar">
+    <span class="filter-note">${rows.length} customer${rows.length===1?"":"s"}</span>
+    <div style="flex:1"></div>
+    <button class="btn sm" data-action="new-customer">＋ Add Customer</button>
+  </div>
+  <div class="card"><table>
+    <thead><tr><th>Customer</th><th>Contact</th><th>Address</th><th class="num">Jobs</th><th class="num">Open</th><th>Last service</th><th class="num">Billed</th></tr></thead>
+    <tbody>
+      ${rows.length ? rows.map(r => `
+        <tr class="clickable" data-customer="${r.c.id}">
+          <td><div class="t-strong">${esc(r.c.name)}</div>${r.c.notes?`<div class="t-sub">📌 ${esc(r.c.notes.slice(0,48))}${r.c.notes.length>48?"…":""}</div>`:""}</td>
+          <td><div>${esc(fmtPhone(r.c.phone))}</div>${r.c.email?`<div class="t-sub">${esc(r.c.email)}</div>`:""}</td>
+          <td><div>${esc(r.c.address)}</div><div class="t-sub">${esc(r.c.city)}</div></td>
+          <td class="num">${r.count}</td>
+          <td class="num">${r.open?`<span class="chip" style="background:var(--blue-soft);color:#175f8e">${r.open}</span>`:"—"}</td>
+          <td class="t-sub">${r.last?esc(fmtDate(r.last.scheduledDate)):"—"}</td>
+          <td class="num">${r.spend?esc(money(r.spend)):"—"}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="7"><div class="empty"><div class="big">👤</div>No customers yet.</div></td></tr>`}
+    </tbody>
+  </table></div>`;
+}
+
+/* ============================================================
+   View: Technicians
+   ============================================================ */
+function viewTechs(){
+  const t = todayStr();
+  const rows = Store.data.techs.map(tech => {
+    const all = Store.data.jobs.filter(j => j.techId === tech.id);
+    return {
+      tech,
+      today: all.filter(j => j.scheduledDate === t && j.status !== "cancelled").length,
+      open: all.filter(isOpen).length,
+      done: all.filter(j => j.status === "complete").length
+    };
+  });
+
+  return `
+  <div class="toolbar">
+    <span class="filter-note">${Store.activeTechs().length} active of ${rows.length}</span>
+    <div style="flex:1"></div>
+    <button class="btn sm" data-action="new-tech">＋ Add Technician</button>
+  </div>
+  <div class="card"><table>
+    <thead><tr><th>Technician</th><th>Level</th><th>Phone</th><th class="num">Today</th><th class="num">Open</th><th class="num">Completed</th><th></th></tr></thead>
+    <tbody>
+      ${rows.length ? rows.map(r => `
+        <tr>
+          <td>
+            <div style="display:flex;gap:9px;align-items:center">
+              <span class="avatar lg" style="background:${esc(r.tech.color)}">${esc(initials(r.tech.name))}</span>
+              <div><div class="t-strong">${esc(r.tech.name)}</div>
+              ${!r.tech.active?`<div class="t-sub">Inactive — hidden from the board</div>`:""}</div>
+            </div>
+          </td>
+          <td class="t-sub">${esc(r.tech.skill||"—")}</td>
+          <td>${esc(fmtPhone(r.tech.phone))}</td>
+          <td class="num">${r.today||"—"}</td>
+          <td class="num">${r.open||"—"}</td>
+          <td class="num">${r.done||"—"}</td>
+          <td class="num" style="white-space:nowrap">
+            <button class="btn sm" data-edit-tech="${r.tech.id}">Edit</button>
+            <button class="btn sm ghost" data-toggle-tech="${r.tech.id}">${r.tech.active?"Deactivate":"Activate"}</button>
+          </td>
+        </tr>`).join("")
+      : `<tr><td colspan="7"><div class="empty"><div class="big">🔧</div>No technicians yet.</div></td></tr>`}
+    </tbody>
+  </table></div>`;
+}
+
+/* ============================================================
+   View: Data & setup
+   ============================================================ */
+function viewData(){
+  const d = Store.data;
+  return `
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-head"><h3>Company settings</h3></div>
+        <div class="card-body">
+          <div class="row2">
+            <div class="field"><label>Company name</label>
+              <input class="input" id="set-company" value="${esc(d.settings.company)}"></div>
+            <div class="field"><label>Office phone</label>
+              <input class="input" id="set-phone" value="${esc(d.settings.phone)}"></div>
+          </div>
+          <div class="field" style="max-width:220px"><label>Default labor rate ($/hr)</label>
+            <input class="input" id="set-rate" type="number" min="0" step="5" value="${esc(d.settings.laborRate)}">
+            <div class="hint">Used to price new jobs. Existing jobs keep the rate they were created with.</div>
+          </div>
+          <button class="btn primary" data-action="save-settings">Save settings</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Backup &amp; restore</h3></div>
+        <div class="card-body">
+          <p class="t-sub" style="margin-top:0">
+            This prototype stores everything in this browser on this device. Nothing is sent anywhere.
+            Export regularly if you are entering real work, and import the file to move it to another machine.
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" data-action="export">⬇ Export JSON backup</button>
+            <button class="btn" data-action="import">⬆ Import backup</button>
+            <button class="btn" data-action="export-csv">⬇ Export jobs as CSV</button>
+          </div>
+          <input type="file" id="import-file" accept="application/json,.json" style="display:none">
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Danger zone</h3></div>
+        <div class="card-body">
+          <p class="t-sub" style="margin-top:0">Wipes everything in this browser and reloads the sample day.</p>
+          <button class="btn danger" data-action="reset">Reset to sample data</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-head"><h3>What's stored</h3></div>
+        <div class="card-body">
+          <div class="dl"><dt>Jobs</dt><dd>${d.jobs.length}</dd></div>
+          <div class="dl"><dt>Customers</dt><dd>${d.customers.length}</dd></div>
+          <div class="dl"><dt>Technicians</dt><dd>${d.techs.length}</dd></div>
+          <div class="dl"><dt>Storage used</dt><dd>${esc(storageSize())}</dd></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Next steps</h3></div>
+        <div class="card-body t-sub" style="line-height:1.65">
+          This is a working prototype for the office. Natural things to add once the
+          crew has used it for a week:
+          <ul style="padding-left:18px;margin:8px 0 0">
+            <li>A shared backend so techs and office see the same board</li>
+            <li>A mobile view for the truck</li>
+            <li>Customer text/email confirmations</li>
+            <li>Real invoicing and payment</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function storageSize(){
+  try {
+    const bytes = new Blob([JSON.stringify(Store.data)]).size;
+    return bytes < 1024 ? bytes + " B" : (bytes/1024).toFixed(1) + " KB";
+  } catch(e){ return "—"; }
+}
+
+/* ============================================================
+   View: Global search results
+   ============================================================ */
+function viewSearch(){
+  const q = App.search.trim().toLowerCase();
+  const digits = q.replace(/\D/g,"");
+  const custHit = c =>
+    c.name.toLowerCase().includes(q) ||
+    (c.address||"").toLowerCase().includes(q) ||
+    (c.email||"").toLowerCase().includes(q) ||
+    (digits.length >= 3 && String(c.phone||"").replace(/\D/g,"").includes(digits));
+
+  const customers = Store.data.customers.filter(custHit);
+  const custIds = new Set(customers.map(c => c.id));
+  const jobs = Store.data.jobs.filter(j =>
+    custIds.has(j.customerId) ||
+    String(j.no).includes(q.replace("#","")) ||
+    (j.type||"").toLowerCase().includes(q) ||
+    (j.description||"").toLowerCase().includes(q)
+  ).sort((a,b) => (b.scheduledDate||"").localeCompare(a.scheduledDate||""));
+
+  return `
+  <div class="toolbar">
+    <span class="filter-note">Results for “${esc(App.search)}” — ${jobs.length} job${jobs.length===1?"":"s"}, ${customers.length} customer${customers.length===1?"":"s"}</span>
+    <div style="flex:1"></div>
+    <button class="btn sm ghost" data-action="clear-search">Clear search</button>
+  </div>
+  ${customers.length ? `
+    <div class="section-title">Customers</div>
+    <div class="card"><table>
+      <thead><tr><th>Customer</th><th>Phone</th><th>Address</th><th class="num">Jobs</th></tr></thead>
+      <tbody>${customers.map(c => `
+        <tr class="clickable" data-customer="${c.id}">
+          <td class="t-strong">${esc(c.name)}</td>
+          <td>${esc(fmtPhone(c.phone))}</td>
+          <td>${esc([c.address,c.city].filter(Boolean).join(", "))}</td>
+          <td class="num">${Store.jobsForCustomer(c.id).length}</td>
+        </tr>`).join("")}</tbody>
+    </table></div>` : ""}
+  <div class="section-title">Jobs</div>
+  <div class="card"><table>${JOB_TABLE_HEAD}<tbody>${jobRows(jobs,{emptyMsg:"No jobs matched that search."})}</tbody></table></div>`;
+}
+
+/* ============================================================
+   Modals
+   ============================================================ */
+function openModal(html, opts){
+  opts = opts || {};
+  const root = $("#modal-root");
+  root.innerHTML = `<div class="overlay" data-overlay>
+    <div class="modal ${opts.wide?"wide":""}" role="dialog" aria-modal="true">${html}</div>
+  </div>`;
+  const overlay = $("[data-overlay]", root);
+  overlay.addEventListener("mousedown", e => { if (e.target === overlay) closeModal(); });
+  const first = $(".modal input:not([type=hidden]), .modal select, .modal textarea", root);
+  if (first && !opts.noFocus) setTimeout(() => first.focus(), 30);
+  document.body.style.overflow = "hidden";
+}
+function closeModal(){
+  $("#modal-root").innerHTML = "";
+  document.body.style.overflow = "";
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && $("#modal-root").innerHTML) closeModal();
+});
+
+/* ---------- Job detail ---------- */
+function openJob(id){
+  const j = Store.job(id);
+  if (!j) return;
+  const c = Store.customer(j.customerId);
+  const next = NEXT_STATUS[j.status];
+  const parts = j.parts || [];
+  const partsTotal = parts.reduce((s,p) => s + (Number(p.qty)||0)*(Number(p.price)||0), 0);
+  const laborTotal = (Number(j.laborHours)||0) * (Number(j.laborRate)||0);
+
+  openModal(`
+    <div class="modal-head">
+      <div>
+        <div class="t-sub">Job #${j.no} · opened ${esc(fmtStamp(j.createdAt))}</div>
+        <h2>${esc(j.type)} — ${esc(c ? c.name : "(deleted customer)")}</h2>
+      </div>
+      <div class="spacer"></div>
+      ${priorityBadge(j.priority)} ${statusBadge(j.status)}
+      <button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="status-steps" style="margin-bottom:16px">
+        ${next ? `<button class="btn primary sm" data-advance="${j.id}">Mark ${esc(STATUS_LABEL[next])} →</button>` : ""}
+        <select class="input" style="width:auto;padding:5px 8px" data-setstatus="${j.id}">
+          ${STATUSES.map(s => `<option value="${s.id}"${s.id===j.status?" selected":""}>${esc(s.label)}</option>`).join("")}
+        </select>
+        <select class="input" style="width:auto;padding:5px 8px" data-settech="${j.id}">
+          <option value="">— Unassigned —</option>
+          ${Store.activeTechs().map(t => `<option value="${t.id}"${t.id===j.techId?" selected":""}>${esc(t.name)}</option>`).join("")}
+        </select>
+        <button class="btn sm" data-edit-job="${j.id}">Edit details</button>
+        <button class="btn sm" data-print-job="${j.id}">🖨 Ticket</button>
+      </div>
+
+      <div class="detail-grid">
+        <div>
+          <div class="dl"><dt>Customer</dt><dd>
+            ${c ? `<div class="t-strong">${esc(c.name)}</div>
+                   <div>${esc(fmtPhone(c.phone))}</div>
+                   ${c.email?`<div class="t-sub">${esc(c.email)}</div>`:""}` : "—"}
+          </dd></div>
+          <div class="dl"><dt>Service address</dt><dd>${esc(custAddr(j.customerId)) || "—"}</dd></div>
+          ${c && c.notes ? `<div class="dl"><dt>Site notes</dt><dd class="t-sub">${esc(c.notes)}</dd></div>` : ""}
+        </div>
+        <div>
+          <div class="dl"><dt>Scheduled</dt><dd>${j.scheduledDate?esc(fmtDateLong(j.scheduledDate)):"Not scheduled"}<br>
+            <span class="t-sub">${esc(j.window||"")}</span></dd></div>
+          <div class="dl"><dt>Technician</dt><dd>${techPill(j.techId,"lg")}</dd></div>
+          ${j.completedAt?`<div class="dl"><dt>Completed</dt><dd>${esc(fmtStamp(j.completedAt))}</dd></div>`:""}
+        </div>
+      </div>
+
+      <div class="dl"><dt>Reported problem</dt><dd style="white-space:pre-wrap">${esc(j.description)||"—"}</dd></div>
+
+      <div class="section-title" style="margin-top:22px">Parts &amp; labor</div>
+      <table style="border:1px solid var(--line);border-radius:6px">
+        <thead><tr><th>Item</th><th class="num" style="width:70px">Qty</th><th class="num" style="width:100px">Price</th><th class="num" style="width:100px">Line</th><th style="width:40px"></th></tr></thead>
+        <tbody>
+          ${parts.map((p,i) => `<tr>
+            <td>${esc(p.desc)}</td>
+            <td class="num">${esc(p.qty)}</td>
+            <td class="num">${esc(money(p.price))}</td>
+            <td class="num">${esc(money((Number(p.qty)||0)*(Number(p.price)||0)))}</td>
+            <td class="num"><button class="btn sm ghost" data-del-part="${j.id}:${i}" title="Remove">×</button></td>
+          </tr>`).join("")}
+          <tr>
+            <td><input class="input" id="part-desc" placeholder="Add a part or material…"></td>
+            <td><input class="input num" id="part-qty" type="number" min="0" step="1" value="1"></td>
+            <td><input class="input" id="part-price" type="number" min="0" step="0.01" placeholder="0.00"></td>
+            <td colspan="2"><button class="btn sm" data-add-part="${j.id}">Add</button></td>
+          </tr>
+          <tr>
+            <td>Labor <span class="t-sub">@ ${esc(money(j.laborRate||0))}/hr</span></td>
+            <td class="num"><input class="input" id="labor-hours" type="number" min="0" step="0.25" value="${esc(j.laborHours||0)}" style="width:70px"></td>
+            <td class="num t-sub">hours</td>
+            <td class="num">${esc(money(laborTotal))}</td>
+            <td class="num"><button class="btn sm" data-save-labor="${j.id}">✓</button></td>
+          </tr>
+          <tr>
+            <td colspan="3" class="t-strong" style="text-align:right">Job total</td>
+            <td class="num t-strong">${esc(money(partsTotal + laborTotal))}</td><td></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title" style="margin-top:22px">Activity</div>
+      <div class="field" style="display:flex;gap:8px;margin-bottom:14px">
+        <input class="input" id="note-text" placeholder="Add a note — what the tech found, callback promised, parts ordered…">
+        <button class="btn" data-add-note="${j.id}">Add note</button>
+      </div>
+      <ul class="timeline">
+        ${(j.log||[]).slice().reverse().map(l => `<li>${esc(l.text)}<span class="ts">${esc(fmtStamp(l.ts))}</span></li>`).join("")
+          || `<li class="t-sub">Job created.<span class="ts">${esc(fmtStamp(j.createdAt))}</span></li>`}
+      </ul>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger sm" data-del-job="${j.id}">Delete job</button>
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+    </div>`, { wide:true, noFocus:true });
+}
+
+/* ---------- Job create / edit form ---------- */
+function openJobForm(id){
+  const j = id ? Store.job(id) : null;
+  const custs = Store.data.customers.slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const sel = (v, cur) => v === cur ? " selected" : "";
+
+  openModal(`
+    <div class="modal-head">
+      <h2>${j ? "Edit job #" + j.no : "New service call"}</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Customer *</label>
+        <select class="input" id="f-customer">
+          <option value="">— Select a customer —</option>
+          ${custs.map(c => `<option value="${c.id}"${sel(c.id, j?j.customerId:"")}>${esc(c.name)} — ${esc(c.address)}</option>`).join("")}
+          <option value="__new">＋ New customer…</option>
+        </select>
+        <div class="err" id="e-customer" style="display:none">Pick a customer, or add a new one.</div>
+      </div>
+
+      <div id="new-cust" style="display:none;border:1px solid var(--line);border-radius:7px;padding:14px;background:#fafcfd;margin-bottom:14px">
+        <div class="row2">
+          <div class="field"><label>Name *</label><input class="input" id="nc-name" placeholder="Homeowner or business"></div>
+          <div class="field"><label>Phone</label><input class="input" id="nc-phone" placeholder="(435) 555-0100"></div>
+        </div>
+        <div class="row2">
+          <div class="field" style="margin-bottom:0"><label>Service address</label><input class="input" id="nc-address" placeholder="482 Deer Valley Dr"></div>
+          <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="nc-city" value="Park City"></div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field"><label>Job type</label>
+          <select class="input" id="f-type">${JOB_TYPES.map(t=>`<option${sel(t,j?j.type:"Drain Cleaning")}>${esc(t)}</option>`).join("")}</select></div>
+        <div class="field"><label>Priority</label>
+          <select class="input" id="f-priority">${PRIORITIES.map(p=>`<option${sel(p,j?j.priority:"Normal")}>${esc(p)}</option>`).join("")}</select></div>
+      </div>
+
+      <div class="row3">
+        <div class="field"><label>Date</label>
+          <input class="input" id="f-date" type="date" value="${esc(j?(j.scheduledDate||""):App.date)}">
+          <div class="hint">Leave blank to hold unscheduled.</div></div>
+        <div class="field"><label>Arrival window</label>
+          <select class="input" id="f-window">${WINDOWS.map(w=>`<option${sel(w,j?j.window:"8:00–10:00")}>${esc(w)}</option>`).join("")}</select></div>
+        <div class="field"><label>Technician</label>
+          <select class="input" id="f-tech"><option value="">— Unassigned —</option>
+            ${Store.activeTechs().map(t=>`<option value="${t.id}"${sel(t.id,j?j.techId:"")}>${esc(t.name)}</option>`).join("")}
+          </select></div>
+      </div>
+
+      <div class="field">
+        <label>What's the problem? *</label>
+        <textarea class="input" id="f-desc" placeholder="What the customer described, access details, anything the tech should know before rolling.">${esc(j?j.description:"")}</textarea>
+        <div class="err" id="e-desc" style="display:none">Give the tech something to go on.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-job="${j?j.id:""}">${j?"Save changes":"Create job"}</button>
+    </div>`);
+
+  const cSel = $("#f-customer"), nc = $("#new-cust");
+  cSel.addEventListener("change", () => {
+    nc.style.display = cSel.value === "__new" ? "block" : "none";
+    if (cSel.value === "__new") $("#nc-name").focus();
+  });
+}
+
+function saveJobFromForm(id){
+  const custVal = $("#f-customer").value;
+  const desc = $("#f-desc").value.trim();
+  let ok = true;
+
+  $("#e-customer").style.display = "none";
+  $("#e-desc").style.display = "none";
+
+  let customerId = custVal;
+  if (custVal === "__new"){
+    const name = $("#nc-name").value.trim();
+    if (!name){ $("#nc-name").classList.add("invalid"); ok = false; }
+    else {
+      const c = {
+        id: uid("cus"), name,
+        phone: $("#nc-phone").value.trim(),
+        email: "",
+        address: $("#nc-address").value.trim(),
+        city: $("#nc-city").value.trim() || "Park City",
+        notes: "", createdAt: Date.now()
+      };
+      Store.data.customers.push(c);
+      customerId = c.id;
+    }
+  } else if (!custVal){
+    $("#e-customer").style.display = "block"; ok = false;
+  }
+  if (!desc){ $("#e-desc").style.display = "block"; ok = false; }
+  if (!ok) return;
+
+  const fields = {
+    customerId,
+    type: $("#f-type").value,
+    priority: $("#f-priority").value,
+    scheduledDate: $("#f-date").value || null,
+    window: $("#f-window").value,
+    description: desc
+  };
+  const techId = $("#f-tech").value || null;
+
+  if (id){
+    const j = Store.job(id);
+    Object.assign(j, fields);
+    if ((j.techId||"") !== (techId||"")) Store.assign(j, techId);
+    Store.addLog(j, "Job details updated");
+    Store.save();
+    closeModal(); render(); openJob(j.id);
+    toast("Job updated", "ok");
+  } else {
+    const j = Object.assign({
+      id: uid("job"), no: Store.nextJobNo(), createdAt: Date.now(),
+      status: "new", techId: null, completedAt: null,
+      laborHours: 0, laborRate: Store.data.settings.laborRate,
+      parts: [], log: [{ ts: Date.now(), text: "Job created" }]
+    }, fields);
+    Store.data.jobs.push(j);
+    if (techId) Store.assign(j, techId);
+    else if (j.scheduledDate) { j.status = "scheduled"; Store.addLog(j, "Scheduled, awaiting a technician"); }
+    Store.save();
+    closeModal(); render();
+    toast(`Job #${j.no} created`, "ok");
+  }
+}
+
+/* ---------- Customer detail / form ---------- */
+function openCustomer(id){
+  const c = Store.customer(id);
+  if (!c) return;
+  const js = Store.jobsForCustomer(id);
+  const billed = js.filter(j=>j.status==="complete").reduce((s,j)=>s+Store.jobTotal(j),0);
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">Customer</div><h2>${esc(c.name)}</h2></div>
+      <div class="spacer"></div>
+      <button class="btn sm" data-edit-customer="${c.id}">Edit</button>
+      <button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div>
+          <div class="dl"><dt>Phone</dt><dd>${esc(fmtPhone(c.phone))||"—"}</dd></div>
+          <div class="dl"><dt>Email</dt><dd>${esc(c.email)||"—"}</dd></div>
+        </div>
+        <div>
+          <div class="dl"><dt>Service address</dt><dd>${esc(c.address)||"—"}<br><span class="t-sub">${esc(c.city)}</span></dd></div>
+          <div class="dl"><dt>Lifetime billed</dt><dd>${esc(money(billed))} · ${js.length} job${js.length===1?"":"s"}</dd></div>
+        </div>
+      </div>
+      ${c.notes?`<div class="dl"><dt>Site notes</dt><dd style="white-space:pre-wrap">${esc(c.notes)}</dd></div>`:""}
+      <div class="section-title">Service history</div>
+      <div class="card"><table>${JOB_TABLE_HEAD}<tbody>${jobRows(js,{emptyMsg:"No jobs on file yet."})}</tbody></table></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn sm accent" data-new-job-for="${c.id}">＋ New job for this customer</button>
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+    </div>`, { wide:true, noFocus:true });
+}
+
+function openCustomerForm(id){
+  const c = id ? Store.customer(id) : null;
+  openModal(`
+    <div class="modal-head"><h2>${c?"Edit customer":"Add customer"}</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="row2">
+        <div class="field"><label>Name *</label><input class="input" id="c-name" value="${esc(c?c.name:"")}" placeholder="Homeowner or business"></div>
+        <div class="field"><label>Phone</label><input class="input" id="c-phone" value="${esc(c?c.phone:"")}"></div>
+      </div>
+      <div class="field"><label>Email</label><input class="input" id="c-email" value="${esc(c?c.email:"")}"></div>
+      <div class="row2">
+        <div class="field"><label>Service address</label><input class="input" id="c-address" value="${esc(c?c.address:"")}"></div>
+        <div class="field"><label>City</label><input class="input" id="c-city" value="${esc(c?c.city:"Park City")}"></div>
+      </div>
+      <div class="field"><label>Site notes</label>
+        <textarea class="input" id="c-notes" placeholder="Gate codes, dogs, parking, billing quirks — anything the tech should know.">${esc(c?c.notes:"")}</textarea></div>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-customer="${c?c.id:""}">${c?"Save":"Add customer"}</button>
+    </div>`);
+}
+
+function saveCustomerFromForm(id){
+  const name = $("#c-name").value.trim();
+  if (!name){ $("#c-name").classList.add("invalid"); $("#c-name").focus(); return; }
+  const fields = {
+    name, phone:$("#c-phone").value.trim(), email:$("#c-email").value.trim(),
+    address:$("#c-address").value.trim(), city:$("#c-city").value.trim(), notes:$("#c-notes").value.trim()
+  };
+  if (id){ Object.assign(Store.customer(id), fields); toast("Customer updated","ok"); }
+  else { Store.data.customers.push(Object.assign({id:uid("cus"),createdAt:Date.now()}, fields)); toast("Customer added","ok"); }
+  Store.save(); closeModal(); render();
+}
+
+/* ---------- Technician form ---------- */
+function openTechForm(id){
+  const t = id ? Store.tech(id) : null;
+  openModal(`
+    <div class="modal-head"><h2>${t?"Edit technician":"Add technician"}</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="row2">
+        <div class="field"><label>Name *</label><input class="input" id="t-name" value="${esc(t?t.name:"")}"></div>
+        <div class="field"><label>Phone</label><input class="input" id="t-phone" value="${esc(t?t.phone:"")}"></div>
+      </div>
+      <div class="field"><label>Level / specialty</label>
+        <input class="input" id="t-skill" value="${esc(t?t.skill:"")}" placeholder="Journeyman · Drains"></div>
+      <div class="field"><label>Board color</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="t-colors">
+          ${TECH_COLORS.map(col => `<button type="button" class="swatch" data-color="${col}"
+            style="width:30px;height:30px;border-radius:50%;border:3px solid ${t&&t.color===col?"var(--navy)":"transparent"};background:${col};cursor:pointer"></button>`).join("")}
+        </div>
+        <input type="hidden" id="t-color" value="${esc(t?t.color:TECH_COLORS[0])}">
+      </div>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-tech="${t?t.id:""}">${t?"Save":"Add technician"}</button>
+    </div>`);
+
+  $("#t-colors").addEventListener("click", e => {
+    const b = e.target.closest(".swatch");
+    if (!b) return;
+    $("#t-color").value = b.dataset.color;
+    $$("#t-colors .swatch").forEach(s => s.style.borderColor = "transparent");
+    b.style.borderColor = "var(--navy)";
+  });
+}
+
+function saveTechFromForm(id){
+  const name = $("#t-name").value.trim();
+  if (!name){ $("#t-name").classList.add("invalid"); $("#t-name").focus(); return; }
+  const fields = { name, phone:$("#t-phone").value.trim(), skill:$("#t-skill").value.trim(), color:$("#t-color").value };
+  if (id){ Object.assign(Store.tech(id), fields); toast("Technician updated","ok"); }
+  else { Store.data.techs.push(Object.assign({id:uid("tech"),active:true}, fields)); toast("Technician added","ok"); }
+  Store.save(); closeModal(); render();
+}
+
+/* ============================================================
+   Dispatch tickets (print)
+   ============================================================ */
+function ticketHtml(j){
+  const c = Store.customer(j.customerId);
+  const s = Store.data.settings;
+  return `
+  <div class="ticket">
+    <div class="tk-head">
+      <div style="flex:1">
+        <h1>${esc(s.company)}</h1>
+        <div>${esc(s.phone)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:22px;font-weight:700">Job #${j.no}</div>
+        <div>${esc(j.priority)} priority</div>
+      </div>
+    </div>
+    <table>
+      <tr><td style="width:130px"><strong>Date</strong></td><td>${j.scheduledDate?esc(fmtDateLong(j.scheduledDate)):"Unscheduled"} · ${esc(j.window||"")}</td></tr>
+      <tr><td><strong>Technician</strong></td><td>${esc(Store.tech(j.techId)?.name || "UNASSIGNED")}</td></tr>
+      <tr><td><strong>Customer</strong></td><td>${esc(c?c.name:"—")} · ${esc(c?fmtPhone(c.phone):"")}</td></tr>
+      <tr><td><strong>Address</strong></td><td>${esc(custAddr(j.customerId))}</td></tr>
+      <tr><td><strong>Job type</strong></td><td>${esc(j.type)}</td></tr>
+      <tr><td valign="top"><strong>Problem</strong></td><td>${esc(j.description)}</td></tr>
+      ${c && c.notes ? `<tr><td valign="top"><strong>Site notes</strong></td><td>${esc(c.notes)}</td></tr>` : ""}
+    </table>
+    <p style="margin-top:22px"><strong>Work performed / parts used:</strong></p>
+    <div style="border:1px solid #999;height:150px"></div>
+    <div style="display:flex;gap:40px">
+      <div class="sig">Customer signature</div>
+      <div class="sig">Hours on site</div>
+    </div>
+  </div>`;
+}
+
+function printJobs(list, label){
+  if (!list.length){ toast("Nothing to print for " + label, "err"); return; }
+  $("#print-area").innerHTML = list.map(ticketHtml).join("");
+  window.print();
+}
+
+/* ============================================================
+   Import / export
+   ============================================================ */
+function download(filename, text, mime){
+  const blob = new Blob([text], { type: mime || "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function exportJson(){
+  download(`pcp-dispatch-${todayStr()}.json`, JSON.stringify(Store.data, null, 2));
+  toast("Backup downloaded", "ok");
+}
+
+function exportCsv(){
+  const head = ["Job","Date","Window","Status","Priority","Type","Customer","Phone","Address","Technician","Labor hrs","Total","Description"];
+  const rows = Store.data.jobs.map(j => {
+    const c = Store.customer(j.customerId);
+    return [
+      j.no, j.scheduledDate||"", j.window||"", STATUS_LABEL[j.status]||j.status, j.priority, j.type,
+      c?c.name:"", c?fmtPhone(c.phone):"", custAddr(j.customerId),
+      Store.tech(j.techId)?.name || "", j.laborHours||0,
+      (Store.jobTotal(j)).toFixed(2), (j.description||"").replace(/\s+/g," ")
+    ];
+  });
+  const q = v => `"${String(v).replace(/"/g,'""')}"`;
+  const csv = [head, ...rows].map(r => r.map(q).join(",")).join("\r\n");
+  download(`pcp-jobs-${todayStr()}.csv`, csv, "text/csv");
+  toast("Jobs exported", "ok");
+}
+
+function importJson(file){
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!parsed || !Array.isArray(parsed.jobs)) throw new Error("Not a dispatch backup");
+      if (!confirm(`Replace everything in this browser with the backup?\n\n${parsed.jobs.length} jobs · ${(parsed.customers||[]).length} customers`)) return;
+      Store.data = parsed;
+      Store.data.techs     = Store.data.techs     || [];
+      Store.data.customers = Store.data.customers || [];
+      Store.data.settings  = Store.data.settings  || { company:"Park City Plumbing", laborRate:145, phone:"" };
+      Store.save(); render();
+      toast("Backup restored", "ok");
+    } catch(e){
+      toast("That file isn't a dispatch backup.", "err");
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ============================================================
+   Event wiring
+   ============================================================ */
+document.addEventListener("click", e => {
+  const hit = sel => e.target.closest(sel);
+
+  if (hit("[data-close]")) return closeModal();
+
+  /* --- navigation --- */
+  const nav = hit("[data-nav]");
+  if (nav){ App.search = ""; $("#global-search").value = ""; return go(nav.dataset.nav); }
+
+  /* --- date navigation --- */
+  const dn = hit("[data-date]");
+  if (dn){
+    const k = dn.dataset.date;
+    App.date = k === "today" ? todayStr() : addDays(App.date, k === "next" ? 1 : -1);
+    return render();
+  }
+
+  /* --- job detail actions (checked before the generic row handler) --- */
+  const adv = hit("[data-advance]");
+  if (adv){
+    const j = Store.job(adv.dataset.advance);
+    const n = NEXT_STATUS[j.status];
+    if (n){ Store.setStatus(j, n); render(); openJob(j.id); toast(`#${j.no} → ${STATUS_LABEL[n]}`, "ok"); }
+    return;
+  }
+  const editJob = hit("[data-edit-job]");
+  if (editJob) return openJobForm(editJob.dataset.editJob);
+
+  const printJob = hit("[data-print-job]");
+  if (printJob) return printJobs([Store.job(printJob.dataset.printJob)], "this job");
+
+  const addPart = hit("[data-add-part]");
+  if (addPart){
+    const j = Store.job(addPart.dataset.addPart);
+    const desc = $("#part-desc").value.trim();
+    if (!desc){ $("#part-desc").focus(); return; }
+    j.parts = j.parts || [];
+    j.parts.push({ desc, qty: Number($("#part-qty").value) || 1, price: Number($("#part-price").value) || 0 });
+    Store.addLog(j, `Part added: ${desc}`);
+    Store.save(); openJob(j.id);
+    return;
+  }
+  const delPart = hit("[data-del-part]");
+  if (delPart){
+    const [jid, idx] = delPart.dataset.delPart.split(":");
+    const j = Store.job(jid);
+    j.parts.splice(Number(idx), 1);
+    Store.save(); openJob(jid);
+    return;
+  }
+  const saveLabor = hit("[data-save-labor]");
+  if (saveLabor){
+    const j = Store.job(saveLabor.dataset.saveLabor);
+    j.laborHours = Number($("#labor-hours").value) || 0;
+    Store.save(); openJob(j.id); toast("Labor saved", "ok");
+    return;
+  }
+  const addNote = hit("[data-add-note]");
+  if (addNote){
+    const j = Store.job(addNote.dataset.addNote);
+    const text = $("#note-text").value.trim();
+    if (!text) return;
+    Store.addLog(j, text); Store.save(); openJob(j.id);
+    return;
+  }
+  const delJob = hit("[data-del-job]");
+  if (delJob){
+    const j = Store.job(delJob.dataset.delJob);
+    if (!confirm(`Delete job #${j.no} for ${custName(j.customerId)}?\n\nThis cannot be undone.`)) return;
+    Store.deleteJob(j.id); closeModal(); render(); toast("Job deleted");
+    return;
+  }
+
+  /* --- form saves --- */
+  const sj = hit("[data-save-job]");      if (sj) return saveJobFromForm(sj.dataset.saveJob || null);
+  const sc = hit("[data-save-customer]"); if (sc) return saveCustomerFromForm(sc.dataset.saveCustomer || null);
+  const st = hit("[data-save-tech]");     if (st) return saveTechFromForm(st.dataset.saveTech || null);
+
+  /* --- customers / techs --- */
+  const ec = hit("[data-edit-customer]"); if (ec) return openCustomerForm(ec.dataset.editCustomer);
+  const et = hit("[data-edit-tech]");     if (et) return openTechForm(et.dataset.editTech);
+  const tt = hit("[data-toggle-tech]");
+  if (tt){
+    const t = Store.tech(tt.dataset.toggleTech);
+    const open = Store.data.jobs.filter(j => j.techId === t.id && isOpen(j)).length;
+    if (t.active && open && !confirm(`${t.name} still has ${open} open job${open===1?"":"s"}.\n\nDeactivate anyway? Their jobs stay assigned but the column leaves the board.`)) return;
+    t.active = !t.active; Store.save(); render();
+    return;
+  }
+  const njf = hit("[data-new-job-for]");
+  if (njf){
+    const cid = njf.dataset.newJobFor;
+    openJobForm(null);
+    $("#f-customer").value = cid;
+    return;
+  }
+
+  /* --- generic row / card open (last) --- */
+  const jobEl = hit("[data-job]");   if (jobEl) return openJob(jobEl.dataset.job);
+  const cusEl = hit("[data-customer]"); if (cusEl) return openCustomer(cusEl.dataset.customer);
+
+  /* --- toolbar actions --- */
+  const act = hit("[data-action]");
+  if (!act) return;
+  switch(act.dataset.action){
+    case "new-job":      openJobForm(null); break;
+    case "new-customer": openCustomerForm(null); break;
+    case "new-tech":     openTechForm(null); break;
+    case "clear-filters":
+      App.filters = { status:"", techId:"", type:"", when:"upcoming" }; render(); break;
+    case "clear-search":
+      App.search = ""; $("#global-search").value = ""; render(); break;
+    case "print-day":
+      printJobs(Store.data.jobs.filter(j => j.scheduledDate === todayStr() && isOpen(j)), "today"); break;
+    case "print-board":
+      printJobs(Store.data.jobs.filter(j => j.scheduledDate === App.date && isOpen(j)), "this day"); break;
+    case "export":     exportJson(); break;
+    case "export-csv": exportCsv(); break;
+    case "import":     $("#import-file").click(); break;
+    case "save-settings": {
+      const s = Store.data.settings;
+      s.company = $("#set-company").value.trim() || "Park City Plumbing";
+      s.phone   = $("#set-phone").value.trim();
+      s.laborRate = Number($("#set-rate").value) || 0;
+      Store.save(); render(); toast("Settings saved", "ok");
+      break;
+    }
+    case "reset":
+      if (confirm("Wipe all data in this browser and reload the sample day?")){
+        Store.reset(); App.date = todayStr(); render(); toast("Reset to sample data");
+      }
+      break;
+  }
+});
+
+document.addEventListener("change", e => {
+  const t = e.target;
+
+  if (t.id === "import-file" && t.files && t.files[0]){ importJson(t.files[0]); t.value = ""; return; }
+  if (t.id === "board-date"){ App.date = t.value || todayStr(); return render(); }
+
+  if (t.id === "f-when")  { App.filters.when   = t.value; return render(); }
+  if (t.id === "f-status"){ App.filters.status = t.value; return render(); }
+  if (t.id === "f-tech")  { App.filters.techId = t.value; return render(); }
+  if (t.id === "f-type")  { App.filters.type   = t.value; return render(); }
+
+  if (t.dataset.setstatus){
+    const j = Store.job(t.dataset.setstatus);
+    Store.setStatus(j, t.value); render(); openJob(j.id);
+    return;
+  }
+  if (t.dataset.settech){
+    const j = Store.job(t.dataset.settech);
+    Store.assign(j, t.value || null); render(); openJob(j.id);
+    return;
+  }
+});
+
+/* Enter-to-submit inside modals, so the office can key a job fast. */
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  const modal = $("#modal-root .modal");
+  if (!modal || e.target.tagName === "TEXTAREA") return;
+  if (e.target.id === "part-desc" || e.target.id === "part-price" || e.target.id === "part-qty"){
+    $("[data-add-part]", modal)?.click(); e.preventDefault(); return;
+  }
+  if (e.target.id === "note-text"){ $("[data-add-note]", modal)?.click(); e.preventDefault(); return; }
+  const save = $("[data-save-job],[data-save-customer],[data-save-tech]", modal);
+  if (save && e.target.closest(".modal-body")){ save.click(); e.preventDefault(); }
+});
+
+let searchTimer = null;
+$("#global-search").addEventListener("input", e => {
+  clearTimeout(searchTimer);
+  const v = e.target.value;
+  searchTimer = setTimeout(() => { App.search = v; render(); }, 160);
+});
+
+$("#btn-new-job").addEventListener("click", () => openJobForm(null));
+
+/* ============================================================
+   Boot
+   ============================================================ */
+Store.load();
+App.date = todayStr();
+render();
+$("#storage-note").textContent = `${Store.data.jobs.length} jobs · saved on this device`;
+</script>
+</body>
+</html>
