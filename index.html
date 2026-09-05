@@ -154,6 +154,29 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .money-lg{font-size:19px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
 .linkish{color:var(--blue);cursor:pointer;font-weight:600}
 .linkish:hover{text-decoration:underline}
+.sigpad-wrap{border:1px solid #d5dde5;border-radius:7px;background:#fff;position:relative;overflow:hidden}
+.sigpad-wrap.filled{border-color:var(--green)}
+#sigpad{display:block;width:100%;height:150px;touch-action:none;cursor:crosshair}
+.sigpad-line{position:absolute;left:24px;right:24px;bottom:34px;border-bottom:1px solid #cfd8e1;pointer-events:none}
+.sigpad-hint{position:absolute;left:24px;bottom:14px;font-size:11.5px;color:var(--muted-2);pointer-events:none}
+.waiver-body p{margin:0 0 10px;line-height:1.6}
+.waiver-body p:last-child{margin-bottom:0}
+.ack-list{list-style:none;margin:0;padding:0}
+.ack-list li{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #f2f5f8}
+.ack-list li:last-child{border-bottom:0}
+.ack-list input{margin-top:3px;flex:0 0 auto;width:15px;height:15px}
+.ack-list label{font-size:13px;line-height:1.5;cursor:pointer}
+.legal-note{
+  border:1px solid #f0d9b8;background:#fdf7ee;border-radius:7px;padding:12px 14px;
+  font-size:12.5px;line-height:1.6;color:#7a5a25;margin-bottom:16px;
+}
+.legal-note strong{color:#5e441a}
+.tpl-card{border:1px solid var(--line);border-radius:8px;background:#fff;padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column}
+.tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.tpl-card .tc-cat{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--blue)}
+.tpl-card h4{font-size:14px;margin:5px 0 6px;line-height:1.35}
+.tpl-card .tc-when{font-size:12.5px;color:var(--muted);line-height:1.55}
+.tpl-card .tc-foot{display:flex;gap:6px;align-items:center;margin-top:auto;padding-top:14px}
 .pick-row{display:flex;gap:8px;align-items:flex-end;margin-bottom:10px}
 .pick-row .field{margin-bottom:0}
 .opt-card{border:1px solid var(--line);border-radius:7px;padding:12px 14px;margin-bottom:10px;cursor:pointer;background:#fff}
@@ -281,6 +304,16 @@ textarea.input{resize:vertical;min-height:76px}
   .ticket .tk-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px;display:flex}
   .ticket table{margin-top:10px}
   .ticket .sig,.estdoc .sig{margin-top:44px;border-top:1px solid #000;width:280px;padding-top:5px;font-size:12px}
+  .wvdoc{page-break-after:always;padding:28px 4px;font-size:12px;line-height:1.55}
+  .wvdoc h1{font-size:18px}
+  .wvdoc .wv-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:14px;display:flex}
+  .wvdoc .wv-meta{width:100%;border-collapse:collapse;margin-bottom:14px}
+  .wvdoc .wv-meta td{padding:3px 4px;border-bottom:1px solid #ddd}
+  .wvdoc p{margin:0 0 9px}
+  .wvdoc ul{margin:6px 0 0;padding-left:18px}
+  .wvdoc li{margin-bottom:5px}
+  .wvdoc .wv-sig{margin-top:22px;border-top:2px solid #000;padding-top:12px;display:flex;gap:30px;align-items:flex-end}
+  .wvdoc .wv-sig img{max-height:70px;border-bottom:1px solid #000}
   .estdoc{page-break-after:always;padding:28px 4px}
   .estdoc h1{font-size:20px}
   .estdoc .ed-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px;display:flex}
@@ -387,6 +420,34 @@ const LINE_KINDS = [
 ];
 const KIND_UNIT = Object.fromEntries(LINE_KINDS.map(k => [k.id, k.unit]));
 
+const WAIVER_CATEGORIES = ["Drain & Sewer","Gas","Boiler & Hydronic","Plumbing","All trades"];
+
+/* Job types that normally want a signed acknowledgment before the tech starts.
+   Drives the reminder on the job record — it never blocks anything. */
+const JOB_TYPE_WAIVERS = {
+  "Drain Cleaning":       ["drain-condition"],
+  "Sewer / Camera":       ["camera-limits","drain-condition"],
+  "Gas Line":             ["gas-pressure"],
+  "Boiler / Radiant Heat":["boiler-service"],
+  "Water Heater":         ["water-heater"],
+  "Frozen Pipe":          ["freeze-shutoff"],
+  "Remodel Rough-in":     ["access-openings"],
+  "Well / Pump":          ["access-entry"]
+};
+
+/* Merge fields a waiver body can use. Filled from the job when one is attached. */
+const MERGE_FIELDS = [
+  ["{{company}}",        "Your company name"],
+  ["{{company_phone}}",  "Office phone"],
+  ["{{customer_name}}",  "Customer or signer on the job"],
+  ["{{service_address}}","Service address"],
+  ["{{job_number}}",     "Job number, if attached to a job"],
+  ["{{job_type}}",       "Type of work"],
+  ["{{job_description}}","The reported problem"],
+  ["{{tech_name}}",      "Assigned technician"],
+  ["{{date}}",           "Today"]
+];
+
 const TECH_COLORS = ["#1d6fa5","#e2701f","#1f8a4c","#5b4bb5","#c0392b","#0d7c8f","#8a6d1f","#b8407e"];
 
 /* ---------- Tiny helpers ---------- */
@@ -475,6 +536,10 @@ const Store = {
           this.data.estimates  = this.data.estimates  || [];
           this.data.priceBook  = this.data.priceBook  || seedPriceBook();
           this.data.counterEst = this.data.counterEst || 2000;
+          // Added with waivers.
+          this.data.waiverTemplates = this.data.waiverTemplates || seedWaiverTemplates();
+          this.data.signedWaivers   = this.data.signedWaivers   || [];
+          this.data.counterWaiver   = this.data.counterWaiver   || 5000;
           return;
         }
       } catch(e){ console.warn("Saved data was unreadable; starting fresh.", e); }
@@ -582,6 +647,84 @@ const Store = {
 
   deleteEstimate(id){
     this.data.estimates = this.data.estimates.filter(e => e.id !== id);
+    this.save();
+  },
+
+  /* Waivers — templates, and the frozen record of what someone actually signed. */
+  nextWaiverNo(){
+    this.data.counterWaiver = (this.data.counterWaiver || 5000) + 1;
+    return this.data.counterWaiver;
+  },
+  waiverTemplate(id){ return this.data.waiverTemplates.find(w => w.id === id) || null; },
+  templateByKey(key){ return this.data.waiverTemplates.find(w => w.key === key && !w.archived) || null; },
+  activeTemplates(){ return this.data.waiverTemplates.filter(w => !w.archived); },
+  signedWaiver(id){ return this.data.signedWaivers.find(w => w.id === id) || null; },
+  signedForJob(jobId){ return this.data.signedWaivers.filter(w => w.jobId === jobId); },
+  signedForCustomer(cid){
+    return this.data.signedWaivers.filter(w => w.customerId === cid)
+      .sort((a,b) => b.signedAt - a.signedAt);
+  },
+
+  /* Values a waiver body can merge in. */
+  waiverContext(job){
+    const st = this.data.settings;
+    const c = job ? this.customer(job.customerId) : null;
+    return {
+      company: st.company,
+      company_phone: st.phone,
+      customer_name: c ? c.name : "",
+      service_address: c ? [c.address, c.city].filter(Boolean).join(", ") : "",
+      job_number: job ? "#" + job.no : "",
+      job_type: job ? job.type : "",
+      job_description: job ? job.description : "",
+      tech_name: job && job.techId ? (this.tech(job.techId) || {}).name || "" : "",
+      date: fmtDateLong(todayStr())
+    };
+  },
+  applyMerge(text, ctx){
+    return String(text || "").replace(/\{\{(\w+)\}\}/g, (m, k) =>
+      ctx[k] != null && ctx[k] !== "" ? ctx[k] : m);
+  },
+
+  /* Which templates this job would normally want, and which are still missing. */
+  recommendedFor(job){
+    const keys = JOB_TYPE_WAIVERS[job.type] || [];
+    return keys.map(k => this.templateByKey(k)).filter(Boolean);
+  },
+  missingFor(job){
+    const have = new Set(this.signedForJob(job.id).map(w => w.templateKey));
+    return this.recommendedFor(job).filter(t => !have.has(t.key));
+  },
+
+  /* A signed waiver freezes its own text — editing the template later must
+     never change what someone already put their name to. */
+  signWaiver(tpl, opts){
+    const ctx = this.waiverContext(opts.job);
+    const rec = {
+      id: uid("sw"), no: this.nextWaiverNo(),
+      templateId: tpl.id, templateKey: tpl.key || null, title: tpl.title,
+      category: tpl.category,
+      jobId: opts.job ? opts.job.id : null,
+      customerId: opts.job ? opts.job.customerId : (opts.customerId || null),
+      body: tpl.body.map(pp => this.applyMerge(pp, ctx)),
+      acks: tpl.acks.map(a => this.applyMerge(a, ctx)),
+      fillIns: opts.fillIns || "",
+      signerName: opts.signerName,
+      signerRole: opts.signerRole,
+      signature: opts.signature || null,
+      techId: opts.job ? opts.job.techId : null,
+      contextSnapshot: ctx,
+      signedAt: Date.now()
+    };
+    this.data.signedWaivers.push(rec);
+    if (opts.job){
+      this.addLog(opts.job, `Waiver signed: ${tpl.title} (by ${opts.signerName})`);
+    }
+    this.save();
+    return rec;
+  },
+  deleteSignedWaiver(id){
+    this.data.signedWaivers = this.data.signedWaivers.filter(w => w.id !== id);
     this.save();
   },
 
@@ -780,9 +923,251 @@ function seedData(){
     counter: n,
     counterEst: en,
     settings: { company:"Park City Plumbing", laborRate:145, phone:"(435) 555-0100" },
+    counterWaiver: 5000,
     techs, customers, jobs, estimates,
-    priceBook: seedPriceBook()
+    priceBook: seedPriceBook(),
+    waiverTemplates: seedWaiverTemplates(),
+    signedWaivers: []
   };
+}
+
+/* ------------------------------------------------------------------
+   Waiver template library.
+
+   These are drafts modelled on language that is common in service
+   plumbing, gas fitting, drain cleaning and boiler work. They have NOT
+   been reviewed by an attorney or an insurance carrier, and what a
+   waiver can actually disclaim varies by state — nothing here waives
+   gross negligence or willful misconduct anywhere. Have counsel and
+   your carrier review before a customer signs one. Every template is
+   editable, and you can add your own.
+   ------------------------------------------------------------------ */
+function seedWaiverTemplates(){
+  const t = (key, title, category, whenToUse, body, acks) =>
+    ({ id: uid("wt"), key, title, category, whenToUse, body, acks, builtin: true, archived: false });
+
+  return [
+    t("drain-condition", "Drain Cleaning & Sewer Line Condition Release", "Drain & Sewer",
+      "Before cabling or clearing any drain or sewer line — especially cast iron, clay or Orangeburg pipe, homes over about 20 years old, known root intrusion, or any line that has backed up more than once.",
+      [
+        "{{company}} has been asked to clear a blocked or slow drain at {{service_address}}. Drain and sewer lines are concealed. Their material, age, slope and condition cannot be known before work begins, and often cannot be known at all without a camera inspection.",
+        "Mechanical drain cleaning — cable machines, augers and similar equipment — applies force inside the line. A line that is already cracked, corroded, root-invaded, offset at a joint, bellied, or built from cast iron, clay or Orangeburg pipe may be further damaged by that force, or may fail during cleaning, even where the equipment is used correctly and with reasonable care.",
+        "The Customer understands that clearing a blockage may reveal or worsen an existing defect, and that the line may need repair or replacement afterward at additional cost. {{company}} does not guarantee that a line will remain clear, and does not accept responsibility for damage arising from the pre-existing condition of the line, from foreign objects placed in the line, or from a defect that could not reasonably have been identified before work began.",
+        "Cables can become caught or lodged in a defective line. If equipment cannot be recovered without excavation, that recovery is quoted separately."
+      ],
+      [
+        "I understand the age, material and condition of my drain or sewer line cannot be known before work begins.",
+        "I understand drain cleaning may damage a line that is already defective, and that this can happen without fault on the technician's part.",
+        "I understand any resulting repair or replacement is not included in the price of drain cleaning and will be quoted separately.",
+        "I have been offered a camera inspection to assess the line's condition, and I understand what declining it means.",
+        "I authorize {{company}} to proceed with drain cleaning at {{service_address}}."
+      ]),
+
+    t("hydro-jetting", "Hydro-Jetting High-Pressure Service Acknowledgment", "Drain & Sewer",
+      "Any time high-pressure water jetting is used instead of, or after, cabling. Jetting carries more risk than a cable and deserves its own signature.",
+      [
+        "High-pressure water jetting clears a line using water at pressures that can exceed 3,000 psi. It is more effective than cabling on grease, sludge and root mass, and it is also more demanding on the pipe.",
+        "Jetting is not appropriate for every line. Pipe that is thin-walled, corroded, cracked, separated at the joints, or made from clay, Orangeburg or deteriorated cast iron can be damaged or destroyed by jetting pressure. Where the condition of the line is unknown, {{company}} recommends a camera inspection before jetting and will perform one on request at the quoted rate.",
+        "Jetting can also force water and waste out of an existing break, crack or open joint into the surrounding soil, a crawlspace, or a lower level of the building. Where a line is already compromised, this may occur with no warning and no way to prevent it.",
+        "The Customer authorizes jetting at {{service_address}} understanding these risks, and accepts that {{company}} is not responsible for damage that results from the pre-existing condition of the line."
+      ],
+      [
+        "I understand hydro-jetting uses water pressure that can damage pipe which is already weak, cracked or deteriorated.",
+        "I have been offered a camera inspection before jetting and understand the risk of proceeding without one.",
+        "I understand jetting can force water out of an existing break into soil, a crawlspace or a lower level.",
+        "I accept that repairs arising from the pre-existing condition of the line are my responsibility.",
+        "I authorize {{company}} to hydro-jet the line at {{service_address}}."
+      ]),
+
+    t("camera-limits", "Sewer Camera Inspection — Scope & Limitations", "Drain & Sewer",
+      "Whenever you scope a line and give the customer findings, especially before a real estate transaction or a repair decision.",
+      [
+        "A camera inspection is a visual record of what the camera could see inside the line on {{date}}. It is not a warranty, a guarantee, or a certification that the line is sound.",
+        "Cameras have real limits. Standing water, heavy grease, sludge, root mass or a collapse can hide a defect or stop the camera before the end of the line. Depth and location readings from a locator are approximate. Small cracks, hairline fractures and joint separations are not always visible, and a line can fail after an inspection that showed nothing wrong.",
+        "Any opinion offered about the material, age, remaining life or repair method for the line is a professional judgment based on what was visible, not a guarantee of outcome or cost.",
+        "The Customer understands this inspection covers only the portion of the line the camera actually reached, and that {{company}} makes no representation about any portion it did not."
+      ],
+      [
+        "I understand this inspection records only what the camera could see, on this date.",
+        "I understand water, grease, roots or a blockage can hide defects, and that depth and location readings are approximate.",
+        "I understand this is not a warranty or certification, and that the line may fail after a clear inspection.",
+        "I understand any repair recommendation is a professional opinion, not a guaranteed outcome or price."
+      ]),
+
+    t("gas-safety", "Gas System Safety — Leak Found, Red Tag & Service Refusal", "Gas",
+      "CRITICAL. Use when a technician finds a gas leak, an unsafe appliance, or a code violation and the customer declines the repair, or asks that gas be left on or turned back on. Never leave this one unsigned.",
+      [
+        "During work at {{service_address}} on {{date}}, {{company}} identified a condition on the gas system or a gas appliance that, in the technician's professional judgment, is unsafe. The condition was explained to the Customer, along with the recommended corrective action.",
+        "Where required, the appliance or gas system has been shut off, tagged, and the utility or authority having jurisdiction notified in accordance with applicable code. A tagged appliance must not be returned to service by anyone other than a qualified technician after the condition has been corrected.",
+        "The Customer has been advised that operating a gas system or appliance with a known leak or unsafe condition can cause fire, explosion, carbon monoxide poisoning, serious injury and death. The Customer has been advised to leave the gas off until the condition is corrected.",
+        "By signing below, the Customer confirms that they have been informed of the condition and the risk, that they are declining or deferring the recommended repair by their own choice, and that they assume full responsibility for any consequence of that decision. {{company}} accepts no liability for injury, death, or property damage arising from the Customer's decision to decline, defer, or reverse the recommended corrective action.",
+        "Condition identified and action recommended: ____________________________________________"
+      ],
+      [
+        "The unsafe condition and the recommended repair were explained to me in terms I understood.",
+        "I have been told that operating this system or appliance as it stands risks fire, explosion, carbon monoxide poisoning, serious injury or death.",
+        "I understand a tagged appliance must not be put back in service by anyone other than a qualified technician.",
+        "I am declining or deferring the recommended repair of my own choice, and I accept full responsibility for that decision.",
+        "I understand {{company}} is not responsible for what results from my decision."
+      ]),
+
+    t("gas-pressure", "Gas Line Work & Pressure Test Acknowledgment", "Gas",
+      "New gas line runs, extensions, repairs, appliance connections, and any job that involves a pressure test or an interruption of gas service.",
+      [
+        "Work on the gas system at {{service_address}} requires that gas service be interrupted, that the affected piping be pressure-tested, and in most cases that the work be permitted and inspected by the authority having jurisdiction before service is restored.",
+        "Existing gas piping is often concealed within walls, floors and slabs. Its age, material, joint condition and prior workmanship cannot be fully assessed before work begins. Isolating a section of an older system, or bringing it up to test pressure, can reveal leaks at existing joints and fittings that were not leaking beforehand. Repairs to those existing sections are not included in the quoted price and are quoted separately.",
+        "{{company}} pressure-tests and certifies only the piping it installs or repairs. It does not certify the balance of the gas system, appliances it did not connect, or any portion it could not access.",
+        "Gas service is restored, and appliances relit, only after a passing test and any required inspection. Where the utility must restore service, the timing is the utility's and outside {{company}}'s control."
+      ],
+      [
+        "I understand my gas service will be interrupted while this work is carried out.",
+        "I understand pressure-testing an older system can reveal existing leaks at joints that were not leaking before, and that repairing those is quoted separately.",
+        "I understand {{company}} certifies only the piping it installed or repaired, not the rest of my gas system or my appliances.",
+        "I understand service is restored only after a passing test and any required inspection, and that utility timing is outside {{company}}'s control."
+      ]),
+
+    t("boiler-service", "Boiler & Hydronic System Service Acknowledgment", "Boiler & Hydronic",
+      "Annual service, repair or diagnosis on any boiler or hydronic system — particularly units over about 15 years old, and any system with original insulation.",
+      [
+        "The boiler or hydronic system at {{service_address}} is being serviced or repaired by {{company}}. Boilers are pressure vessels operating with heat, water and, in most cases, fuel gas. Systems of this kind age in ways that are not visible from outside the jacket.",
+        "Servicing an older boiler involves disturbing components that may be at the end of their service life — sections, gaskets, circulators, zone valves, expansion tanks, relief valves, controls, and near-boiler piping. A component that was functioning before service may fail during or shortly after it because of its existing age and condition, not because of the work performed. Where that happens, replacement is quoted separately.",
+        "Draining, refilling, or isolating zones on an older system can dislodge scale and sediment and reveal leaks at existing joints. Systems that have run for years with low water quality or without proper treatment are especially prone to this.",
+        "If the technician determines the appliance is unsafe to operate, it will be shut down and tagged, and a separate safety acknowledgment will be required before it is left in service.",
+        "In a cold-weather climate, a system taken out of service risks freeze damage to the building. The Customer is responsible for maintaining heat by other means, or for arranging winterization, while the system is down."
+      ],
+      [
+        "I understand my boiler is an aging pressure vessel and that servicing it may cause a component already at the end of its life to fail.",
+        "I understand replacement of failed components is not included in the price of service and will be quoted separately.",
+        "I understand draining or isolating the system can reveal existing leaks and dislodge scale and sediment.",
+        "I understand that if the appliance is found unsafe it will be shut down and tagged.",
+        "I understand I am responsible for protecting the building from freezing while the system is out of service."
+      ]),
+
+    t("water-heater", "Water Heater Replacement & Existing Condition Acknowledgment", "Plumbing",
+      "Any water heater replacement, and any repair that means closing an old shutoff valve or disturbing existing connections.",
+      [
+        "Replacing or servicing the water heater at {{service_address}} requires closing the cold water shutoff and disturbing existing connections, venting and, on gas units, the gas connection.",
+        "Shutoff valves, particularly older gate valves, frequently fail to hold or fail to reopen once they have been operated after years in one position. Where the shutoff will not hold, the water must be turned off at the main or at the street, and a valve replacement will be quoted separately. Where the main itself will not hold, a municipal shutoff may be required and the schedule becomes dependent on the water provider.",
+        "Existing connections, unions, nipples, flex lines, venting and drain pans are often corroded and may not be reusable. Current code may also require upgrades that the original installation did not include — expansion control, seismic strapping, drain pan and termination, sediment trap, vent sizing, or a pan drain to an approved point. Where these are required, they are quoted before installation proceeds.",
+        "{{company}} warrants its own workmanship and passes through the manufacturer's warranty on equipment it supplies. It does not warrant the existing piping, venting or valves it did not install."
+      ],
+      [
+        "I understand old shutoff valves often fail when operated, and that replacing one is quoted separately.",
+        "I understand existing connections, venting and pans may not be reusable.",
+        "I understand current code may require upgrades my original installation did not include, and that these will be quoted before work proceeds.",
+        "I understand {{company}} does not warrant existing piping, venting or valves it did not install."
+      ]),
+
+    t("customer-materials", "Customer-Supplied Materials & Equipment Waiver", "All trades",
+      "Any time the customer provides the fixture, water heater, faucet, valve or part — including anything bought online or from a big-box store.",
+      [
+        "The Customer has chosen to supply the following material or equipment for installation by {{company}} at {{service_address}}: ____________________________________________",
+        "{{company}} did not select, supply, or inspect this material and makes no representation about its quality, suitability, code compliance, or fitness for the intended application. No warranty of any kind is offered on Customer-supplied material.",
+        "{{company}} warrants only its own labour. If Customer-supplied material is defective, incomplete, damaged, the wrong size or model, discontinued, missing parts, or fails after installation, the labour to diagnose, remove, and reinstall a replacement is billable at standard rates, as is any return trip.",
+        "Where material arrives incomplete or incompatible and the job cannot be finished, the visit is billable at the standard service rate. Manufacturer warranty claims on Customer-supplied equipment are the Customer's to pursue directly with the seller or manufacturer."
+      ],
+      [
+        "I am supplying this material myself and understand {{company}} did not select or inspect it.",
+        "I understand no warranty of any kind is offered on material I supply.",
+        "I understand that if my material is defective or wrong, the labour to remove it and install a replacement is billable at standard rates.",
+        "I understand a warranty claim on my own material is mine to pursue with the seller or manufacturer."
+      ]),
+
+    t("declined-repair", "Declined or Deferred Recommended Repair", "All trades",
+      "Whenever a technician recommends work and the customer says no, or not now. The cheapest liability protection there is — get it signed at the door.",
+      [
+        "During the visit to {{service_address}} on {{date}}, {{company}} recommended the following work, and explained the reason for it and what may happen if it is not carried out:",
+        "Recommended: ____________________________________________",
+        "Reason and risk if deferred: ____________________________________________",
+        "The Customer has chosen to decline or defer this work at this time. That decision is the Customer's alone and was made after the recommendation and the risks were explained.",
+        "The Customer understands that a deferred condition can worsen, sometimes suddenly, and can lead to water damage, property loss, loss of heat or hot water, or an unsafe condition. {{company}} is not responsible for damage, loss, or injury arising from work it recommended and the Customer declined or deferred, and the recommendation is not withdrawn by the Customer's decision."
+      ],
+      [
+        "The recommended work and the reason for it were explained to me.",
+        "I was told what may happen if the work is not carried out.",
+        "I am declining or deferring this work by my own choice.",
+        "I understand {{company}} is not responsible for damage or loss arising from my decision."
+      ]),
+
+    t("access-entry", "Property Access, Entry & Unattended Work Authorization", "All trades",
+      "Second homes, rentals, vacant properties, lockbox or keypad entry, and any job where nobody will be on site. Common in a resort town — get it in writing.",
+      [
+        "The Customer authorizes {{company}} and its technicians to enter the property at {{service_address}} to perform the work described, including on dates when the Customer or an occupant is not present.",
+        "Entry method and access details provided by the Customer: ____________________________________________",
+        "The Customer confirms they are the owner of the property, or are authorized by the owner to permit this entry and this work. Where the property is tenanted, the Customer is responsible for any notice the tenancy requires.",
+        "The Customer is responsible for securing valuables, firearms, medication, sensitive documents and pets before the visit, and for disclosing alarm systems, cameras, gate codes, and any hazard on the property. {{company}} will secure the property on leaving using the method described above.",
+        "Where work requires water, gas or power to be shut off and no one is present to be consulted, {{company}} will act reasonably to protect the property and will report what was done. The Customer accepts that decisions of this kind may need to be made without contacting them first."
+      ],
+      [
+        "I own this property or am authorized by the owner to permit entry and this work.",
+        "I authorize entry when I am not present, by the access method described above.",
+        "I am responsible for securing valuables and pets and for disclosing alarms, cameras and hazards.",
+        "I accept that if utilities must be shut off and I cannot be reached, the technician may act to protect the property."
+      ]),
+
+    t("access-openings", "Access Openings & Finish Restoration Waiver", "All trades",
+      "Whenever reaching the work means cutting drywall, tile, plaster, cabinetry, decking or concrete — most concealed leaks and most rough-in work.",
+      [
+        "The work at {{service_address}} requires access to piping or equipment concealed behind a finished surface. Reaching it means cutting, removing or drilling drywall, plaster, tile, stone, cabinetry, flooring, decking, siding or concrete.",
+        "{{company}} makes access openings no larger than the work reasonably requires, and locates them to limit damage where there is a choice. It is not always possible to know the best location before opening the surface, and a second opening is sometimes necessary.",
+        "Unless separately quoted in writing, the price of this work does NOT include restoration of the finished surface. Access openings are left unrestored, or closed to a rough state only. Drywall finishing, texture, paint, tile, stone, grout, cabinetry, flooring and concrete finish work are the Customer's responsibility to arrange.",
+        "Matching existing tile, stone, texture, paint or finish is frequently impossible where the material is discontinued or has aged. Where a finish material must be removed, it is often destroyed in the process and cannot be reinstalled."
+      ],
+      [
+        "I understand reaching the work requires cutting into finished surfaces, and that a second opening is sometimes needed.",
+        "I understand restoration of the finish is NOT included unless separately quoted in writing.",
+        "I understand tile, stone and other finish materials are often destroyed on removal and cannot be reused.",
+        "I understand an exact match to existing finishes may not be possible."
+      ]),
+
+    t("freeze-shutoff", "Winterization, Water Shut-Off & Freeze Damage Acknowledgment", "Plumbing",
+      "Winterizing a property, leaving water off, or any work in a vacant or seasonally-occupied building during cold weather. Mountain-town essential.",
+      [
+        "This acknowledgment covers work at {{service_address}} involving winterization, an extended water shut-off, or service to a building that is vacant or seasonally occupied during freezing weather.",
+        "Winterization reduces the risk of freeze damage. It does not eliminate it. Water can remain trapped in low points, traps, valves, appliances, in-floor tubing, irrigation, and fixtures that cannot be fully drained or accessed. A building left unheated, or one that loses heat or power while unoccupied, can suffer freeze damage regardless of how thoroughly it was winterized.",
+        "The Customer is responsible for maintaining adequate heat and power to the building, for monitoring the property while it is unoccupied, and for notifying {{company}} of any area, appliance, or system not disclosed at the time of service. Systems and fixtures {{company}} was not told about, or could not access, are not covered by this service.",
+        "Where the water has been left off, it must be recommissioned by a qualified technician. Turning the water back on to a winterized building without a proper walk-through frequently causes flooding from a fixture or line that was left open.",
+        "Areas or systems excluded from this winterization: ____________________________________________"
+      ],
+      [
+        "I understand winterization reduces but does not eliminate the risk of freeze damage.",
+        "I am responsible for maintaining heat and power and for monitoring the property while it is unoccupied.",
+        "I understand systems or areas not disclosed, or not accessible, are not covered by this service.",
+        "I understand the water must be turned back on by a qualified technician, and that doing it myself risks flooding."
+      ]),
+
+    t("excavation", "Excavation & Private Underground Utility Waiver", "All trades",
+      "Any digging — sewer or water line repair or replacement, gas line trenching, well and pump work.",
+      [
+        "The work at {{service_address}} requires excavation. {{company}} will request a public utility locate through the state one-call service before digging, as required by law.",
+        "A public locate marks public utilities only. It does NOT mark privately owned lines on the property. Irrigation and sprinkler lines, landscape lighting, invisible pet fencing, private electrical runs to sheds, garages, gates, wells or pumps, septic components, drain tile, data and low-voltage cabling, propane lines and private water lines are the Customer's to identify and mark.",
+        "The Customer agrees to identify and mark all known private underground installations before excavation begins, and accepts that {{company}} is not responsible for damage to private lines that were not marked or disclosed.",
+        "Excavation disturbs the surface. Restoration is to rough grade with the excavated soil unless a finished restoration is separately quoted. Sod, landscaping, plantings, mature root systems, paving, driveways, patios and retaining structures within the work area may be damaged or removed, and their replacement is not included. Settlement over a backfilled trench is normal and may continue for a season or more.",
+        "Private lines identified by the Customer: ____________________________________________"
+      ],
+      [
+        "I understand the public locate marks public utilities only, not private lines on my property.",
+        "I have identified and marked all private underground lines I know of, and I accept responsibility for any I did not.",
+        "I understand restoration is to rough grade unless finished restoration is separately quoted.",
+        "I understand landscaping, paving and plantings in the work area may be damaged, and that trench settlement is normal."
+      ]),
+
+    t("hazmat", "Suspected Hazardous Material — Work Stoppage Acknowledgment", "All trades",
+      "When a technician encounters suspected asbestos, lead or mould — old boiler and pipe insulation, pre-1980 buildings, and any wet cavity that has been closed up.",
+      [
+        "During work at {{service_address}} on {{date}}, {{company}} encountered material suspected to contain asbestos, lead, or mould growth. Suspected material and location: ____________________________________________",
+        "{{company}} is a plumbing and mechanical contractor. It is not licensed or equipped for hazardous material abatement, testing, or remediation, and it will not disturb, remove or work through suspected hazardous material.",
+        "Work in the affected area has been stopped and will not resume until the Customer has arranged assessment and, where required, abatement by an appropriately licensed specialist, and has provided documentation that the area is clear.",
+        "The Customer understands that disturbing asbestos-containing insulation or lead paint, or working in an area with active mould growth, presents a health risk to occupants and to trades on site, and that federal and state rules govern how such material must be handled.",
+        "Time already spent on site is billable at standard rates. Rescheduling after clearance is subject to normal availability."
+      ],
+      [
+        "I understand suspected hazardous material was encountered and that work in that area has stopped.",
+        "I understand {{company}} is not licensed for testing, abatement or remediation and will not disturb the material.",
+        "I am responsible for arranging a licensed specialist and providing clearance documentation before work resumes.",
+        "I understand time already spent on site is billable and that rescheduling depends on availability."
+      ])
+  ];
 }
 
 /* The reusable list estimates are built from. Everything here is editable
@@ -821,6 +1206,7 @@ const App = {
   search: "",
   filters: { status:"", techId:"", type:"", when:"upcoming" },
   estFilter: "open",
+  waiverTab: "templates",
   customerSort: "name"
 };
 
@@ -830,6 +1216,7 @@ const VIEWS = [
   { id:"estimates", label:"Estimates", icon:"📋", crumb:"Work" },
   { id:"jobs",      label:"Jobs",      icon:"🧾", crumb:"Work" },
   { id:"customers", label:"Customers", icon:"👤", crumb:"Work" },
+  { id:"waivers",   label:"Waivers",   icon:"✍", crumb:"Work" },
   { id:"techs",     label:"Technicians", icon:"🔧", crumb:"Setup" },
   { id:"pricebook", label:"Price Book", icon:"🏷", crumb:"Setup" },
   { id:"data",      label:"Data & Setup", icon:"⚙", crumb:"Setup" }
@@ -853,6 +1240,7 @@ function render(){
     switch(App.view){
       case "schedule":  host.innerHTML = viewSchedule();  break;
       case "estimates": host.innerHTML = viewEstimates(); break;
+      case "waivers":   host.innerHTML = viewWaivers();   break;
       case "pricebook": host.innerHTML = viewPriceBook(); break;
       case "jobs":      host.innerHTML = viewJobs();      break;
       case "customers": host.innerHTML = viewCustomers(); break;
@@ -872,6 +1260,7 @@ function renderNav(){
     estimates: Store.openEstimates().length,
     jobs: jobs.filter(j => !["complete","cancelled"].includes(j.status)).length,
     customers: Store.data.customers.length,
+    waivers: Store.data.signedWaivers.length,
     techs: Store.activeTechs().length,
     pricebook: Store.data.priceBook.length
   };
@@ -891,7 +1280,7 @@ function renderNav(){
 
   $("#nav").innerHTML =
     group("Dispatch", ["dashboard","schedule"]) +
-    group("Work", ["estimates","jobs","customers"]) +
+    group("Work", ["estimates","jobs","customers","waivers"]) +
     group("Setup", ["techs","pricebook","data"]);
 }
 
@@ -1255,6 +1644,87 @@ function viewEstimates(){
 }
 
 /* ============================================================
+   View: Waivers — the template library, and what's been signed
+   ============================================================ */
+const LEGAL_NOTE = `<div class="legal-note">
+  <strong>Before you use these with a customer:</strong> these templates are drafts
+  modelled on language that is common in service plumbing, gas, drain and boiler work.
+  They have not been reviewed by an attorney or by your insurance carrier, and what a
+  waiver can actually disclaim varies by state — no waiver anywhere covers gross
+  negligence or willful misconduct. Have counsel and your carrier review them, then edit
+  the wording here to match what they approve.
+</div>`;
+
+function viewWaivers(){
+  const tab = App.waiverTab;
+  const btn = (id,label,n) =>
+    `<button class="btn sm ${tab===id?"primary":""}" data-waiver-tab="${id}">${esc(label)}${n!=null?` (${n})`:""}</button>`;
+
+  return `
+  <div class="toolbar">
+    ${btn("templates","Templates", Store.activeTemplates().length)}
+    ${btn("signed","Signed", Store.data.signedWaivers.length)}
+    <div style="flex:1"></div>
+    ${tab==="templates"
+      ? `<button class="btn sm accent" data-action="new-template">＋ Build a waiver</button>`
+      : `<button class="btn sm" data-action="export-waivers">⬇ Export signed as CSV</button>`}
+  </div>
+  ${tab === "templates" ? viewWaiverTemplates() : viewSignedWaivers()}`;
+}
+
+function viewWaiverTemplates(){
+  const active = Store.activeTemplates();
+  const byCat = WAIVER_CATEGORIES
+    .map(cat => ({ cat, items: active.filter(t => t.category === cat) }))
+    .filter(g => g.items.length);
+  const signedCount = k => Store.data.signedWaivers.filter(w => w.templateKey === k).length;
+
+  return `
+  ${LEGAL_NOTE}
+  ${byCat.map(g => `
+    <div class="section-title">${esc(g.cat)}</div>
+    <div class="tpl-grid">
+      ${g.items.map(t => {
+        const used = t.key ? signedCount(t.key) : 0;
+        return `<div class="tpl-card">
+          <div class="tc-cat">${t.builtin?"Starter template":"Built by you"}</div>
+          <h4>${esc(t.title)}</h4>
+          <div class="tc-when">${esc(t.whenToUse)}</div>
+          <div class="tc-foot">
+            <span class="chip">${t.acks.length} acknowledgment${t.acks.length===1?"":"s"}</span>
+            ${used?`<span class="chip" style="background:var(--green-soft);color:var(--green)">signed ${used}×</span>`:""}
+            <div style="flex:1"></div>
+            <button class="btn sm" data-preview-template="${t.id}">Preview</button>
+            <button class="btn sm" data-edit-template="${t.id}">Edit</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>`).join("")}`;
+}
+
+function viewSignedWaivers(){
+  const list = Store.data.signedWaivers.slice().sort((a,b) => b.signedAt - a.signedAt);
+  return `
+  <div class="card"><table>
+    <thead><tr><th>Ref</th><th>Waiver</th><th>Signed by</th><th>Job</th><th>Signed</th><th></th></tr></thead>
+    <tbody>
+      ${list.length ? list.map(w => {
+        const job = w.jobId ? Store.job(w.jobId) : null;
+        return `<tr class="clickable" data-signed="${w.id}">
+          <td class="t-sub" style="font-variant-numeric:tabular-nums">W-${w.no}</td>
+          <td><div class="t-strong">${esc(w.title)}</div><div class="t-sub">${esc(w.category)}</div></td>
+          <td><div>${esc(w.signerName)}</div><div class="t-sub">${esc(w.signerRole||"")}</div></td>
+          <td class="t-sub">${job?`#${job.no} · ${esc(job.type)}`:"—"}</td>
+          <td class="t-sub">${esc(fmtStamp(w.signedAt))}</td>
+          <td class="num"><button class="btn sm" data-print-waiver="${w.id}">🖨</button></td>
+        </tr>`;
+      }).join("")
+      : `<tr><td colspan="6"><div class="empty"><div class="big">✍</div>Nothing signed yet. Open a job and add a waiver from there — it fills in the customer and address for you.</div></td></tr>`}
+    </tbody>
+  </table></div>`;
+}
+
+/* ============================================================
    View: Price book
    ============================================================ */
 function viewPriceBook(){
@@ -1468,6 +1938,8 @@ function viewData(){
           <div class="dl"><dt>Jobs</dt><dd>${d.jobs.length}</dd></div>
           <div class="dl"><dt>Estimates</dt><dd>${d.estimates.length} <span class="t-sub">· ${Store.openEstimates().length} open</span></dd></div>
           <div class="dl"><dt>Price book items</dt><dd>${d.priceBook.length}</dd></div>
+          <div class="dl"><dt>Waiver templates</dt><dd>${Store.activeTemplates().length}</dd></div>
+          <div class="dl"><dt>Signed waivers</dt><dd>${d.signedWaivers.length}</dd></div>
           <div class="dl"><dt>Customers</dt><dd>${d.customers.length}</dd></div>
           <div class="dl"><dt>Technicians</dt><dd>${d.techs.length}</dd></div>
           <div class="dl"><dt>Storage used</dt><dd>${esc(storageSize())}</dd></div>
@@ -1685,6 +2157,25 @@ function openJob(id){
           })() : ""}
         </tbody>
       </table>
+
+      <div class="section-title" style="margin-top:22px">Waivers</div>
+      ${(() => {
+        const signed = Store.signedForJob(j.id);
+        const missing = Store.missingFor(j);
+        return `
+          ${missing.length ? `<div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
+            <strong>Usually signed for ${esc(j.type)}:</strong>
+            ${missing.map(t => esc(t.title)).join(" · ")} — not on file for this job yet.
+          </div>` : ""}
+          ${signed.length ? `<div class="card" style="margin-bottom:10px"><table>
+            <tbody>${signed.map(w => `<tr class="clickable" data-signed="${w.id}">
+              <td><div class="t-strong">${esc(w.title)}</div>
+                  <div class="t-sub">signed by ${esc(w.signerName)} · ${esc(fmtStamp(w.signedAt))}</div></td>
+              <td class="num" style="width:60px">${w.signature?`<span class="badge s-complete"><span class="dot"></span>signed</span>`:""}</td>
+            </tr>`).join("")}</tbody>
+          </table></div>` : `<p class="t-sub" style="margin-top:0">Nothing signed on this job yet.</p>`}
+          <button class="btn sm" data-add-waiver="${j.id}">✍ Add a waiver</button>`;
+      })()}
 
       <div class="section-title" style="margin-top:22px">Activity</div>
       <div class="field" style="display:flex;gap:8px;margin-bottom:14px">
@@ -2222,6 +2713,394 @@ function doConvert(id){
   toast(`EST-${e.no} approved → job #${job.no}`, "ok");
 }
 
+/* ---------- Waivers: pick, sign, view, build ---------- */
+function openWaiverPicker(jobId){
+  const job = jobId ? Store.job(jobId) : null;
+  const rec = job ? Store.recommendedFor(job) : [];
+  const recIds = new Set(rec.map(t => t.id));
+  const rest = Store.activeTemplates().filter(t => !recIds.has(t.id));
+  const already = job ? new Set(Store.signedForJob(job.id).map(w => w.templateKey)) : new Set();
+
+  const card = (t, flagged) => `
+    <div class="opt-card" data-pick-template="${t.id}" style="margin-bottom:8px">
+      <div class="oc-t">${flagged?"⚠ ":""}${esc(t.title)}
+        ${t.key && already.has(t.key)?`<span class="chip" style="background:var(--green-soft);color:var(--green)">already signed</span>`:""}</div>
+      <div class="oc-s">${esc(t.whenToUse)}</div>
+    </div>`;
+
+  openModal(`
+    <div class="modal-head">
+      <div>${job?`<div class="t-sub">Job #${job.no} · ${esc(custName(job.customerId))}</div>`:""}
+        <h2>Which waiver?</h2></div>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      ${rec.length ? `<div class="section-title" style="margin-top:0">Usually signed for ${esc(job.type)}</div>
+        ${rec.map(t => card(t, true)).join("")}` : ""}
+      <div class="section-title">${rec.length?"Everything else":"All waivers"}</div>
+      ${rest.map(t => card(t, false)).join("")}
+    </div>
+    <div class="modal-foot"><div class="spacer"></div><button class="btn" data-close>Cancel</button></div>`,
+    { wide:true, noFocus:true });
+
+  $$("[data-pick-template]").forEach(el => el.addEventListener("click", () =>
+    openWaiverSign(el.dataset.pickTemplate, jobId)));
+}
+
+function openWaiverSign(tplId, jobId){
+  const tpl = Store.waiverTemplate(tplId);
+  if (!tpl) return;
+  const job = jobId ? Store.job(jobId) : null;
+  const ctx = Store.waiverContext(job);
+  const body = tpl.body.map(pp => Store.applyMerge(pp, ctx));
+  const acks = tpl.acks.map(a => Store.applyMerge(a, ctx));
+  const needsFill = body.some(pp => pp.includes("____"));
+  const c = job ? Store.customer(job.customerId) : null;
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">${esc(tpl.category)}${job?` · job #${job.no}`:""}</div>
+        <h2>${esc(tpl.title)}</h2></div>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      ${job ? `<div class="detail-grid" style="margin-bottom:14px">
+        <div><div class="dl"><dt>Customer</dt><dd>${esc(c?c.name:"—")}</dd></div></div>
+        <div><div class="dl"><dt>Service address</dt><dd>${esc(custAddr(job.customerId))||"—"}</dd></div></div>
+      </div>` : `<div class="legal-note">Signing this outside a job means the customer, address and job number won't be filled in. Open the job and add it from there if you can.</div>`}
+
+      <div class="waiver-body" style="border:1px solid var(--line);border-radius:7px;padding:14px 16px;background:#fafcfd;max-height:280px;overflow:auto">
+        ${body.map(pp => `<p>${esc(pp)}</p>`).join("")}
+      </div>
+
+      ${needsFill ? `<div class="field" style="margin-top:14px">
+        <label>Fill in the blanks</label>
+        <textarea class="input" id="wv-fill" placeholder="Type what goes on the blank lines above — the specific condition, the material supplied, the recommendation made."></textarea>
+        <div class="hint">This is recorded with the signature and printed on the signed copy.</div>
+      </div>` : ""}
+
+      <div class="section-title">The customer confirms</div>
+      <ul class="ack-list">
+        ${acks.map((a,i) => `<li>
+          <input type="checkbox" id="ack-${i}" class="wv-ack">
+          <label for="ack-${i}">${esc(a)}</label>
+        </li>`).join("")}
+      </ul>
+      <div class="err" id="wv-ack-err" style="display:none">Every line has to be ticked before this can be signed.</div>
+
+      <div class="section-title">Signature</div>
+      <div class="row2">
+        <div class="field"><label>Name of the person signing *</label>
+          <input class="input" id="wv-name" value="${esc(c?c.name:"")}"></div>
+        <div class="field"><label>Signing as</label>
+          <select class="input" id="wv-role">
+            <option>Customer / homeowner</option>
+            <option>Property manager</option>
+            <option>Tenant</option>
+            <option>Caretaker</option>
+            <option>Authorized agent</option>
+            <option>Business owner</option>
+          </select></div>
+      </div>
+      <div class="sigpad-wrap" id="sigwrap">
+        <canvas id="sigpad"></canvas>
+        <div class="sigpad-line"></div>
+        <div class="sigpad-hint">Sign above — use a finger or stylus on a tablet, or the mouse</div>
+      </div>
+      <div class="err" id="wv-sig-err" style="display:none">A signature is required.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn sm ghost" data-clear-sig>Clear signature</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-sign-waiver="${tpl.id}:${job?job.id:""}">Record signature</button>
+    </div>`, { wide:true, noFocus:true });
+
+  initSigPad();
+}
+
+/* ---------- Signature pad ---------- */
+let SigPad = null;
+function initSigPad(){
+  const cv = $("#sigpad");
+  if (!cv) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = cv.getBoundingClientRect();
+  cv.width  = Math.max(1, Math.round(rect.width  * dpr));
+  cv.height = Math.max(1, Math.round(rect.height * dpr));
+  const ctx = cv.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "#16222e";
+
+  SigPad = {
+    cv, ctx, dpr, drawing:false, dirty:false,
+    cssW: rect.width, cssH: rect.height,
+    bounds: { minX:Infinity, minY:Infinity, maxX:-Infinity, maxY:-Infinity }
+  };
+
+  const pos = ev => {
+    const r = cv.getBoundingClientRect();
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+  };
+  const mark = pt => {
+    const b = SigPad.bounds;
+    if (pt.x < b.minX) b.minX = pt.x;
+    if (pt.y < b.minY) b.minY = pt.y;
+    if (pt.x > b.maxX) b.maxX = pt.x;
+    if (pt.y > b.maxY) b.maxY = pt.y;
+  };
+  const start = ev => {
+    ev.preventDefault();
+    SigPad.drawing = true;
+    const pt = pos(ev);
+    mark(pt);
+    ctx.beginPath(); ctx.moveTo(pt.x, pt.y);
+    try { cv.setPointerCapture(ev.pointerId); } catch(_){}
+  };
+  const move = ev => {
+    if (!SigPad.drawing) return;
+    ev.preventDefault();
+    const pt = pos(ev);
+    mark(pt);
+    ctx.lineTo(pt.x, pt.y); ctx.stroke();
+    if (!SigPad.dirty){
+      SigPad.dirty = true;
+      $("#sigwrap").classList.add("filled");
+      const err = $("#wv-sig-err");
+      if (err) err.style.display = "none";
+    }
+  };
+  const end = () => { SigPad.drawing = false; };
+
+  cv.addEventListener("pointerdown", start);
+  cv.addEventListener("pointermove", move);
+  cv.addEventListener("pointerup", end);
+  cv.addEventListener("pointercancel", end);
+  cv.addEventListener("pointerleave", end);
+}
+function clearSigPad(){
+  if (!SigPad) return;
+  SigPad.ctx.clearRect(0, 0, SigPad.cv.width, SigPad.cv.height);
+  SigPad.dirty = false;
+  SigPad.bounds = { minX:Infinity, minY:Infinity, maxX:-Infinity, maxY:-Infinity };
+  $("#sigwrap").classList.remove("filled");
+}
+
+/* Export just the inked area. Storing the whole blank canvas costs ~50KB a
+   signature, which fills the browser's storage after a couple of months of
+   work; cropped to the ink it is a fraction of that. */
+function exportSignature(){
+  if (!SigPad || !SigPad.dirty) return null;
+  const { cv, dpr, bounds: b, cssW, cssH } = SigPad;
+  const pad = 8;
+  const x = Math.max(0, b.minX - pad);
+  const y = Math.max(0, b.minY - pad);
+  const w = Math.min(cssW - x, (b.maxX - b.minX) + pad * 2);
+  const h = Math.min(cssH - y, (b.maxY - b.minY) + pad * 2);
+  if (!(w > 0 && h > 0)) return cv.toDataURL("image/png");
+
+  // Enough resolution to stay crisp in print, capped so the file stays small.
+  const scale = Math.min(dpr, 2, 900 / w);
+  const out = document.createElement("canvas");
+  out.width  = Math.max(1, Math.round(w * scale));
+  out.height = Math.max(1, Math.round(h * scale));
+  const octx = out.getContext("2d");
+  octx.drawImage(cv, x * dpr, y * dpr, w * dpr, h * dpr, 0, 0, out.width, out.height);
+  return out.toDataURL("image/png");
+}
+
+/* Ticking the last box clears the acknowledgment error without waiting for
+   another save attempt. */
+function refreshAckError(){
+  const err = $("#wv-ack-err");
+  if (!err || err.style.display === "none") return;
+  if ($$(".wv-ack").every(b => b.checked)) err.style.display = "none";
+}
+
+function saveWaiverSignature(payload){
+  const [tplId, jobId] = payload.split(":");
+  const tpl = Store.waiverTemplate(tplId);
+  const job = jobId ? Store.job(jobId) : null;
+  let ok = true;
+
+  const boxes = $$(".wv-ack");
+  const allTicked = boxes.every(b => b.checked);
+  $("#wv-ack-err").style.display = allTicked ? "none" : "block";
+  if (!allTicked) ok = false;
+
+  const name = $("#wv-name").value.trim();
+  if (!name){ $("#wv-name").classList.add("invalid"); ok = false; }
+
+  const signed = SigPad && SigPad.dirty;
+  $("#wv-sig-err").style.display = signed ? "none" : "block";
+  if (!signed) ok = false;
+
+  if (!ok) return;
+
+  const rec = Store.signWaiver(tpl, {
+    job,
+    signerName: name,
+    signerRole: $("#wv-role").value,
+    fillIns: $("#wv-fill") ? $("#wv-fill").value.trim() : "",
+    signature: exportSignature()
+  });
+
+  closeModal(); render();
+  if (job) openJob(job.id); else openSignedWaiver(rec.id);
+  toast(`${tpl.title} signed by ${name}`, "ok");
+}
+
+function openSignedWaiver(id){
+  const w = Store.signedWaiver(id);
+  if (!w) return;
+  const job = w.jobId ? Store.job(w.jobId) : null;
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">W-${w.no} · signed ${esc(fmtStamp(w.signedAt))}</div>
+        <h2>${esc(w.title)}</h2></div>
+      <div class="spacer"></div>
+      <button class="btn sm" data-print-waiver="${w.id}">🖨 Print</button>
+      <button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid">
+        <div>
+          <div class="dl"><dt>Signed by</dt><dd><div class="t-strong">${esc(w.signerName)}</div>
+            <div class="t-sub">${esc(w.signerRole||"")}</div></dd></div>
+          ${w.customerId?`<div class="dl"><dt>Customer</dt>
+            <dd><span class="linkish" data-customer="${w.customerId}">${esc(custName(w.customerId))}</span></dd></div>`:""}
+        </div>
+        <div>
+          <div class="dl"><dt>Job</dt><dd>${job?`<span class="linkish" data-job="${job.id}">#${job.no} · ${esc(job.type)}</span>`:"—"}</dd></div>
+          <div class="dl"><dt>Service address</dt><dd>${esc(w.contextSnapshot.service_address)||"—"}</dd></div>
+        </div>
+      </div>
+
+      <div class="section-title">What was signed</div>
+      <div class="waiver-body" style="border:1px solid var(--line);border-radius:7px;padding:14px 16px;background:#fafcfd">
+        ${w.body.map(pp => `<p>${esc(pp)}</p>`).join("")}
+      </div>
+      ${w.fillIns ? `<div class="dl" style="margin-top:14px"><dt>Filled in at signing</dt>
+        <dd style="white-space:pre-wrap">${esc(w.fillIns)}</dd></div>` : ""}
+
+      <div class="section-title">Acknowledged</div>
+      <ul class="ack-list">${w.acks.map(a => `<li><span style="color:var(--green);font-weight:700">✓</span><label>${esc(a)}</label></li>`).join("")}</ul>
+
+      <div class="section-title">Signature</div>
+      ${w.signature
+        ? `<div style="border:1px solid var(--line);border-radius:7px;padding:10px;background:#fff">
+             <img src="${w.signature}" alt="Signature of ${esc(w.signerName)}" style="max-height:110px">
+           </div>`
+        : `<div class="t-sub">No signature image on file.</div>`}
+      <div class="t-sub" style="margin-top:8px">
+        ${esc(w.signerName)} · ${esc(fmtStamp(w.signedAt))}${w.techId?` · technician ${esc((Store.tech(w.techId)||{}).name||"")}`:""}
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn danger sm" data-del-signed="${w.id}">Delete record</button>
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+    </div>`, { wide:true, noFocus:true });
+}
+
+function previewTemplate(id){
+  const t = Store.waiverTemplate(id);
+  if (!t) return;
+  const ctx = Store.waiverContext(null);
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">${esc(t.category)} · template preview</div><h2>${esc(t.title)}</h2></div>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="dl"><dt>When to use it</dt><dd>${esc(t.whenToUse)}</dd></div>
+      <div class="section-title">Body</div>
+      <div class="waiver-body">${t.body.map(pp => `<p>${esc(Store.applyMerge(pp, ctx))}</p>`).join("")}</div>
+      <div class="section-title">Acknowledgments</div>
+      <ul class="ack-list">${t.acks.map(a => `<li><span class="t-sub">☐</span><label>${esc(Store.applyMerge(a, ctx))}</label></li>`).join("")}</ul>
+    </div>
+    <div class="modal-foot">
+      <button class="btn sm" data-edit-template="${t.id}">Edit this</button>
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+      <button class="btn primary" data-pick-template-go="${t.id}">Use it now →</button>
+    </div>`, { wide:true, noFocus:true });
+}
+
+function openTemplateForm(id){
+  const t = id ? Store.waiverTemplate(id) : null;
+  openModal(`
+    <div class="modal-head">
+      <h2>${t?"Edit waiver template":"Build a waiver"}</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      ${t && t.builtin ? `<div class="legal-note">You're editing one of the starter templates. Existing signed copies keep the wording they were signed with — editing here only affects future signatures.</div>` : ""}
+      <div class="row2">
+        <div class="field"><label>Title *</label>
+          <input class="input" id="wt-title" value="${esc(t?t.title:"")}" placeholder="Drain Cleaning & Sewer Line Condition Release"></div>
+        <div class="field"><label>Category</label>
+          <select class="input" id="wt-cat">${WAIVER_CATEGORIES.map(c=>`<option${t&&t.category===c?" selected":""}>${esc(c)}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label>When should this be used?</label>
+        <input class="input" id="wt-when" value="${esc(t?t.whenToUse:"")}" placeholder="Before cabling any line in a home over 20 years old">
+        <div class="hint">Shown to whoever is choosing a waiver, so make it a plain trigger.</div></div>
+
+      <div class="field"><label>Body — one paragraph per blank line *</label>
+        <textarea class="input" id="wt-body" style="min-height:200px" placeholder="Write the waiver text. Use ____ where something gets filled in at signing.">${esc(t?t.body.join("\n\n"):"")}</textarea>
+        <div class="err" id="wt-body-err" style="display:none">The body can't be empty.</div>
+      </div>
+
+      <div class="field"><label>Acknowledgments — one per line *</label>
+        <textarea class="input" id="wt-acks" style="min-height:120px" placeholder="I understand...&#10;I authorize...">${esc(t?t.acks.join("\n"):"")}</textarea>
+        <div class="hint">Each becomes a tick box. The customer has to tick every one before they can sign.</div>
+        <div class="err" id="wt-acks-err" style="display:none">Add at least one acknowledgment.</div>
+      </div>
+
+      <div class="field">
+        <label>Merge fields you can drop into the text</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${MERGE_FIELDS.map(([f,d]) => `<span class="chip" title="${esc(d)}">${esc(f)}</span>`).join("")}
+        </div>
+        <div class="hint">These fill in from the job when the waiver is signed.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      ${t && !t.builtin ? `<button class="btn danger sm" data-archive-template="${t.id}">Delete template</button>` : ""}
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-template="${t?t.id:""}">${t?"Save changes":"Create waiver"}</button>
+    </div>`);
+}
+
+function saveTemplateFromForm(id){
+  const title = $("#wt-title").value.trim();
+  const body  = $("#wt-body").value.split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
+  const acks  = $("#wt-acks").value.split("\n").map(x => x.trim()).filter(Boolean);
+  let ok = true;
+  if (!title){ $("#wt-title").classList.add("invalid"); ok = false; }
+  $("#wt-body-err").style.display = body.length ? "none" : "block";
+  $("#wt-acks-err").style.display = acks.length ? "none" : "block";
+  if (!body.length || !acks.length) ok = false;
+  if (!ok) return;
+
+  const fields = { title, category: $("#wt-cat").value, whenToUse: $("#wt-when").value.trim(), body, acks };
+  if (id){ Object.assign(Store.waiverTemplate(id), fields); toast("Template updated", "ok"); }
+  else {
+    Store.data.waiverTemplates.push(Object.assign({ id: uid("wt"), key: null, builtin: false, archived: false }, fields));
+    toast("Waiver created", "ok");
+  }
+  Store.save(); closeModal();
+  App.view = "waivers"; App.waiverTab = "templates";
+  render();
+}
+
 /* ---------- Price book item ---------- */
 function openPriceForm(id){
   const i = id ? Store.priceItem(id) : null;
@@ -2295,6 +3174,20 @@ function openCustomer(id){
                 <td>${estBadge(e.status)}</td>
                 <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
               </tr>`).join("")}</tbody>
+          </table></div>` : "";
+      })()}
+      ${(() => {
+        const ws = Store.signedForCustomer(c.id);
+        return ws.length ? `
+          <div class="section-title">Signed waivers</div>
+          <div class="card"><table>
+            <thead><tr><th>Ref</th><th>Waiver</th><th>Signed by</th><th>Signed</th></tr></thead>
+            <tbody>${ws.map(w => `<tr class="clickable" data-signed="${w.id}">
+              <td class="t-sub">W-${w.no}</td>
+              <td>${esc(w.title)}</td>
+              <td>${esc(w.signerName)}</td>
+              <td class="t-sub">${esc(fmtStamp(w.signedAt))}</td>
+            </tr>`).join("")}</tbody>
           </table></div>` : "";
       })()}
       <div class="section-title">Service history</div>
@@ -2509,6 +3402,61 @@ function exportEstimatesCsv(){
   download(`pcp-estimates-${todayStr()}.csv`, [head, ...rows].map(r => r.map(q).join(",")).join("\r\n"), "text/csv");
 }
 
+function waiverDocHtml(w){
+  const st = Store.data.settings;
+  const job = w.jobId ? Store.job(w.jobId) : null;
+  return `
+  <div class="wvdoc">
+    <div class="wv-head">
+      <div style="flex:1"><h1>${esc(st.company)}</h1><div>${esc(st.phone)}</div></div>
+      <div style="text-align:right">
+        <div style="font-size:15px;font-weight:700">${esc(w.title)}</div>
+        <div>Ref W-${w.no}</div>
+      </div>
+    </div>
+    <table class="wv-meta">
+      <tr><td style="width:130px"><strong>Customer</strong></td>
+          <td>${esc(w.contextSnapshot.customer_name || w.signerName)}</td></tr>
+      <tr><td><strong>Service address</strong></td><td>${esc(w.contextSnapshot.service_address)}</td></tr>
+      ${job?`<tr><td><strong>Job</strong></td><td>#${job.no} — ${esc(job.type)}</td></tr>`:""}
+      <tr><td><strong>Date signed</strong></td><td>${esc(fmtStamp(w.signedAt))}</td></tr>
+    </table>
+    ${w.body.map(pp => `<p>${esc(pp)}</p>`).join("")}
+    ${w.fillIns ? `<p><strong>Details recorded at signing:</strong> ${esc(w.fillIns)}</p>` : ""}
+    <p style="margin-top:14px"><strong>The customer confirms:</strong></p>
+    <ul>${w.acks.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
+    <div class="wv-sig">
+      <div>
+        ${w.signature?`<img src="${w.signature}" alt="Signature">`:`<div style="border-bottom:1px solid #000;width:260px;height:60px"></div>`}
+        <div style="font-size:11px;margin-top:4px">${esc(w.signerName)} — ${esc(w.signerRole||"")}</div>
+      </div>
+      <div>
+        <div style="border-bottom:1px solid #000;width:170px;height:60px;display:flex;align-items:flex-end;padding-bottom:3px">
+          ${esc(fmtStamp(w.signedAt).split(" · ")[0])}</div>
+        <div style="font-size:11px;margin-top:4px">Date</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function printWaiver(w){
+  if (!w) return;
+  $("#print-area").innerHTML = waiverDocHtml(w);
+  window.print();
+}
+
+function exportWaiversCsv(){
+  const head = ["Ref","Waiver","Category","Signed by","Signing as","Customer","Service address","Job","Signed at","Filled in"];
+  const rows = Store.data.signedWaivers.map(w => {
+    const job = w.jobId ? Store.job(w.jobId) : null;
+    return ["W-"+w.no, w.title, w.category, w.signerName, w.signerRole||"",
+            w.contextSnapshot.customer_name||"", w.contextSnapshot.service_address||"",
+            job?"#"+job.no:"", new Date(w.signedAt).toISOString(), (w.fillIns||"").replace(/\s+/g," ")];
+  });
+  const q = v => `"${String(v).replace(/"/g,'""')}"`;
+  download(`pcp-waivers-${todayStr()}.csv`, [head, ...rows].map(r => r.map(q).join(",")).join("\r\n"), "text/csv");
+}
+
 function printJobs(list, label){
   if (!list.length){ toast("Nothing to print for " + label, "err"); return; }
   $("#print-area").innerHTML = list.map(ticketHtml).join("");
@@ -2715,6 +3663,50 @@ document.addEventListener("click", e => {
     return;
   }
 
+  /* --- waivers --- */
+  const wvTab = hit("[data-waiver-tab]");
+  if (wvTab){ App.waiverTab = wvTab.dataset.waiverTab; return render(); }
+
+  const addWv = hit("[data-add-waiver]");
+  if (addWv) return openWaiverPicker(addWv.dataset.addWaiver);
+
+  const prevT = hit("[data-preview-template]");
+  if (prevT) return previewTemplate(prevT.dataset.previewTemplate);
+
+  const pickGo = hit("[data-pick-template-go]");
+  if (pickGo) return openWaiverSign(pickGo.dataset.pickTemplateGo, null);
+
+  const editT = hit("[data-edit-template]");
+  if (editT) return openTemplateForm(editT.dataset.editTemplate);
+
+  const archT = hit("[data-archive-template]");
+  if (archT){
+    const t = Store.waiverTemplate(archT.dataset.archiveTemplate);
+    if (!confirm(`Delete the template "${t.title}"?\n\nWaivers already signed from it are kept.`)) return;
+    t.archived = true; Store.save(); closeModal(); render(); toast("Template deleted");
+    return;
+  }
+  const saveT = hit("[data-save-template]");
+  if (saveT) return saveTemplateFromForm(saveT.dataset.saveTemplate || null);
+
+  if (hit("[data-clear-sig]")) return clearSigPad();
+
+  const signWv = hit("[data-sign-waiver]");
+  if (signWv) return saveWaiverSignature(signWv.dataset.signWaiver);
+
+  const printWv = hit("[data-print-waiver]");
+  if (printWv) return printWaiver(Store.signedWaiver(printWv.dataset.printWaiver));
+
+  const delSigned = hit("[data-del-signed]");
+  if (delSigned){
+    const w = Store.signedWaiver(delSigned.dataset.delSigned);
+    if (!confirm(`Delete the signed record W-${w.no}?\n\nThis removes proof that ${w.signerName} signed. It cannot be undone.`)) return;
+    Store.deleteSignedWaiver(w.id); closeModal(); render(); toast("Signed record deleted");
+    return;
+  }
+  const signedEl = hit("[data-signed]");
+  if (signedEl) return openSignedWaiver(signedEl.dataset.signed);
+
   /* --- price book --- */
   const editPrice = hit("[data-edit-price]");
   if (editPrice) return openPriceForm(editPrice.dataset.editPrice);
@@ -2773,6 +3765,8 @@ document.addEventListener("click", e => {
     case "new-estimate": openEstimateForm(null); break;
     case "new-price":    openPriceForm(null); break;
     case "export-est-csv": exportEstimatesCsv(); break;
+    case "new-template":  openTemplateForm(null); break;
+    case "export-waivers": exportWaiversCsv(); break;
     case "new-customer": openCustomerForm(null); break;
     case "new-tech":     openTechForm(null); break;
     case "clear-filters":
@@ -2813,6 +3807,8 @@ document.addEventListener("change", e => {
   if (t.id === "f-tech")  { App.filters.techId = t.value; return render(); }
   if (t.id === "f-type")  { App.filters.type   = t.value; return render(); }
 
+  if (t.classList && t.classList.contains("wv-ack")){ refreshAckError(); return; }
+
   if (t.id === "pb-pick"){
     const i = Store.priceItem(t.value);
     if (i){
@@ -2850,7 +3846,7 @@ document.addEventListener("keydown", e => {
   if (["line-desc","line-qty","line-price"].includes(e.target.id)){
     $("[data-add-line]", modal)?.click(); e.preventDefault(); return;
   }
-  const save = $("[data-save-job],[data-save-customer],[data-save-tech],[data-save-estimate],[data-save-price]", modal);
+  const save = $("[data-save-job],[data-save-customer],[data-save-tech],[data-save-estimate],[data-save-price],[data-save-template]", modal);
   if (save && e.target.closest(".modal-body")){ save.click(); e.preventDefault(); }
 });
 
