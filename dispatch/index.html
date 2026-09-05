@@ -135,6 +135,51 @@ button{font:inherit; color:inherit}
 .nowline .lbl{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:11px; letter-spacing:.12em}
 .empty{padding:14px 16px 14px 0; color:var(--muted); font-size:14px; border-top:1px solid var(--line-2)}
 
+/* ---------- view switch + people ---------- */
+.viewsw{display:flex; gap:0; border:1px solid var(--line); border-radius:4px; overflow:hidden; margin:0 16px 0 0; width:max-content}
+.viewsw button{
+  background:var(--surface); border:0; border-right:1px solid var(--line); cursor:pointer;
+  padding:6px 16px; font-family:"Saira Condensed",Arial,sans-serif; font-weight:600;
+  font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+}
+.viewsw button:last-child{border-right:0}
+.viewsw button:hover{background:var(--surface-2); color:var(--ink)}
+.viewsw button[aria-pressed="true"]{background:var(--ink); color:var(--ground)}
+.prow{
+  display:grid; grid-template-columns:36px 4px minmax(0,1fr) auto; gap:0 12px; align-items:center;
+  width:100%; text-align:left; background:none; border:0; border-top:1px solid var(--line-2);
+  padding:12px 16px 12px 0; cursor:pointer;
+}
+.prow:hover{background:var(--surface-2)}
+.prow:active{background:var(--sunk)}
+.prow[aria-current="true"]{background:var(--surface); box-shadow:var(--shadow); border-top-color:transparent}
+.mono{
+  width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background:var(--sunk); color:var(--ink-2); font-family:"Saira Condensed",Arial,sans-serif;
+  font-weight:700; font-size:13.5px; letter-spacing:.03em;
+}
+.prow .stripe{width:4px; border-radius:2px; height:30px; filter:var(--stripe-boost)}
+.prow .nm{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:16.5px; line-height:1.2; overflow-wrap:anywhere}
+.prow .sub{font-size:12.5px; color:var(--faint); margin-top:1px; display:flex; gap:8px; flex-wrap:wrap}
+.prow .sub .loop{color:var(--signal); font-weight:500}
+.prow .ago{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:12.5px;
+  color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; text-align:right;
+}
+.prow .ago.quiet{color:var(--warn)}
+.thread{display:flex; flex-direction:column}
+.thread .ev{padding:11px 0; border-top:1px solid var(--line-2)}
+.thread .ev:first-child{border-top:0; padding-top:2px}
+.thread .when{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:11.5px;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--faint);
+}
+.thread .what{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:15.5px; margin-top:1px; overflow-wrap:anywhere}
+.thread .said{font-family:"Newsreader",Georgia,serif; font-size:15px; line-height:1.55; color:var(--ink-2); margin-top:4px; overflow-wrap:anywhere}
+.thread .said.none{color:var(--faint); font-style:italic}
+.thread .lp{font-size:12.5px; color:var(--signal); margin-top:4px; font-weight:500}
+.thread .lp.shut{color:var(--faint); font-weight:400; text-decoration:line-through}
+
 /* ---------- panel ---------- */
 .panel{padding:18px 0 0 24px; display:flex; flex-direction:column; gap:22px}
 @media (max-width:900px){ .panel{padding:8px 0 0; border-top:2px solid var(--ink); margin-top:24px} }
@@ -290,13 +335,28 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
 
   <div class="console">
     <section class="board" aria-label="Dispatch board">
+      <div class="viewsw" role="group" aria-label="View" style="margin-top:16px">
+        <button type="button" data-view="board" aria-pressed="true">Board</button>
+        <button type="button" data-view="people" aria-pressed="false">People</button>
+      </div>
       <div class="calbar" id="calbar"></div>
       <div id="flash" role="status" aria-live="polite"></div>
       <div id="board-msg"></div>
       <div id="board"></div>
+      <div id="people" hidden></div>
     </section>
 
     <aside class="panel">
+      <div class="card" id="person-card" hidden>
+        <div class="hd">
+          <span class="sel-title" id="p-name">People</span>
+          <span class="stale" id="p-count"></span>
+        </div>
+        <div class="bd">
+          <div class="thread" id="p-thread"></div>
+        </div>
+      </div>
+
       <div class="card" id="closeout">
         <div class="hd">
           <span class="sel-title" id="c-title">Nothing selected</span>
@@ -457,6 +517,7 @@ var state = {
   selectedId: null,
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
+  view: "board", personKey: null,
   mcp: null, sample: null
 };
 
@@ -823,7 +884,7 @@ function flashSaved(msg){
 }
 function saveField(patch){
   var ev = currentEvent(); if (!ev) return;
-  var meta = {title: ev.title, startsAt: ev.start.toISOString(), calendar: ev.calName || ""};
+  var meta = {title: ev.title, startsAt: ev.start.toISOString(), calendar: ev.calName || "", color: ev.color};
   store.put(ev.id, Object.assign(meta, patch))
     .then(function(){ flashSaved(); })
     .catch(function(){ $("c-saved").textContent = "Couldn't save — check your connection"; });
@@ -863,6 +924,131 @@ function addLoop(){
 $("c-loop-add").addEventListener("click", addLoop);
 $("c-loop").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); addLoop(); } });
 
+/* ---------- people ---------- */
+function splitPeople(v){
+  return String(v || "").split(/[,;&/]|\band\b|\bwith\b/i)
+    .map(function(x){ return x.replace(/\s+/g," ").trim(); })
+    .filter(function(x){ return x.length > 0 && x.length < 60; });
+}
+function monogram(name){
+  var parts = name.split(/\s+/).filter(Boolean);
+  return ((parts[0]||"?")[0] + (parts.length > 1 ? parts[parts.length-1][0] : "")).toUpperCase();
+}
+function recordTime(r){
+  return r.startsAt ? Date.parse(r.startsAt) : (r.updatedAt || 0);
+}
+function ago(ts){
+  if (!ts) return "";
+  var days = Math.floor((startOfDay(new Date()) - startOfDay(new Date(ts))) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 21) return days + "d ago";
+  if (days < 60) return Math.round(days/7) + "w ago";
+  return Math.round(days/30) + "mo ago";
+}
+
+function peopleIndex(){
+  var recs = store.all(), map = {};
+  Object.keys(recs).forEach(function(k){
+    var r = recs[k];
+    if (!r || !r.people) return;
+    splitPeople(r.people).forEach(function(name){
+      var key = name.toLowerCase();
+      var p = map[key] || (map[key] = {key:key, spellings:{}, touches:[]});
+      p.spellings[name] = (p.spellings[name] || 0) + 1;
+      p.touches.push(r);
+    });
+  });
+  return Object.keys(map).map(function(k){
+    var p = map[k];
+    p.name = Object.keys(p.spellings).sort(function(a,b){ return p.spellings[b] - p.spellings[a]; })[0];
+    p.touches.sort(function(a,b){ return recordTime(b) - recordTime(a); });
+    p.last = recordTime(p.touches[0]);
+    p.openLoops = p.touches.reduce(function(n, r){
+      return n + (r.loops || []).filter(function(l){ return !l.done; }).length; }, 0);
+    var tally = {};
+    p.touches.forEach(function(r){ if (r.color) tally[r.color] = (tally[r.color] || 0) + 1; });
+    var top = Object.keys(tally).sort(function(a,b){ return tally[b] - tally[a]; })[0];
+    p.color = top || DEFAULT_COLOR;   /* whichever calendar colour they show up in most */
+    return p;
+  }).sort(function(a,b){ return b.last - a.last; });
+}
+
+function renderPeople(){
+  if (state.view !== "people") return;
+  var list = peopleIndex(), host = $("people");
+  if (!list.length){
+    host.innerHTML = '<div class="empty">Nobody logged yet. Fill in <b>who was in it</b> when you ' +
+      "write up a block, and everyone you spend time with collects here.</div>";
+    return;
+  }
+  host.innerHTML = list.map(function(p){
+    var quiet = p.last && (Date.now() - p.last) > 30*86400000;
+    var sub = [p.touches.length + " block" + (p.touches.length===1?"":"s")];
+    if (p.openLoops) sub.push('<span class="loop">' + p.openLoops + " open</span>");
+    return '<button class="prow" type="button" data-person="' + esc(p.key) + '" aria-current="' +
+        (p.key === state.personKey) + '">' +
+      '<span class="mono" aria-hidden="true">' + esc(monogram(p.name)) + "</span>" +
+      '<span class="stripe" style="background:' + p.color + '"></span>' +
+      '<span><span class="nm">' + esc(p.name) + '</span><span class="sub">' + sub.join("<span>\u00b7</span>") + "</span></span>" +
+      '<span class="ago' + (quiet ? " quiet" : "") + '">' + esc(ago(p.last)) + "</span></button>";
+  }).join("");
+}
+
+function renderPerson(){
+  var card = $("person-card");
+  if (state.view !== "people"){ card.hidden = true; return; }
+  card.hidden = false;
+  var p = peopleIndex().filter(function(x){ return x.key === state.personKey; })[0];
+  if (!p){
+    $("p-name").textContent = "People";
+    $("p-count").textContent = "";
+    $("p-thread").innerHTML = '<div style="color:var(--muted);font-size:14px">' +
+      "Pick someone to see every block you've written up with them." + "</div>";
+    return;
+  }
+  $("p-name").textContent = p.name;
+  $("p-count").textContent = p.touches.length + " block" + (p.touches.length===1?"":"s") +
+                             " \u00b7 last " + ago(p.last);
+  $("p-thread").innerHTML = p.touches.map(function(r){
+    var loops = (r.loops || []).map(function(l){
+      return '<div class="lp' + (l.done ? " shut" : "") + '">' + (l.done ? "\u2713 " : "\u25cb ") + esc(l.text) + "</div>";
+    }).join("");
+    return '<div class="ev"><div class="when">' +
+      esc(r.startsAt ? new Date(r.startsAt).toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"}) : "\u2014") +
+      (r.status && r.status !== "open" ? " \u00b7 " + esc(r.status) : "") + "</div>" +
+      '<div class="what">' + esc(r.title || "a block") + "</div>" +
+      (r.note ? '<div class="said">' + esc(r.note) + "</div>"
+              : '<div class="said none">No write-up on this one.</div>') +
+      loops + "</div>";
+  }).join("");
+}
+
+$("people").addEventListener("click", function(e){
+  var row = e.target.closest ? e.target.closest(".prow") : null;
+  if (!row) return;
+  state.personKey = row.getAttribute("data-person");
+  renderPeople(); renderPerson(); renderLoops();
+  if (narrow()) goTo($("person-card"));
+});
+
+document.querySelector(".viewsw").addEventListener("click", function(e){
+  var b = e.target.closest ? e.target.closest("button[data-view]") : null;
+  if (!b) return;
+  state.view = b.dataset.view;
+  document.querySelectorAll(".viewsw button").forEach(function(x){
+    x.setAttribute("aria-pressed", String(x.dataset.view === state.view));
+  });
+  var people = state.view === "people";
+  $("board").hidden = people;
+  $("people").hidden = !people;
+  $("calbar").hidden = people;
+  $("board-msg").hidden = people;
+  $("closeout").hidden = people;
+  if (people) renderPeople();
+  renderPerson(); renderCloseout(); renderLoops();
+});
+
 /* ---------- open loops across every block ---------- */
 function renderLoops(){
   var recs = store.all(), items = [];
@@ -876,11 +1062,22 @@ function renderLoops(){
     if (a.loop.done !== b.loop.done) return a.loop.done ? 1 : -1;
     return String(b.at||"").localeCompare(String(a.at||""));
   });
+  var person = state.view === "people" && state.personKey
+    ? peopleIndex().filter(function(x){ return x.key === state.personKey; })[0] : null;
+  if (person){
+    var keys = {};
+    person.touches.forEach(function(r){ keys[store.safeId(r.eventId || "")] = 1; });
+    items = items.filter(function(i){ return keys[i.key]; });
+  }
+  document.querySelector("#loops").closest(".card").querySelector(".sel-title").textContent =
+    person ? "Open loops \u2014 " + person.name : "Open loops";
   var open = items.filter(function(i){ return !i.loop.done; }).length;
   $("loop-count").textContent = open ? open + " open" : "";
   var host = $("loops");
   if (!items.length){
-    host.innerHTML = '<li><span class="txt" style="color:var(--faint)">Nothing open. Loops you leave on a block collect here.</span></li>';
+    host.innerHTML = '<li><span class="txt" style="color:var(--faint)">' +
+      (person ? "Nothing open with " + esc(person.name) + "." : "Nothing open. Loops you leave on a block collect here.") +
+      "</span></li>";
     return;
   }
   host.innerHTML = items.map(function(i){
@@ -1035,7 +1232,7 @@ $("review-btn").addEventListener("click", function(){
 
 /* ---------- boot ---------- */
 store.attachLocal();
-store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); });
+store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); renderPeople(); renderPerson(); });
 renderBoard(); renderCloseout();
 setInterval(function(){ renderBoard(); }, 60000);
 

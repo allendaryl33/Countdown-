@@ -93,6 +93,11 @@ calendar you already keep, and asks for one thing back — the write-up.
   event: passing the instance id moves that occurrence only, the series is
   left alone, and the duration carries across. Nothing is written until the
   second, deliberate tap.
+- **People.** A second view on the board column: everyone you've logged, most
+  recent first, with how many blocks, how many loops are still open with them,
+  and how long it's been. Pick someone for their full thread — every block,
+  every write-up, every loop — and the open-loops card filters to them. Each
+  person takes the calendar colour they show up in most.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.
 
 Notes live in the Artifact's own store, which means Claude can read them back
@@ -104,9 +109,9 @@ later — ask for last month's Men's Group notes and they're there.
    `description` or an extended property. Then it's durable, it syncs to your
    phone, and Victor can read it — "what did I commit to at Men's Group?"
    becomes answerable without a second database.
-2. **People view.** Group every write-up by who was in it. A running thread per
-   person: Jess, Olly, Saso, the group. This is the "customer history" panel,
-   and it's the piece a personal dashboard usually lacks entirely.
+2. **People, deeper.** The view exists; the obvious next steps are merging
+   spellings of the same person by hand ("Jess" vs "Jessica"), and pulling
+   attendees off the calendar event so you don't have to type who was there.
 3. **Rhythm adherence.** `Life Mapping` is on the board 5×/week — how many
    actually held? The gap between the standing rhythm and the cleared blocks is
    the most honest metric in the app.
