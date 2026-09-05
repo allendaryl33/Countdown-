@@ -99,6 +99,12 @@ button{font:inherit; color:inherit}
   padding:11px 16px 11px 0; cursor:pointer; position:relative;
 }
 .row:hover{background:var(--surface-2)}
+.row:active{background:var(--sunk)}
+.row .chip{transition:none}
+@media (max-width:900px){
+  .row{padding-right:8px}
+  .row .chip::after{content:" \203A"; font-size:14px; line-height:1}
+}
 .row[aria-current="true"]{background:var(--surface); box-shadow:var(--shadow); border-top-color:transparent}
 .row .t{
   font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:14px;
@@ -144,6 +150,7 @@ button{font:inherit; color:inherit}
   font-weight:600; font-size:12px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
 }
 .seg button:last-child{border-right:0}
+@media (max-width:900px){ .seg button{padding:8px 2px; font-size:11.5px; letter-spacing:.03em} }
 .seg button:hover{background:var(--surface-2); color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--ink); color:var(--ground)}
 label.fl{display:flex; flex-direction:column; gap:5px}
@@ -187,6 +194,11 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
 }
 .notice b{font-weight:600}
 .notice.err{border-left-color:var(--miss)}
+.backlink{display:none}
+@media (max-width:900px){ .backlink{display:inline-block; margin-left:auto; flex:none} }
+.card#closeout.jump{animation:jump 1.1s ease-out}
+@media (prefers-reduced-motion:reduce){ .card#closeout.jump{animation:none} }
+@keyframes jump{0%,55%{border-color:var(--focus); box-shadow:0 0 0 3px var(--signal-bg), var(--shadow)}100%{border-color:var(--line)}}
 .stale{font-size:11.5px; color:var(--faint); font-family:"Saira Condensed",Arial,sans-serif; letter-spacing:.06em; text-transform:uppercase}
 
 /* ---------- model footer ---------- */
@@ -241,6 +253,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
       <div class="card" id="closeout">
         <div class="hd">
           <span class="sel-title" id="c-title">Nothing selected</span>
+          <button class="btn backlink" type="button" id="back-to-board">&larr; Board</button>
         </div>
         <div class="bd">
           <div class="sel-when" id="c-when">Pick a block on the board to write it up.</div>
@@ -518,12 +531,30 @@ function renderStrip(evs){
   }
 }
 
+var narrow = function(){ return window.matchMedia("(max-width: 900px)").matches; };
+var calmMotion = function(){ return window.matchMedia("(prefers-reduced-motion: reduce)").matches; };
+function goTo(el){
+  el.scrollIntoView({behavior: calmMotion() ? "auto" : "smooth", block: "start"});
+}
+
 $("board").addEventListener("click", function(e){
   var row = e.target.closest ? e.target.closest(".row") : null;
   if (!row) return;
   state.selectedId = row.getAttribute("data-id");
   state.autoSelect = false;
   renderBoard(); renderCloseout();
+  if (narrow()){
+    /* stacked layout: the panel is below the board, so a tap looks dead without this */
+    var card = $("closeout");
+    goTo(card);
+    card.classList.remove("jump"); void card.offsetWidth; card.classList.add("jump");
+  }
+});
+
+$("back-to-board").addEventListener("click", function(){
+  var row = document.querySelector('.row[aria-current="true"]') ||
+            document.querySelector(".board");
+  goTo(row === null ? document.body : row);
 });
 
 /* ---------- close-out panel ---------- */
