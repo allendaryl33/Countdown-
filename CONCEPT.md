@@ -87,6 +87,12 @@ calendar you already keep, and asks for one thing back — the write-up.
   until ticked.
 - **Week close-out.** Drafts "what held / what slipped / still open / one thing
   to change" from the week you actually recorded — for the Sunday session.
+- **Move a block.** Picking `Moved` opens a month grid; choosing a day records
+  the destination, and a separate confirm button reschedules the event in
+  Google Calendar. Verified against the live API on a throwaway recurring
+  event: passing the instance id moves that occurrence only, the series is
+  left alone, and the duration carries across. Nothing is written until the
+  second, deliberate tap.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.
 
 Notes live in the Artifact's own store, which means Claude can read them back

@@ -208,6 +208,15 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
   font-family:inherit; font-size:12px; letter-spacing:.05em; text-transform:uppercase; padding:2px;
 }
 .moved-note .clear:hover{color:var(--miss)}
+.apply{display:flex; flex-direction:column; gap:6px}
+.apply .why{font-size:12.5px; color:var(--muted); line-height:1.45}
+.apply .why b{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; color:var(--ink-2)}
+.applied{
+  display:flex; align-items:center; gap:7px; color:var(--good);
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:13px;
+  letter-spacing:.05em; text-transform:uppercase;
+}
+.notice.ok{border-left-color:var(--good)}
 .row .meta .to{color:var(--muted); font-weight:500}
 .loops{list-style:none; margin:0; padding:0; display:flex; flex-direction:column}
 .loops li{display:flex; gap:9px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line-2)}
@@ -282,6 +291,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
   <div class="console">
     <section class="board" aria-label="Dispatch board">
       <div class="calbar" id="calbar"></div>
+      <div id="flash" role="status" aria-live="polite"></div>
       <div id="board-msg"></div>
       <div id="board"></div>
     </section>
@@ -303,6 +313,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
           <div id="moved-wrap" hidden>
             <div class="moved-note" id="moved-note"></div>
             <div class="picker" id="picker" role="group" aria-label="Pick the day to move this to"></div>
+            <div id="moved-apply"></div>
           </div>
           <label class="fl">
             <span class="eyebrow">What actually happened</span>
@@ -635,6 +646,7 @@ function renderPicker(){
       ' <button class="clear" type="button" id="moved-clear">Change</button>'
     : '<span style="color:var(--muted);font-weight:500">Pick the day it moved to.</span>';
 
+  renderApply();
   if (rec.movedTo && !state.pickerOpen){ $("picker").hidden = true; return; }
   $("picker").hidden = false;
 
@@ -668,6 +680,95 @@ function renderPicker(){
   $("picker").innerHTML = html + "</div>";
 }
 
+/* A recurring occurrence carries an instance suffix: <seriesId>_20261121T100000Z */
+function isOccurrence(id){ return /_\d{8}T\d{6}Z$/.test(String(id)); }
+
+/* Wall-clock time is preserved: the block keeps its hour on the new date, and
+   update_event carries the end along, so the duration is untouched. */
+function movedStart(ev, v){
+  var d = fromYmd(v);
+  d.setHours(ev.start.getHours(), ev.start.getMinutes(), 0, 0);
+  return d;
+}
+
+function renderApply(){
+  var host = $("moved-apply"), ev = currentEvent();
+  var rec = ev ? (store.get(ev.id) || {}) : {};
+  if (!ev || rec.status !== "moved" || !rec.movedTo){ host.innerHTML = ""; return; }
+  if (rec.movedApplied){
+    host.innerHTML = '<div class="applied"><span>\u2713</span>Moved in Google Calendar</div>';
+    return;
+  }
+  if (ev.allDay){
+    host.innerHTML = '<div class="apply"><span class="why">All-day blocks have to be moved in Google Calendar itself. ' +
+      "The date above is recorded here either way.</span></div>";
+    return;
+  }
+  if (!state.mcp){
+    host.innerHTML = '<div class="apply"><span class="why">The date is recorded. Open this on claude.ai with Google Calendar connected to move the event itself.</span></div>';
+    return;
+  }
+  var to = movedStart(ev, rec.movedTo);
+  host.innerHTML = '<div class="apply">' +
+    '<button class="btn solid" type="button" id="apply-move">Move it in Calendar</button>' +
+    '<span class="why"><b>' + esc(to.toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"})) +
+      ", " + esc(hhmm(to)) + "</b> \u00b7 same length" +
+      (isOccurrence(ev.id) ? ", just this one \u2014 the rest of the series stays put" : "") +
+    ".</span></div>";
+}
+
+function flash(msg, kind){
+  var el = $("flash");
+  el.innerHTML = '<div class="notice ' + (kind === "err" ? "err" : "ok") +
+                 '" style="margin:12px 16px 0 0">' + msg + "</div>";
+  clearTimeout(flash._t);
+  if (kind !== "err") flash._t = setTimeout(function(){ el.innerHTML = ""; }, 9000);
+}
+
+var WRITE_ERR = {
+  needs_reauth:        "Google Calendar needs reconnecting before it will accept changes. Reconnect it in claude.ai Settings &rarr; Connectors.",
+  server_not_connected:"Google Calendar isn't connected, so nothing was changed.",
+  selection_required:  "Pick which Google Calendar account to use, then try the move again.",
+  blocked_by_policy:   "Your organization blocks changes through this connector. Nothing was changed.",
+  approval_required:   "This change needs an approval that artifacts can't request yet. Nothing was changed.",
+  not_in_manifest:     "This page isn't cleared to change calendar events.",
+  not_granted:         "This view can't change calendar events.",
+  tool_error:          "Google Calendar refused the change.",
+  bad_request:         "The move was built wrong \u2014 that's a bug on this page.",
+  cancelled:           "The move was cancelled. Check the board before trying again."
+};
+
+$("moved-apply").addEventListener("click", function(e){
+  var btn = e.target.closest ? e.target.closest("#apply-move") : null;
+  if (!btn || btn.disabled) return;
+  var ev = currentEvent(); if (!ev || !state.mcp) return;
+  var rec = store.get(ev.id) || {};
+  if (!rec.movedTo) return;
+  var to = movedStart(ev, rec.movedTo), title = ev.title, dest = longDay(rec.movedTo);
+
+  btn.disabled = true; btn.textContent = "Moving\u2026";
+  var input = {eventId: ev.id, startTime: isoLocal(to), notificationLevel: "NONE"};
+  if (ev.calId && ev.calId !== "__primary__") input.calendarId = ev.calId;
+  if (TZ) input.timeZone = TZ;
+
+  state.mcp.callTool(SERVER, "update_event", input, {cache:false}).then(function(){
+    store.put(ev.id, {movedApplied: true, movedAppliedAt: Date.now()}).catch(function(){});
+    flash("Moved <b>" + esc(title) + "</b> to " + esc(dest) + " in Google Calendar.");
+    try { state.mcp.invalidate(SERVER, "list_events"); } catch(err){}
+  }).catch(function(err){
+    var code = err && err.code;
+    btn.disabled = false; btn.textContent = "Move it in Calendar";
+    if (code === "server_unavailable" || code === "upstream_error" || code === "rate_limited"){
+      /* An ambiguous write: the rejection is not proof it did not run. Re-read, never auto-retry. */
+      flash("Google Calendar didn't confirm the move, and it may still have gone through. " +
+            "Check the block on the board before trying again.", "err");
+      try { state.mcp.invalidate(SERVER, "list_events"); } catch(e2){}
+    } else {
+      flash(WRITE_ERR[code] || "The move didn't go through, and nothing was changed.", "err");
+    }
+  });
+});
+
 $("moved-wrap").addEventListener("click", function(e){
   var t = e.target;
   if (t.id === "moved-clear"){ state.pickerOpen = true; state.pickerMonth = null; renderPicker(); return; }
@@ -680,7 +781,7 @@ $("moved-wrap").addEventListener("click", function(e){
   var day = t.closest ? t.closest("button[data-day]") : null;
   if (day && !day.disabled){
     state.pickerOpen = false;
-    saveField({status:"moved", movedTo: day.dataset.day});
+    saveField({status:"moved", movedTo: day.dataset.day, movedApplied:false});
   }
 });
 
@@ -694,7 +795,7 @@ function renderCloseout(){
     $("c-note").value = ""; $("c-people").value = "";
     $("c-note").disabled = $("c-people").disabled = $("c-loop").disabled = $("c-loop-add").disabled = true;
     st.forEach(function(b){ b.setAttribute("aria-pressed","false"); b.disabled = true; });
-    $("moved-wrap").hidden = true;
+    $("moved-wrap").hidden = true; $("moved-apply").innerHTML = "";
     return;
   }
   if (state.selectedId !== ev.id && state.autoSelect) state.selectedId = ev.id;
@@ -739,7 +840,7 @@ $("c-status").addEventListener("click", function(e){
     saveField({status: st, movedTo: rec.movedTo || null});
   } else {
     state.pickerOpen = false;
-    saveField({status: st, movedTo: null});
+    saveField({status: st, movedTo: null, movedApplied: false});
   }
 });
 $("c-note").addEventListener("input", function(){
@@ -910,7 +1011,7 @@ $("review-btn").addEventListener("click", function(){
     var when = r.startsAt ? new Date(r.startsAt).toLocaleDateString([], {weekday:"short"}) : "?";
     var loops = (r.loops||[]).filter(function(l){ return !l.done; }).map(function(l){ return l.text; });
     return "- ["+when+"] "+(r.title||"block")+" — status: "+(r.status||"unrecorded") +
-      (r.status === "moved" && r.movedTo ? " to "+longDay(r.movedTo) : "") +
+      (r.status === "moved" && r.movedTo ? " to "+longDay(r.movedTo)+(r.movedApplied?" (rescheduled)":"") : "") +
       (r.people ? "; with: "+r.people : "") +
       (r.note ? "; note: "+r.note : "") +
       (loops.length ? "; open: "+loops.join(" / ") : "");
