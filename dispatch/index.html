@@ -1,0 +1,816 @@
+<title>Life Dispatch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Saira+Condensed:wght@500;600;700&family=Saira:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#EDF0EE; --surface:#FFFFFF; --surface-2:#F6F8F6; --sunk:#E3E8E5;
+  --ink:#131B1E; --ink-2:#31434A; --muted:#5F7076; --faint:#8B9BA0;
+  --line:#D2DAD7; --line-2:#E2E8E5;
+  --signal:#9A6510; --signal-bg:#FBEFD9;
+  --good:#0B6E4F; --warn:#9A5B12; --miss:#A02F2F;
+  --shadow:0 1px 2px rgba(19,27,30,.06), 0 8px 24px -12px rgba(19,27,30,.18);
+  --stripe-boost:none;
+  --focus:#1F6F78;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#111A1E; --surface:#18242A; --surface-2:#1E2C33; --sunk:#0D1417;
+    --ink:#E5EBE9; --ink-2:#C2CFD1; --muted:#8DA0A5; --faint:#6B7F85;
+    --line:#25333A; --line-2:#1F2C31;
+    --signal:#E2A544; --signal-bg:#2A2011;
+    --good:#4FBF92; --warn:#DDA355; --miss:#E77C7C;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+    --stripe-boost:saturate(1.15) brightness(1.45);
+    --focus:#5FC8D3;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#111A1E; --surface:#18242A; --surface-2:#1E2C33; --sunk:#0D1417;
+  --ink:#E5EBE9; --ink-2:#C2CFD1; --muted:#8DA0A5; --faint:#6B7F85;
+  --line:#25333A; --line-2:#1F2C31;
+  --signal:#E2A544; --signal-bg:#2A2011;
+  --good:#4FBF92; --warn:#DDA355; --miss:#E77C7C;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+  --stripe-boost:saturate(1.15) brightness(1.45);
+  --focus:#5FC8D3;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"Saira","Helvetica Neue",Arial,sans-serif;
+  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px; margin:0 auto; padding:20px 20px 56px;}
+h1,h2,h3{margin:0; text-wrap:balance}
+button{font:inherit; color:inherit}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px; border-radius:3px}
+.cond{font-family:"Saira Condensed","Saira",Arial,sans-serif}
+.num{font-variant-numeric:tabular-nums}
+.eyebrow{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600;
+  font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint);
+}
+
+/* ---------- status strip ---------- */
+.strip{
+  display:flex; flex-wrap:wrap; align-items:flex-end; gap:14px 28px;
+  padding:0 0 16px; border-bottom:2px solid var(--ink); margin-bottom:0;
+}
+.brand{display:flex; flex-direction:column; gap:2px; margin-right:auto}
+.brand h1{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700;
+  font-size:30px; letter-spacing:-.005em; line-height:1;
+}
+.brand .sub{color:var(--muted); font-size:13px}
+.stat{display:flex; flex-direction:column; gap:3px; min-width:0}
+.stat .v{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:19px;
+  line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:26ch;
+}
+.stat .v.dim{color:var(--muted); font-weight:500}
+.live-dot{
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:var(--signal); margin-right:6px; vertical-align:middle;
+  box-shadow:0 0 0 3px var(--signal-bg);
+}
+@media (prefers-reduced-motion:no-preference){
+  .live-dot{animation:pulse 2.4s ease-in-out infinite}
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* ---------- console ---------- */
+.console{display:grid; grid-template-columns:minmax(0,1.45fr) minmax(0,1fr); gap:0}
+@media (max-width:900px){ .console{grid-template-columns:1fr} }
+
+/* ---------- board ---------- */
+.board{border-right:1px solid var(--line); padding-right:0}
+@media (max-width:900px){ .board{border-right:0} }
+.daybar{
+  display:flex; align-items:baseline; gap:10px; padding:18px 16px 8px 0;
+}
+.daybar .d{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:15px; letter-spacing:.06em; text-transform:uppercase}
+.daybar .n{color:var(--faint); font-size:12.5px}
+.rows{display:flex; flex-direction:column}
+.row{
+  display:grid; grid-template-columns:66px 4px minmax(0,1fr) auto;
+  gap:0 12px; align-items:start; width:100%; text-align:left;
+  background:none; border:0; border-top:1px solid var(--line-2);
+  padding:11px 16px 11px 0; cursor:pointer; position:relative;
+}
+.row:hover{background:var(--surface-2)}
+.row[aria-current="true"]{background:var(--surface); box-shadow:var(--shadow); border-top-color:transparent}
+.row .t{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:14px;
+  color:var(--ink-2); font-variant-numeric:tabular-nums; padding-top:1px;
+}
+.row .t small{display:block; font-weight:500; color:var(--faint); font-size:12px}
+.row .stripe{width:4px; border-radius:2px; align-self:stretch; min-height:22px; filter:var(--stripe-boost)}
+.row .body{min-width:0}
+.row .ttl{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:16.5px;
+  line-height:1.25; overflow-wrap:anywhere;
+}
+.row .meta{font-size:12.5px; color:var(--faint); display:flex; gap:8px; flex-wrap:wrap; margin-top:2px}
+.row .meta .loop{color:var(--signal); font-weight:500}
+.chip{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:11.5px;
+  letter-spacing:.08em; text-transform:uppercase; padding:3px 7px; border-radius:3px;
+  white-space:nowrap; border:1px solid transparent; margin-top:2px;
+}
+.chip.open{color:var(--muted); border-color:var(--line)}
+.chip.live{color:var(--signal); background:var(--signal-bg); border-color:transparent}
+.chip.await{color:var(--warn); background:var(--signal-bg)}
+.chip.cleared{color:var(--good); border-color:currentColor}
+.chip.missed{color:var(--miss); border-color:currentColor}
+.chip.moved{color:var(--muted); border-color:var(--line); text-decoration:line-through}
+.nowline{display:flex; align-items:center; gap:8px; padding:2px 16px 2px 0; color:var(--signal)}
+.nowline .bar{flex:1; height:2px; background:var(--signal); opacity:.55}
+.nowline .lbl{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:11px; letter-spacing:.12em}
+.empty{padding:14px 16px 14px 0; color:var(--muted); font-size:14px; border-top:1px solid var(--line-2)}
+
+/* ---------- panel ---------- */
+.panel{padding:18px 0 0 24px; display:flex; flex-direction:column; gap:22px}
+@media (max-width:900px){ .panel{padding:8px 0 0; border-top:2px solid var(--ink); margin-top:24px} }
+.card{background:var(--surface); border:1px solid var(--line); border-radius:5px; box-shadow:var(--shadow)}
+.card .hd{padding:12px 14px 10px; border-bottom:1px solid var(--line-2); display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.card .bd{padding:12px 14px 14px; display:flex; flex-direction:column; gap:12px}
+.sel-title{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:19px; line-height:1.2; flex:1; min-width:0; overflow-wrap:anywhere}
+.sel-when{font-family:"Saira Condensed",Arial,sans-serif; font-weight:500; color:var(--muted); font-size:13.5px; font-variant-numeric:tabular-nums}
+.seg{display:flex; gap:0; border:1px solid var(--line); border-radius:4px; overflow:hidden; width:100%}
+.seg button{
+  flex:1; background:var(--surface); border:0; border-right:1px solid var(--line);
+  padding:7px 4px; cursor:pointer; font-family:"Saira Condensed",Arial,sans-serif;
+  font-weight:600; font-size:12px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:var(--surface-2); color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--ink); color:var(--ground)}
+label.fl{display:flex; flex-direction:column; gap:5px}
+textarea,input[type=text]{
+  width:100%; background:var(--surface-2); color:var(--ink);
+  border:1px solid var(--line); border-radius:4px; padding:9px 10px;
+  font-family:"Newsreader",Georgia,serif; font-size:15.5px; line-height:1.55; resize:vertical;
+}
+input[type=text]{font-family:"Saira",Arial,sans-serif; font-size:14px}
+textarea::placeholder,input::placeholder{color:var(--faint); font-style:italic}
+textarea:focus,input:focus{background:var(--surface); border-color:var(--focus); outline:none}
+.saved{font-size:11.5px; color:var(--faint); font-family:"Saira Condensed",Arial,sans-serif; letter-spacing:.08em; text-transform:uppercase; min-height:14px}
+.btn{
+  background:var(--surface); border:1px solid var(--line); border-radius:4px;
+  padding:7px 12px; cursor:pointer; font-family:"Saira Condensed",Arial,sans-serif;
+  font-weight:600; font-size:12.5px; letter-spacing:.07em; text-transform:uppercase;
+}
+.btn:hover{background:var(--surface-2); border-color:var(--muted)}
+.btn.solid{background:var(--ink); color:var(--ground); border-color:var(--ink)}
+.btn.solid:hover{opacity:.88}
+.btn[disabled]{opacity:.45; cursor:not-allowed}
+.loops{list-style:none; margin:0; padding:0; display:flex; flex-direction:column}
+.loops li{display:flex; gap:9px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line-2)}
+.loops li:first-child{border-top:0}
+.loops input[type=checkbox]{margin-top:4px; accent-color:var(--focus); width:15px; height:15px; flex:none}
+.loops .txt{flex:1; font-family:"Newsreader",Georgia,serif; font-size:15px; line-height:1.45; overflow-wrap:anywhere}
+.loops .done .txt{color:var(--faint); text-decoration:line-through}
+.loops .src{display:block; font-family:"Saira Condensed",Arial,sans-serif; font-size:11px;
+  letter-spacing:.07em; text-transform:uppercase; color:var(--faint); text-decoration:none; margin-top:2px}
+.loops .x{background:none; border:0; color:var(--faint); cursor:pointer; font-size:16px; line-height:1; padding:2px 4px; flex:none}
+.loops .x:hover{color:var(--miss)}
+.addrow{display:flex; gap:8px}
+.addrow input{flex:1}
+.note-out{
+  font-family:"Newsreader",Georgia,serif; font-size:15.5px; line-height:1.6;
+  white-space:pre-wrap; color:var(--ink-2); max-height:340px; overflow:auto;
+}
+.notice{
+  border-left:3px solid var(--warn); background:var(--surface-2);
+  padding:9px 12px; font-size:13.5px; color:var(--ink-2); border-radius:0 4px 4px 0;
+}
+.notice b{font-weight:600}
+.notice.err{border-left-color:var(--miss)}
+.stale{font-size:11.5px; color:var(--faint); font-family:"Saira Condensed",Arial,sans-serif; letter-spacing:.06em; text-transform:uppercase}
+
+/* ---------- model footer ---------- */
+.model{margin-top:40px; border-top:1px solid var(--line); padding-top:18px}
+.model .grid{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:2px 32px; margin-top:10px;
+}
+.model .pair{display:flex; gap:10px; align-items:baseline; padding:7px 0; border-top:1px solid var(--line-2)}
+.model .from{
+  font-family:"Saira Condensed",Arial,sans-serif; font-size:12.5px; letter-spacing:.05em;
+  text-transform:uppercase; color:var(--faint); flex:none; width:9.5em;
+}
+.model .to{font-size:13.5px; color:var(--ink-2)}
+.calbar{display:flex; gap:6px; flex-wrap:wrap; padding:14px 16px 0 0}
+.calchip{
+  border:1px solid var(--line); background:var(--surface); border-radius:99px; padding:3px 10px;
+  font-size:12px; cursor:pointer; color:var(--muted); display:flex; align-items:center; gap:6px;
+}
+.calchip[aria-pressed="true"]{border-color:var(--ink); color:var(--ink); background:var(--surface-2)}
+.calchip .dot{width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.5}
+.calchip[aria-pressed="true"] .dot{opacity:1; background:var(--good)}
+</style>
+
+<div class="wrap">
+  <header class="strip">
+    <div class="brand">
+      <h1>Life Dispatch</h1>
+      <div class="sub">Victor schedules the work. This is where you close it out.</div>
+    </div>
+    <div class="stat">
+      <span class="eyebrow">On the board</span>
+      <span class="v num" id="s-count">—</span>
+    </div>
+    <div class="stat">
+      <span class="eyebrow">Closed out</span>
+      <span class="v num" id="s-closed">—</span>
+    </div>
+    <div class="stat" style="min-width:16ch">
+      <span class="eyebrow" id="s-now-lbl">Right now</span>
+      <span class="v dim" id="s-now">Connecting…</span>
+    </div>
+  </header>
+
+  <div class="console">
+    <section class="board" aria-label="Dispatch board">
+      <div class="calbar" id="calbar"></div>
+      <div id="board-msg"></div>
+      <div id="board"></div>
+    </section>
+
+    <aside class="panel">
+      <div class="card" id="closeout">
+        <div class="hd">
+          <span class="sel-title" id="c-title">Nothing selected</span>
+        </div>
+        <div class="bd">
+          <div class="sel-when" id="c-when">Pick a block on the board to write it up.</div>
+          <div class="seg" role="group" aria-label="Block status" id="c-status">
+            <button type="button" data-st="open" aria-pressed="false">On board</button>
+            <button type="button" data-st="cleared" aria-pressed="false">Cleared</button>
+            <button type="button" data-st="missed" aria-pressed="false">Missed</button>
+            <button type="button" data-st="moved" aria-pressed="false">Moved</button>
+          </div>
+          <label class="fl">
+            <span class="eyebrow">What actually happened</span>
+            <textarea id="c-note" rows="4" placeholder="Two sentences is plenty. What came out of it?"></textarea>
+          </label>
+          <label class="fl">
+            <span class="eyebrow">Who was in it</span>
+            <input type="text" id="c-people" placeholder="Jess, Olly, the group…">
+          </label>
+          <label class="fl">
+            <span class="eyebrow">Leave an open loop</span>
+            <div class="addrow">
+              <input type="text" id="c-loop" placeholder="What still needs doing?">
+              <button class="btn" type="button" id="c-loop-add">Add</button>
+            </div>
+          </label>
+          <div class="saved" id="c-saved"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd">
+          <span class="sel-title" style="font-size:16px">Open loops</span>
+          <span class="stale" id="loop-count"></span>
+        </div>
+        <div class="bd" style="gap:0">
+          <ul class="loops" id="loops"><li><span class="txt" style="color:var(--faint)">Nothing open. Loops you leave on a block collect here.</span></li></ul>
+        </div>
+      </div>
+
+      <div class="card" id="review-card">
+        <div class="hd">
+          <span class="sel-title" style="font-size:16px">Week close-out</span>
+        </div>
+        <div class="bd">
+          <div style="font-size:13.5px;color:var(--muted)">A draft for Plan/Assess with Jess — built from what you actually recorded this week.</div>
+          <div><button class="btn solid" type="button" id="review-btn">Draft the week</button></div>
+          <div class="note-out" id="review-out"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="model">
+    <span class="eyebrow">Why it's shaped like a service dashboard</span>
+    <div class="grid">
+      <div class="pair"><span class="from">Dispatch board</span><span class="to">Today's blocks, straight off Google Calendar</span></div>
+      <div class="pair"><span class="from">Work order</span><span class="to">One block you can open and write up</span></div>
+      <div class="pair"><span class="from">Tech's write-up</span><span class="to">What actually happened, in your words</span></div>
+      <div class="pair"><span class="from">Job status</span><span class="to">Cleared, missed, or moved — not just scheduled</span></div>
+      <div class="pair"><span class="from">Call-backs</span><span class="to">Open loops, carried until you close them</span></div>
+      <div class="pair"><span class="from">Dispatcher</span><span class="to">Victor, over on the calendar side</span></div>
+    </div>
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* Google Calendar's own event palette — the color language already in your calendar. */
+var CAL_COLOR = {"1":"#7986CB","2":"#33B679","3":"#8E24AA","4":"#E67C73","5":"#F6BF26",
+                 "6":"#F4511E","7":"#039BE5","8":"#616161","9":"#3F51B5","10":"#0B8043","11":"#D50000"};
+var DEFAULT_COLOR = "#68797F";
+var SERVER = "Google Calendar";
+
+var $ = function(id){ return document.getElementById(id); };
+var esc = function(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){
+  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); };
+
+/* ---------- time helpers ---------- */
+var TZ = (Intl.DateTimeFormat().resolvedOptions().timeZone) || undefined;
+function pad(n){ return String(n).padStart(2,"0"); }
+function isoLocal(d){
+  var off = -d.getTimezoneOffset(), s = off>=0?"+":"-", a = Math.abs(off);
+  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+
+         pad(d.getHours())+":"+pad(d.getMinutes())+":00"+s+pad(Math.floor(a/60))+":"+pad(a%60);
+}
+function startOfDay(d){ var x=new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d,n){ var x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function hhmm(d){ return d.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}).replace(/\s/g," "); }
+function dayKey(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function dayLabel(d){
+  var t = startOfDay(new Date()), k = dayKey(d);
+  if (k === dayKey(t)) return "Today";
+  if (k === dayKey(addDays(t,1))) return "Tomorrow";
+  return d.toLocaleDateString([], {weekday:"long", month:"short", day:"numeric"});
+}
+
+/* Stable window: today 00:00 -> end of tomorrow. Computed once so the watch identity is stable. */
+var WIN_START = startOfDay(new Date());
+var WIN_END = addDays(WIN_START, 2);
+
+/* ---------- record store (db when granted, localStorage otherwise) ---------- */
+var LS_KEY = "life-dispatch/records";
+var store = {
+  db: null, cache: {}, subs: [],
+  safeId: function(id){ return String(id).replace(/[^A-Za-z0-9_\-.~:@+]/g, "-").slice(0,190); },
+  emit: function(){ this.subs.forEach(function(f){ try{ f(); }catch(e){ console.warn(e); } }); },
+  subscribe: function(f){ this.subs.push(f); f(); },
+  all: function(){ return this.cache; },
+  get: function(id){ return this.cache[this.safeId(id)] || null; },
+  put: function(id, patch){
+    var k = this.safeId(id);
+    var rec = Object.assign({}, this.cache[k] || {eventId:id, loops:[]}, patch);
+    rec.eventId = id; rec.updatedAt = Date.now();
+    this.cache[k] = rec; this.emit();
+    if (this.db){
+      return this.db.doc("blocks/"+k).set(rec).catch(function(e){
+        console.warn("save failed", e); return Promise.reject(e); });
+    }
+    try { localStorage.setItem(LS_KEY, JSON.stringify(this.cache)); } catch(e){}
+    return Promise.resolve();
+  },
+  attachLocal: function(){
+    try { this.cache = JSON.parse(localStorage.getItem(LS_KEY) || "{}") || {}; } catch(e){ this.cache = {}; }
+    this.emit();
+  },
+  attachDb: function(db){
+    var self = this; this.db = db;
+    db.collection("blocks").onSnapshot(function(snap){
+      var next = {};
+      snap.docs.forEach(function(d){
+        var v = d.data(); if (!v) return;
+        var k = d.id || self.safeId(v.eventId || "");
+        next[k] = Object.assign({loops:[]}, v);
+      });
+      self.cache = next; self.emit();
+    }, function(err){ console.warn("blocks listener", err); });
+  }
+};
+
+/* ---------- state ---------- */
+var state = {
+  calendars: [],           /* {id, summary} */
+  selected: {},            /* calendarId -> true */
+  eventsByCal: {},         /* calendarId -> [event] */
+  errorByCal: {},          /* calendarId -> {code, message} */
+  watches: {},             /* calendarId -> unsubscribe */
+  storedAt: null,
+  selectedId: null,
+  autoSelect: true,
+  mcp: null, sample: null
+};
+
+var SEL_KEY = "life-dispatch/calendars";
+function loadSel(){ try { return JSON.parse(localStorage.getItem(SEL_KEY) || "null"); } catch(e){ return null; } }
+function saveSel(){ try { localStorage.setItem(SEL_KEY, JSON.stringify(Object.keys(state.selected))); } catch(e){} }
+
+/* ---------- event normalization ---------- */
+function normalize(payload, calId, calName){
+  var evs = (payload && payload.events) || [];
+  var out = [];
+  for (var i=0;i<evs.length;i++){
+    var e = evs[i];
+    if (!e || e.status === "cancelled") continue;
+    var sRaw = e.start && (e.start.dateTime || e.start.date);
+    var eRaw = e.end && (e.end.dateTime || e.end.date);
+    if (!sRaw) continue;
+    var allDay = !(e.start && e.start.dateTime);
+    var start = new Date(allDay ? sRaw + "T00:00:00" : sRaw);
+    var end = eRaw ? new Date(allDay ? eRaw + "T00:00:00" : eRaw) : new Date(start.getTime()+3600000);
+    if (isNaN(start)) continue;
+    out.push({
+      id: e.id, title: e.summary || "(untitled block)",
+      start: start, end: end, allDay: allDay,
+      color: CAL_COLOR[e.colorId] || DEFAULT_COLOR,
+      calId: calId, calName: calName, link: e.htmlLink || null,
+      location: e.location || null
+    });
+  }
+  return out;
+}
+
+function allEvents(){
+  var seen = {}, out = [];
+  Object.keys(state.eventsByCal).forEach(function(k){
+    if (!state.selected[k]) return;
+    state.eventsByCal[k].forEach(function(ev){
+      if (seen[ev.id]) return;          /* the primary watch can overlap a named calendar */
+      seen[ev.id] = 1; out.push(ev);
+    });
+  });
+  out.sort(function(a,b){ return a.start - b.start || String(a.title).localeCompare(b.title); });
+  return out;
+}
+
+/* ---------- status ---------- */
+function statusOf(ev){
+  var rec = store.get(ev.id);
+  if (rec && rec.status && rec.status !== "open") return rec.status;
+  var now = Date.now();
+  if (!ev.allDay && ev.start <= now && now < ev.end) return "live";
+  if (ev.end <= now) return "await";
+  return "open";
+}
+var CHIP_LABEL = {open:"On board", live:"Live now", await:"Needs write-up", cleared:"Cleared", missed:"Missed", moved:"Moved"};
+
+/* ---------- board rendering ---------- */
+function renderBoard(){
+  var evs = allEvents(), host = $("board"), now = Date.now();
+  if (!evs.length){
+    host.innerHTML = '<div class="empty">' +
+      (Object.keys(state.eventsByCal).length ? "Nothing on the board for today or tomorrow." : "Waiting on Google Calendar\u2026") +
+      "</div>";
+    renderStrip(evs); return;
+  }
+  var groups = [];
+  evs.forEach(function(ev){
+    var k = dayKey(ev.start), g = groups[groups.length-1];
+    if (!g || g.key !== k){ g = {key:k, date:ev.start, items:[]}; groups.push(g); }
+    g.items.push(ev);
+  });
+  var todayKey = dayKey(new Date());
+  var nowline = '<div class="nowline"><span class="lbl">NOW ' + esc(hhmm(new Date())) +
+                '</span><span class="bar"></span></div>';
+  var html = "";
+  groups.forEach(function(g){
+    html += '<div class="daybar"><span class="d">' + esc(dayLabel(g.date)) + "</span>" +
+            '<span class="n num">' + g.items.length + " block" + (g.items.length===1?"":"s") + "</span></div>";
+    var placed = (g.key !== todayKey);        /* the marker only belongs in today's group */
+    g.items.forEach(function(ev){
+      if (!placed && ev.start > now){ html += nowline; placed = true; }
+      html += rowHtml(ev);
+    });
+    if (!placed) html += nowline;             /* every block today is already behind you */
+  });
+  host.innerHTML = html;
+  renderStrip(evs);
+}
+
+function rowHtml(ev){
+  var st = statusOf(ev), rec = store.get(ev.id);
+  var openLoops = rec && rec.loops ? rec.loops.filter(function(l){ return !l.done; }).length : 0;
+  var meta = [];
+  if (ev.calName) meta.push(esc(ev.calName));
+  if (rec && rec.note) meta.push("written up");
+  if (openLoops) meta.push('<span class="loop">' + openLoops + " open loop" + (openLoops===1?"":"s") + "</span>");
+  return '<button class="row" type="button" data-id="' + esc(ev.id) + '" aria-current="' + (ev.id===state.selectedId) + '">' +
+    '<span class="t">' + (ev.allDay ? "all day" : esc(hhmm(ev.start)) + "<small>" + esc(hhmm(ev.end)) + "</small>") + "</span>" +
+    '<span class="stripe" style="background:' + ev.color + '"></span>' +
+    '<span class="body"><span class="ttl">' + esc(ev.title) + "</span>" +
+      (meta.length ? '<span class="meta">' + meta.join("<span>\u00b7</span>") + "</span>" : "") +
+    "</span>" +
+    '<span class="chip ' + st + '">' + CHIP_LABEL[st] + "</span></button>";
+}
+
+function renderStrip(evs){
+  var now = Date.now();
+  var today = evs.filter(function(e){ return dayKey(e.start) === dayKey(new Date()); });
+  var closed = today.filter(function(e){ var s = statusOf(e); return s==="cleared"||s==="missed"||s==="moved"; }).length;
+  $("s-count").textContent = today.length ? today.length + " today" : "—";
+  $("s-closed").textContent = today.length ? closed + " of " + today.length : "—";
+  var live = evs.filter(function(e){ return !e.allDay && e.start<=now && now<e.end; })[0];
+  var next = evs.filter(function(e){ return e.start > now; })[0];
+  if (live){
+    $("s-now-lbl").textContent = "Right now";
+    $("s-now").innerHTML = '<span class="live-dot"></span>'+esc(live.title);
+    $("s-now").classList.remove("dim");
+  } else if (next){
+    $("s-now-lbl").textContent = "Next up";
+    $("s-now").textContent = hhmm(next.start) + " · " + next.title;
+    $("s-now").classList.remove("dim");
+  } else if (evs.length){
+    $("s-now-lbl").textContent = "Right now"; $("s-now").textContent = "Board's clear";
+    $("s-now").classList.add("dim");
+  }
+}
+
+$("board").addEventListener("click", function(e){
+  var row = e.target.closest ? e.target.closest(".row") : null;
+  if (!row) return;
+  state.selectedId = row.getAttribute("data-id");
+  state.autoSelect = false;
+  renderBoard(); renderCloseout();
+});
+
+/* ---------- close-out panel ---------- */
+function currentEvent(){
+  var evs = allEvents();
+  if (state.selectedId){
+    var hit = evs.filter(function(e){ return e.id === state.selectedId; })[0];
+    if (hit) return hit;
+  }
+  if (!state.autoSelect) return null;
+  var now = Date.now();
+  return evs.filter(function(e){ return !e.allDay && e.start<=now && now<e.end; })[0] ||
+         evs.filter(function(e){ return e.end<=now && statusOf(e)==="await"; }).pop() ||
+         evs.filter(function(e){ return e.start>now; })[0] || evs[0] || null;
+}
+
+var noteTimer = null, peopleTimer = null;
+function renderCloseout(){
+  var ev = currentEvent();
+  var st = $("c-status").querySelectorAll("button");
+  if (!ev){
+    $("c-title").textContent = "Nothing selected";
+    $("c-when").textContent = "Pick a block on the board to write it up.";
+    $("c-note").value = ""; $("c-people").value = "";
+    $("c-note").disabled = $("c-people").disabled = $("c-loop").disabled = $("c-loop-add").disabled = true;
+    st.forEach(function(b){ b.setAttribute("aria-pressed","false"); b.disabled = true; });
+    return;
+  }
+  if (state.selectedId !== ev.id && state.autoSelect) state.selectedId = ev.id;
+  var rec = store.get(ev.id) || {};
+  $("c-title").textContent = ev.title;
+  $("c-when").textContent = (ev.allDay ? dayLabel(ev.start)+" · all day"
+      : dayLabel(ev.start)+" · "+hhmm(ev.start)+"–"+hhmm(ev.end)) + (ev.calName ? " · "+ev.calName : "");
+  $("c-note").disabled = $("c-people").disabled = $("c-loop").disabled = $("c-loop-add").disabled = false;
+  var live = statusOf(ev);
+  st.forEach(function(b){
+    b.disabled = false;
+    var on = (rec.status ? rec.status === b.dataset.st : (b.dataset.st === "open" && (live==="open"||live==="live"||live==="await")));
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+  if (document.activeElement !== $("c-note")) $("c-note").value = rec.note || "";
+  if (document.activeElement !== $("c-people")) $("c-people").value = rec.people || "";
+  renderLoops();
+}
+
+function flashSaved(msg){
+  var el = $("c-saved"); el.textContent = msg || "Saved";
+  clearTimeout(flashSaved._t);
+  flashSaved._t = setTimeout(function(){ el.textContent = ""; }, 1800);
+}
+function saveField(patch){
+  var ev = currentEvent(); if (!ev) return;
+  var meta = {title: ev.title, startsAt: ev.start.toISOString(), calendar: ev.calName || ""};
+  store.put(ev.id, Object.assign(meta, patch))
+    .then(function(){ flashSaved(); })
+    .catch(function(){ $("c-saved").textContent = "Couldn't save — check your connection"; });
+}
+
+$("c-status").addEventListener("click", function(e){
+  var b = e.target.closest ? e.target.closest("button[data-st]") : null;
+  if (!b || b.disabled) return;
+  saveField({status: b.dataset.st});
+});
+$("c-note").addEventListener("input", function(){
+  clearTimeout(noteTimer); var v = this.value;
+  noteTimer = setTimeout(function(){ saveField({note: v}); }, 700);
+});
+$("c-people").addEventListener("input", function(){
+  clearTimeout(peopleTimer); var v = this.value;
+  peopleTimer = setTimeout(function(){ saveField({people: v}); }, 700);
+});
+function addLoop(){
+  var input = $("c-loop"), text = input.value.trim(); if (!text) return;
+  var ev = currentEvent(); if (!ev) return;
+  var rec = store.get(ev.id) || {};
+  var loops = (rec.loops || []).slice();
+  loops.push({id: "l"+Date.now()+Math.floor(Math.random()*999), text: text, done: false});
+  input.value = "";
+  saveField({loops: loops});
+}
+$("c-loop-add").addEventListener("click", addLoop);
+$("c-loop").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); addLoop(); } });
+
+/* ---------- open loops across every block ---------- */
+function renderLoops(){
+  var recs = store.all(), items = [];
+  Object.keys(recs).forEach(function(k){
+    var r = recs[k]; if (!r || !r.loops) return;
+    r.loops.forEach(function(l){
+      items.push({key:k, eventId:r.eventId, from:r.title || "a block", at:r.startsAt, loop:l});
+    });
+  });
+  items.sort(function(a,b){
+    if (a.loop.done !== b.loop.done) return a.loop.done ? 1 : -1;
+    return String(b.at||"").localeCompare(String(a.at||""));
+  });
+  var open = items.filter(function(i){ return !i.loop.done; }).length;
+  $("loop-count").textContent = open ? open + " open" : "";
+  var host = $("loops");
+  if (!items.length){
+    host.innerHTML = '<li><span class="txt" style="color:var(--faint)">Nothing open. Loops you leave on a block collect here.</span></li>';
+    return;
+  }
+  host.innerHTML = items.map(function(i){
+    var when = i.at ? new Date(i.at).toLocaleDateString([], {month:"short", day:"numeric"}) : "";
+    return '<li class="'+(i.loop.done?"done":"")+'" data-key="'+esc(i.key)+'" data-loop="'+esc(i.loop.id)+'">' +
+      '<input type="checkbox" '+(i.loop.done?"checked":"")+' aria-label="Close this loop">' +
+      '<span class="txt">'+esc(i.loop.text)+
+        '<span class="src">'+esc(i.from)+(when?" · "+esc(when):"")+"</span></span>" +
+      '<button class="x" type="button" title="Remove">&times;</button></li>';
+  }).join("");
+}
+$("loops").addEventListener("click", function(e){
+  var li = e.target.closest ? e.target.closest("li[data-key]") : null; if (!li) return;
+  var rec = store.all()[li.dataset.key]; if (!rec) return;
+  var loops = (rec.loops || []).slice();
+  if (e.target.type === "checkbox"){
+    loops = loops.map(function(l){ return l.id === li.dataset.loop ? Object.assign({}, l, {done: e.target.checked}) : l; });
+  } else if (e.target.classList.contains("x")){
+    loops = loops.filter(function(l){ return l.id !== li.dataset.loop; });
+  } else return;
+  store.put(rec.eventId, {loops: loops}).catch(function(){});
+});
+
+/* ---------- Google Calendar wiring ---------- */
+var ERR_COPY = {
+  needs_reauth:        ["Google Calendar needs reconnecting.", "Reconnect it in claude.ai Settings &rarr; Connectors, then reload."],
+  server_not_connected:["Google Calendar isn't connected.", "Add it in claude.ai Settings &rarr; Connectors, then reload."],
+  selection_required:  ["More than one Google Calendar account.", "Reload and pick the account you want the board to read."],
+  blocked_by_policy:   ["Your organization blocks this connector.", "The board can't read your calendar here."],
+  approval_required:   ["This connector needs per-call approval.", "Artifacts can't request that yet."],
+  not_in_manifest:     ["This page isn't cleared to read that calendar.", "It can only read events."],
+  not_granted:         ["Calendar access wasn't granted to this page.", "Reload and allow Google Calendar when asked."],
+  capability_disabled: ["Connectors aren't available in this view.", "Open the artifact on claude.ai to see live events."],
+  server_unavailable:  ["Google Calendar didn't answer.", "Showing the last board it sent. It'll retry on its own."],
+  upstream_error:      ["Google Calendar returned an error.", "Showing the last board it sent."],
+  tool_error:          ["Google Calendar rejected the request.", ""],
+  bad_request:         ["The board asked for events the wrong way.", "That's a bug on this page."],
+  rate_limited:        ["Too many calendar requests.", "It'll pick back up shortly."],
+  cancelled:           ["The calendar request was cancelled.", ""]
+};
+var RETRACTING = {needs_reauth:1, server_not_connected:1, blocked_by_policy:1, approval_required:1,
+                  not_granted:1, capability_disabled:1, not_in_manifest:1, selection_required:1};
+
+function renderMsg(){
+  var codes = {}, host = $("board-msg");
+  Object.keys(state.errorByCal).forEach(function(k){
+    var e = state.errorByCal[k]; if (e) codes[e.code] = e;
+  });
+  var keys = Object.keys(codes);
+  if (!keys.length){
+    host.innerHTML = state.storedAt
+      ? '<div class="stale" style="padding:10px 16px 0 0">Calendar as of ' + esc(hhmm(new Date(state.storedAt))) + "</div>"
+      : "";
+    return;
+  }
+  host.innerHTML = keys.map(function(c){
+    var copy = ERR_COPY[c] || ERR_COPY.upstream_error;
+    var detail = copy[1] || esc(codes[c].message || "");
+    return '<div class="notice'+(RETRACTING[c]?" err":"")+'" style="margin:12px 16px 0 0"><b>'+copy[0]+"</b> "+detail+"</div>";
+  }).join("");
+}
+
+function watchCalendar(key, calendarId, label){
+  if (state.watches[key]) return;
+  var input = {
+    startTime: isoLocal(WIN_START), endTime: isoLocal(WIN_END),
+    orderBy: "startTime", pageSize: 100
+  };
+  if (calendarId) input.calendarId = calendarId;
+  if (TZ) input.timeZone = TZ;
+  var un = state.mcp.watchTool(SERVER, "list_events", input, function(ev){
+    if (ev.type === "data"){
+      delete state.errorByCal[key];
+      state.eventsByCal[key] = normalize(ev.result && ev.result.payload, key, label);
+      var c = ev.result && ev.result.cache;
+      state.storedAt = c && c.storedAt ? c.storedAt : Date.now();
+    } else {
+      var code = ev.error && ev.error.code || "upstream_error";
+      state.errorByCal[key] = {code: code, message: ev.error && ev.error.message};
+      if (RETRACTING[code]) delete state.eventsByCal[key];
+    }
+    renderMsg(); renderBoard(); renderCloseout();
+  }, {cache:{staleTime:120000}, refetchInterval:300000});
+  state.watches[key] = un;
+}
+function unwatchCalendar(key){
+  if (state.watches[key]){ try{ state.watches[key](); }catch(e){} delete state.watches[key]; }
+  delete state.eventsByCal[key]; delete state.errorByCal[key];
+}
+
+function renderCalbar(){
+  var host = $("calbar");
+  if (!state.calendars.length){ host.innerHTML = ""; return; }
+  host.innerHTML = state.calendars.map(function(c){
+    return '<button class="calchip" type="button" data-cal="'+esc(c.id)+'" aria-pressed="'+(!!state.selected[c.id])+'">' +
+           '<span class="dot"></span>'+esc(c.summary || c.id)+"</button>";
+  }).join("");
+}
+$("calbar").addEventListener("click", function(e){
+  var b = e.target.closest ? e.target.closest(".calchip") : null; if (!b) return;
+  var id = b.getAttribute("data-cal");
+  if (state.selected[id]){ delete state.selected[id]; unwatchCalendar(id); }
+  else {
+    state.selected[id] = true;
+    var cal = state.calendars.filter(function(c){ return c.id === id; })[0];
+    watchCalendar(id, id, (cal && cal.summary) || "Calendar");
+  }
+  saveSel(); renderCalbar(); renderMsg(); renderBoard(); renderCloseout();
+});
+
+/* ---------- week close-out draft ---------- */
+function weekRecords(){
+  var cut = Date.now() - 7*24*3600*1000, recs = store.all(), out = [];
+  Object.keys(recs).forEach(function(k){
+    var r = recs[k]; if (!r) return;
+    var t = r.startsAt ? Date.parse(r.startsAt) : (r.updatedAt || 0);
+    if (t >= cut) out.push(r);
+  });
+  out.sort(function(a,b){ return String(a.startsAt||"").localeCompare(String(b.startsAt||"")); });
+  return out;
+}
+$("review-btn").addEventListener("click", function(){
+  var btn = this, out = $("review-out");
+  if (!state.sample){ out.textContent = "Drafting needs to run on claude.ai — open this page there."; return; }
+  var recs = weekRecords();
+  if (!recs.length){ out.textContent = "Nothing recorded in the last seven days yet. Write up a few blocks first."; return; }
+  var lines = recs.map(function(r){
+    var when = r.startsAt ? new Date(r.startsAt).toLocaleDateString([], {weekday:"short"}) : "?";
+    var loops = (r.loops||[]).filter(function(l){ return !l.done; }).map(function(l){ return l.text; });
+    return "- ["+when+"] "+(r.title||"block")+" — status: "+(r.status||"unrecorded") +
+      (r.people ? "; with: "+r.people : "") +
+      (r.note ? "; note: "+r.note : "") +
+      (loops.length ? "; open: "+loops.join(" / ") : "");
+  }).join("\n");
+  btn.disabled = true; out.textContent = "Thinking…";
+  state.sample(
+    "You are helping draft a weekly review for a Sunday planning conversation between a husband and wife.\n" +
+    "Below is a week of recorded life blocks from a personal dispatch board.\n\n" + lines + "\n\n" +
+    "Write a short draft under exactly these four headings: What held. What slipped. Still open. One thing to change.\n" +
+    "Use plain sentences, no bullets under three words, no preamble, no sign-off. Be concrete and quote the notes where useful. " +
+    "Under 200 words total.",
+    {modelTier:"default", onText: function(u){ out.textContent = u.text; }}
+  ).then(function(r){ out.textContent = r.text; btn.disabled = false; })
+   .catch(function(e){
+     btn.disabled = false;
+     out.textContent = e && e.code === "not_granted" ? "Drafting isn't available in this view."
+       : e && e.code === "rate_limited" ? "Too many requests just now — try again in a minute."
+       : (e && e.text) ? e.text : "The draft didn't come back. Try again.";
+   });
+});
+
+/* ---------- boot ---------- */
+store.attachLocal();
+store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); });
+renderBoard(); renderCloseout();
+setInterval(function(){ renderBoard(); }, 60000);
+
+var claudeApi = (typeof claude !== "undefined" && claude && typeof claude.use === "function")
+  ? claude : {use: function(){ return Promise.resolve(null); }};
+
+claudeApi.use("db").then(function(db){ if (db) store.attachDb(db); }).catch(function(){});
+claudeApi.use("sample").then(function(s){
+  state.sample = s;
+  if (!s) $("review-card").style.display = "none";
+}).catch(function(){ $("review-card").style.display = "none"; });
+
+claudeApi.use("mcp").then(function(mcp){
+  if (!mcp){
+    state.errorByCal.__boot = {code:"capability_disabled"};
+    renderMsg(); return;
+  }
+  state.mcp = mcp;
+  state.selected.__primary__ = true;
+  watchCalendar("__primary__", null, "");
+  return mcp.callTool(SERVER, "list_calendars", {}, {cache:{staleTime:3600000}}).then(function(res){
+    var p = res && res.payload;
+    state.calendars = (p && p.calendars) || [];
+    var saved = loadSel();
+    if (saved) saved.forEach(function(id){
+      if (id === "__primary__") return;
+      var cal = state.calendars.filter(function(c){ return c.id === id; })[0];
+      if (cal){ state.selected[id] = true; watchCalendar(id, id, cal.summary || "Calendar"); }
+    });
+    renderCalbar();
+  }).catch(function(){ /* the primary watch is what matters; chips are a bonus */ });
+}).catch(function(){});
+
+})();
+</script>
