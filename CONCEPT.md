@@ -39,6 +39,11 @@ that only grow.
 
 ## What the calendar already says about the week
 
+*Read off an earlier Google account; the app itself is account-agnostic — it
+follows whichever calendar the viewer's connector is authorised to, and
+discovers the rest at runtime. The rhythm below describes the life, not the
+account, and is the shape the board is designed around.*
+
 Reading the current recurring blocks, the operating rhythm is already there:
 
 - A daily open (`Prepare for the day`) and a long `Marketing & Sales` block.
@@ -98,6 +103,8 @@ calendar you already keep, and asks for one thing back — the write-up.
   and how long it's been. Pick someone for their full thread — every block,
   every write-up, every loop — and the open-loops card filters to them. Each
   person takes the calendar colour they show up in most.
+- **Range.** Today / 2 days / Week, remembered per browser. A clear day says so
+  rather than vanishing, so an empty board never reads as a broken one.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.
 
 Notes live in the Artifact's own store, which means Claude can read them back

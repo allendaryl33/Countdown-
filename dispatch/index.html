@@ -136,7 +136,9 @@ button{font:inherit; color:inherit}
 .empty{padding:14px 16px 14px 0; color:var(--muted); font-size:14px; border-top:1px solid var(--line-2)}
 
 /* ---------- view switch + people ---------- */
-.viewsw{display:flex; gap:0; border:1px solid var(--line); border-radius:4px; overflow:hidden; margin:0 16px 0 0; width:max-content}
+.boardhd{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:16px 16px 0 0}
+.viewsw{display:flex; gap:0; border:1px solid var(--line); border-radius:4px; overflow:hidden; width:max-content}
+.rangesw button{padding:6px 12px; font-size:11.5px; letter-spacing:.07em}
 .viewsw button{
   background:var(--surface); border:0; border-right:1px solid var(--line); cursor:pointer;
   padding:6px 16px; font-family:"Saira Condensed",Arial,sans-serif; font-weight:600;
@@ -335,9 +337,16 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
 
   <div class="console">
     <section class="board" aria-label="Dispatch board">
-      <div class="viewsw" role="group" aria-label="View" style="margin-top:16px">
-        <button type="button" data-view="board" aria-pressed="true">Board</button>
-        <button type="button" data-view="people" aria-pressed="false">People</button>
+      <div class="boardhd">
+        <div class="viewsw" id="viewsw" role="group" aria-label="View">
+          <button type="button" data-view="board" aria-pressed="true">Board</button>
+          <button type="button" data-view="people" aria-pressed="false">People</button>
+        </div>
+        <div class="viewsw rangesw" id="rangesw" role="group" aria-label="How far ahead">
+          <button type="button" data-range="1">Today</button>
+          <button type="button" data-range="2">2 days</button>
+          <button type="button" data-range="7">Week</button>
+        </div>
       </div>
       <div class="calbar" id="calbar"></div>
       <div id="flash" role="status" aria-live="polite"></div>
@@ -463,9 +472,16 @@ function dayLabel(d){
   return d.toLocaleDateString([], {weekday:"long", month:"short", day:"numeric"});
 }
 
-/* Stable window: today 00:00 -> end of tomorrow. Computed once so the watch identity is stable. */
+/* The board's window. WIN_START is fixed at load so a watch identity stays stable;
+   the range is a viewer choice and re-registers the watches when it changes. */
 var WIN_START = startOfDay(new Date());
-var WIN_END = addDays(WIN_START, 2);
+var RANGE_KEY = "life-dispatch/range";
+function loadRange(){
+  var v = 0;
+  try { v = parseInt(localStorage.getItem(RANGE_KEY), 10); } catch(e){}
+  return (v === 1 || v === 2 || v === 7) ? v : 2;
+}
+function winEnd(){ return addDays(WIN_START, state.range); }
 
 /* ---------- record store (db when granted, localStorage otherwise) ---------- */
 var LS_KEY = "life-dispatch/records";
@@ -518,6 +534,7 @@ var state = {
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
   view: "board", personKey: null,
+  range: 2, watchArgs: {},
   mcp: null, sample: null
 };
 
@@ -578,8 +595,9 @@ var CHIP_LABEL = {open:"On board", live:"Live now", await:"Needs write-up", clea
 function renderBoard(){
   var evs = allEvents(), host = $("board"), now = Date.now();
   if (!evs.length){
+    var span = state.range === 1 ? "today" : state.range === 2 ? "today or tomorrow" : "the next seven days";
     host.innerHTML = '<div class="empty">' +
-      (Object.keys(state.eventsByCal).length ? "Nothing on the board for today or tomorrow." : "Waiting on Google Calendar\u2026") +
+      (Object.keys(state.eventsByCal).length ? "Nothing on the board for " + span + "." : "Waiting on Google Calendar\u2026") +
       "</div>";
     renderStrip(evs); return;
   }
@@ -590,9 +608,15 @@ function renderBoard(){
     g.items.push(ev);
   });
   var todayKey = dayKey(new Date());
+  var hasToday = groups.some(function(g){ return g.key === todayKey; });
   var nowline = '<div class="nowline"><span class="lbl">NOW ' + esc(hhmm(new Date())) +
                 '</span><span class="bar"></span></div>';
   var html = "";
+  if (!hasToday){
+    /* Otherwise a clear day just vanishes and the board reads as broken. */
+    html += '<div class="daybar"><span class="d">Today</span><span class="n num">clear</span></div>' +
+            '<div class="empty">Nothing on the board today.</div>' + nowline;
+  }
   groups.forEach(function(g){
     html += '<div class="daybar"><span class="d">' + esc(dayLabel(g.date)) + "</span>" +
             '<span class="n num">' + g.items.length + " block" + (g.items.length===1?"":"s") + "</span></div>";
@@ -628,8 +652,9 @@ function renderStrip(evs){
   var now = Date.now();
   var today = evs.filter(function(e){ return dayKey(e.start) === dayKey(new Date()); });
   var closed = today.filter(function(e){ var s = statusOf(e); return s==="cleared"||s==="missed"||s==="moved"; }).length;
-  $("s-count").textContent = today.length ? today.length + " today" : "—";
-  $("s-closed").textContent = today.length ? closed + " of " + today.length : "—";
+  var haveData = Object.keys(state.eventsByCal).length > 0;
+  $("s-count").textContent = haveData ? today.length + " today" : "—";
+  $("s-closed").textContent = !haveData ? "—" : today.length ? closed + " of " + today.length : "nothing due";
   var live = evs.filter(function(e){ return !e.allDay && e.start<=now && now<e.end; })[0];
   var next = evs.filter(function(e){ return e.start > now; })[0];
   if (live){
@@ -1032,11 +1057,32 @@ $("people").addEventListener("click", function(e){
   if (narrow()) goTo($("person-card"));
 });
 
-document.querySelector(".viewsw").addEventListener("click", function(e){
+function setRange(n){
+  if (state.range === n) return;
+  state.range = n;
+  try { localStorage.setItem(RANGE_KEY, String(n)); } catch(e){}
+  document.querySelectorAll("#rangesw button").forEach(function(x){
+    x.setAttribute("aria-pressed", String(Number(x.dataset.range) === n));
+  });
+  /* A watch is keyed by its arguments, so a new window means re-registering each one. */
+  var args = state.watchArgs, keys = Object.keys(state.watches);
+  keys.forEach(function(k){ unwatchCalendar(k); });
+  keys.forEach(function(k){
+    var a = args[k]; if (a) watchCalendar(k, a.calendarId, a.label);
+  });
+  renderMsg(); renderBoard(); renderCloseout();
+}
+
+$("rangesw").addEventListener("click", function(e){
+  var b = e.target.closest ? e.target.closest("button[data-range]") : null;
+  if (b) setRange(Number(b.dataset.range));
+});
+
+$("viewsw").addEventListener("click", function(e){
   var b = e.target.closest ? e.target.closest("button[data-view]") : null;
   if (!b) return;
   state.view = b.dataset.view;
-  document.querySelectorAll(".viewsw button").forEach(function(x){
+  document.querySelectorAll("#viewsw button").forEach(function(x){
     x.setAttribute("aria-pressed", String(x.dataset.view === state.view));
   });
   var people = state.view === "people";
@@ -1044,6 +1090,7 @@ document.querySelector(".viewsw").addEventListener("click", function(e){
   $("people").hidden = !people;
   $("calbar").hidden = people;
   $("board-msg").hidden = people;
+  $("rangesw").hidden = people;
   $("closeout").hidden = people;
   if (people) renderPeople();
   renderPerson(); renderCloseout(); renderLoops();
@@ -1142,8 +1189,9 @@ function renderMsg(){
 
 function watchCalendar(key, calendarId, label){
   if (state.watches[key]) return;
+  state.watchArgs[key] = {calendarId: calendarId, label: label};
   var input = {
-    startTime: isoLocal(WIN_START), endTime: isoLocal(WIN_END),
+    startTime: isoLocal(WIN_START), endTime: isoLocal(winEnd()),
     orderBy: "startTime", pageSize: 100
   };
   if (calendarId) input.calendarId = calendarId;
@@ -1231,6 +1279,11 @@ $("review-btn").addEventListener("click", function(){
 });
 
 /* ---------- boot ---------- */
+state.range = loadRange();
+document.querySelectorAll("#rangesw button").forEach(function(x){
+  x.setAttribute("aria-pressed", String(Number(x.dataset.range) === state.range));
+});
+
 store.attachLocal();
 store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); renderPeople(); renderPerson(); });
 renderBoard(); renderCloseout();
