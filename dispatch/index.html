@@ -241,6 +241,19 @@ button{font:inherit; color:inherit}
   font-family:"Newsreader",Georgia,serif; font-size:15.5px; color:var(--ink);
 }
 .td-add input:focus{border-color:var(--focus); outline:none}
+.dropbtn{
+  background:none; border:0; padding:0; cursor:pointer;
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:15px;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+}
+.dropbtn:hover{color:var(--ink)}
+.tdrow.gone .tx{color:var(--faint)}
+.tdrow.gone .tm{background:var(--line); color:var(--muted)}
+.notice .undo{
+  background:none; border:0; padding:0 0 0 8px; cursor:pointer; color:var(--focus);
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:12px;
+  letter-spacing:.09em; text-transform:uppercase; text-decoration:underline;
+}
 .td-empty{padding:14px 16px 14px 0; color:var(--muted); font-size:14px}
 .boardtd{
   border-top:1px solid var(--line-2); border-bottom:2px solid var(--line);
@@ -627,7 +640,7 @@ var state = {
   selectedId: null,
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
-  view: "board", personKey: null, todoCalIds: {}, todoDirty: false,
+  view: "board", personKey: null, todoCalIds: {}, todoDirty: false, showDropped: false,
   range: 2, watchArgs: {},
   mcp: null, sample: null
 };
@@ -932,13 +945,23 @@ function renderApply(){
     ".</span></div>";
 }
 
-function flash(msg, kind){
+var flashAction = null;
+function flash(msg, kind, action){
   var el = $("flash");
+  flashAction = action || null;
   el.innerHTML = '<div class="notice ' + (kind === "err" ? "err" : "ok") +
-                 '" style="margin:12px 16px 0 0">' + msg + "</div>";
+                 '" style="margin:12px 16px 0 0">' + msg +
+                 (action ? '<button type="button" class="undo">' + esc(action.label) + "</button>" : "") +
+                 "</div>";
   clearTimeout(flash._t);
-  if (kind !== "err") flash._t = setTimeout(function(){ el.innerHTML = ""; }, 9000);
+  if (kind !== "err") flash._t = setTimeout(function(){ el.innerHTML = ""; flashAction = null; }, 12000);
 }
+$("flash").addEventListener("click", function(e){
+  if (!e.target.classList.contains("undo") || !flashAction) return;
+  var fn = flashAction.fn; flashAction = null;
+  $("flash").innerHTML = ""; clearTimeout(flash._t);
+  fn();
+});
 
 var WRITE_ERR = {
   needs_reauth:        "Google Calendar needs reconnecting before it will accept changes. Reconnect it in claude.ai Settings &rarr; Connectors.",
@@ -1115,6 +1138,22 @@ function adoptTodos(){
   });
 }
 
+function todoAll(){
+  var all = todos.all();
+  return Object.keys(all).map(function(k){
+    return Object.assign({key: k}, all[k]);
+  }).filter(function(t){ return t && t.title; })
+    .sort(function(a,b){
+      var ad = a.day || "9999", bd = b.day || "9999";
+      if (ad !== bd) return ad.localeCompare(bd);
+      var at = timeIn(a.note), bt = timeIn(b.note);
+      if (at && bt && at.mins !== bt.mins) return at.mins - bt.mins;
+      if (at && !bt) return -1;
+      if (bt && !at) return 1;
+      return (a.createdAt||0) - (b.createdAt||0);
+    });
+}
+
 function todoList(){
   var all = todos.all();
   return Object.keys(all).map(function(k){
@@ -1139,16 +1178,19 @@ function todoRow(t){
   var tm = timeIn(t.note);
   var extra = t.note ? String(t.note).trim() : "";
   if (tm && extra.replace(/[^A-Za-z0-9]/g, "").length <= 4) extra = "";  /* the note was only the time */
-  return '<div class="tdrow' + (t.done ? " done" : "") + '" data-td="' + esc(t.key) + '">' +
+  return '<div class="tdrow' + (t.done ? " done" : "") + (t.dropped ? " gone" : "") +
+    '" data-td="' + esc(t.key) + '">' +
     '<input type="checkbox" ' + (t.done ? "checked" : "") + ' aria-label="Mark done">' +
     '<span><span class="tx">' + esc(t.title) +
       (tm ? ' <span class="tm">' + esc(tm.label) + "</span>" : "") + "</span>" +
       (extra ? '<span class="nt">' + esc(extra) + "</span>" : "") +
       (bits.length ? '<span class="src">' + bits.join(" · ") + "</span>" : "") + "</span>" +
     '<span class="td-actions">' +
-      '<input type="date" value="' + esc(t.day || "") + '" aria-label="Day for this to-do">' +
-      (canClear ? '<button type="button" class="clearcal">Clear from calendar</button>' : "") +
-      '<button type="button" class="drop" aria-label="Drop this to-do">Drop</button>' +
+      (t.dropped
+        ? '<button type="button" class="restore">Restore</button>'
+        : '<input type="date" value="' + esc(t.day || "") + '" aria-label="Day for this to-do">' +
+          (canClear ? '<button type="button" class="clearcal">Clear from calendar</button>' : "") +
+          '<button type="button" class="drop" aria-label="Drop this to-do">Drop</button>') +
     "</span></div>";
 }
 
@@ -1169,16 +1211,26 @@ function renderTodos(){
     {id:"done",  label:"Done",     cls:"",     items: list.filter(function(t){ return t.done; })}
   ].filter(function(b){ return b.items.length; });
 
-  if (!buckets.length){
+  var gone = todoAll().filter(function(t){ return t.dropped; });
+  if (!buckets.length && !gone.length){
     host.innerHTML = '<div class="td-empty">Nothing on the list. Add one above, or tell Victor ' +
       "\u2014 anything he puts on a calendar named <b>To-dos</b>, or titled <b>TODO: something</b>, lands here.</div>";
     return;
   }
-  host.innerHTML = buckets.map(function(b){
+  var html = buckets.map(function(b){
     return '<div class="tdsec"><div class="h"><span class="d ' + b.cls + '">' + b.label + "</span>" +
       '<span class="n num">' + b.items.length + "</span></div></div>" +
       b.items.map(todoRow).join("");
   }).join("");
+  if (gone.length){
+    /* Nothing is ever gone from the interface — only folded away. */
+    html += '<div class="tdsec"><div class="h">' +
+      '<button type="button" class="dropbtn" id="dropped-toggle" aria-expanded="' + !!state.showDropped + '">' +
+        (state.showDropped ? "\u25be" : "\u25b8") + " Dropped</button>" +
+      '<span class="n num">' + gone.length + "</span></div></div>";
+    if (state.showDropped) html += gone.map(todoRow).join("");
+  }
+  host.innerHTML = html;
 }
 
 function boardTodos(){
@@ -1198,6 +1250,9 @@ $("td-add").addEventListener("click", newTodo);
 $("td-new").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); newTodo(); } });
 
 function todoAction(e){
+  if (e.target.id === "dropped-toggle"){
+    state.showDropped = !state.showDropped; renderTodos(); return;
+  }
   var row = e.target.closest ? e.target.closest(".tdrow") : null;
   if (!row) return;
   var t = todos.all()[row.dataset.td]; if (!t) return;
@@ -1207,7 +1262,12 @@ function todoAction(e){
   } else if (e.target.type === "date"){
     todos.put(id, {day: e.target.value || null}).catch(function(){});
   } else if (e.target.classList.contains("drop")){
+    var title = t.title;
     todos.put(id, {dropped: true}).catch(function(){});
+    flash("Dropped <b>" + esc(title) + "</b>.", "ok",
+          {label: "Undo", fn: function(){ todos.put(id, {dropped: false}).catch(function(){}); }});
+  } else if (e.target.classList.contains("restore")){
+    todos.put(id, {dropped: false}).catch(function(){});
   } else if (e.target.classList.contains("clearcal")){
     clearFromCalendar(t, e.target);
   }
