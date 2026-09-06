@@ -7,30 +7,36 @@
   --ground:#EDF0EE; --surface:#FFFFFF; --surface-2:#F6F8F6; --sunk:#E3E8E5;
   --ink:#131B1E; --ink-2:#31434A; --muted:#5F7076; --faint:#8B9BA0;
   --line:#D2DAD7; --line-2:#E2E8E5;
-  --signal:#9A6510; --signal-bg:#FBEFD9;
-  --good:#0B6E4F; --warn:#9A5B12; --miss:#A02F2F;
+  --signal:#B35309; --signal-bg:#FCEBD6;
+  --good:#0B6E4F; --warn:#9A5B12; --miss:#A82D2D;
+  --on-signal:#FFFFFF; --on-good:#FFFFFF; --on-miss:#FFFFFF;
+  --tint:7%; --tint-hover:14%; --tint-sel:11%;
   --shadow:0 1px 2px rgba(19,27,30,.06), 0 8px 24px -12px rgba(19,27,30,.18);
   --stripe-boost:none;
   --focus:#1F6F78;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --ground:#111A1E; --surface:#18242A; --surface-2:#1E2C33; --sunk:#0D1417;
+    --ground:#0E171C; --surface:#152229; --surface-2:#1C2F37; --sunk:#0A1216;
     --ink:#E5EBE9; --ink-2:#C2CFD1; --muted:#8DA0A5; --faint:#6B7F85;
-    --line:#25333A; --line-2:#1F2C31;
-    --signal:#E2A544; --signal-bg:#2A2011;
+    --line:#25383F; --line-2:#1E3038;
+    --signal:#F2A44D; --signal-bg:#33220E;
     --good:#4FBF92; --warn:#DDA355; --miss:#E77C7C;
+    --on-signal:#221403; --on-good:#052419; --on-miss:#2B0D0D;
+    --tint:13%; --tint-hover:22%; --tint-sel:18%;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
     --stripe-boost:saturate(1.15) brightness(1.45);
     --focus:#5FC8D3;
   }
 }
 :root[data-theme="dark"]{
-  --ground:#111A1E; --surface:#18242A; --surface-2:#1E2C33; --sunk:#0D1417;
+    --ground:#0E171C; --surface:#152229; --surface-2:#1C2F37; --sunk:#0A1216;
   --ink:#E5EBE9; --ink-2:#C2CFD1; --muted:#8DA0A5; --faint:#6B7F85;
-  --line:#25333A; --line-2:#1F2C31;
-  --signal:#E2A544; --signal-bg:#2A2011;
+  --line:#25383F; --line-2:#1E3038;
+  --signal:#F2A44D; --signal-bg:#33220E;
   --good:#4FBF92; --warn:#DDA355; --miss:#E77C7C;
+  --on-signal:#221403; --on-good:#052419; --on-miss:#2B0D0D;
+  --tint:13%; --tint-hover:22%; --tint-sel:18%;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
   --stripe-boost:saturate(1.15) brightness(1.45);
   --focus:#5FC8D3;
@@ -89,6 +95,7 @@ button{font:inherit; color:inherit}
 .daybar{
   display:flex; align-items:baseline; gap:10px; padding:18px 16px 8px 0;
 }
+.daybar .d.now{color:var(--signal)}
 .daybar .d{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:15px; letter-spacing:.06em; text-transform:uppercase}
 .daybar .n{color:var(--faint); font-size:12.5px}
 .rows{display:flex; flex-direction:column}
@@ -98,20 +105,21 @@ button{font:inherit; color:inherit}
   background:none; border:0; border-top:1px solid var(--line-2);
   padding:11px 16px 11px 0; cursor:pointer; position:relative;
 }
-.row:hover{background:var(--surface-2)}
-.row:active{background:var(--sunk)}
+.row{--c:#68797F; background:color-mix(in srgb, var(--c) var(--tint), transparent)}
+.row:hover{background:color-mix(in srgb, var(--c) var(--tint-hover), transparent)}
+.row:active{background:color-mix(in srgb, var(--c) calc(var(--tint-hover) + 8%), transparent)}
 .row .chip{transition:none}
 @media (max-width:900px){
   .row{padding-right:8px}
   .row .chip::after{content:" \203A"; font-size:14px; line-height:1}
 }
-.row[aria-current="true"]{background:var(--surface); box-shadow:var(--shadow); border-top-color:transparent}
+.row[aria-current="true"]{background:color-mix(in srgb, var(--c) var(--tint-sel), var(--surface)); box-shadow:var(--shadow); border-top-color:transparent}
 .row .t{
   font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:14px;
   color:var(--ink-2); font-variant-numeric:tabular-nums; padding-top:1px;
 }
 .row .t small{display:block; font-weight:500; color:var(--faint); font-size:12px}
-.row .stripe{width:4px; border-radius:2px; align-self:stretch; min-height:22px; filter:var(--stripe-boost)}
+.row .stripe{width:5px; border-radius:3px; align-self:stretch; min-height:24px; background:var(--c); filter:var(--stripe-boost)}
 .row .body{min-width:0}
 .row .ttl{
   font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:16.5px;
@@ -125,13 +133,13 @@ button{font:inherit; color:inherit}
   white-space:nowrap; border:1px solid transparent; margin-top:2px;
 }
 .chip.open{color:var(--muted); border-color:var(--line)}
-.chip.live{color:var(--signal); background:var(--signal-bg); border-color:transparent}
+.chip.live{color:var(--on-signal); background:var(--signal); border-color:transparent}
 .chip.await{color:var(--warn); background:var(--signal-bg)}
-.chip.cleared{color:var(--good); border-color:currentColor}
-.chip.missed{color:var(--miss); border-color:currentColor}
+.chip.cleared{color:var(--on-good); background:var(--good); border-color:transparent}
+.chip.missed{color:var(--on-miss); background:var(--miss); border-color:transparent}
 .chip.moved{color:var(--muted); border-color:var(--line); text-decoration:line-through}
 .nowline{display:flex; align-items:center; gap:8px; padding:2px 16px 2px 0; color:var(--signal)}
-.nowline .bar{flex:1; height:2px; background:var(--signal); opacity:.55}
+.nowline .bar{flex:1; height:2px; background:var(--signal); opacity:.85}
 .nowline .lbl{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:11px; letter-spacing:.12em}
 .empty{padding:14px 16px 14px 0; color:var(--muted); font-size:14px; border-top:1px solid var(--line-2)}
 
@@ -152,15 +160,16 @@ button{font:inherit; color:inherit}
   width:100%; text-align:left; background:none; border:0; border-top:1px solid var(--line-2);
   padding:12px 16px 12px 0; cursor:pointer;
 }
-.prow:hover{background:var(--surface-2)}
-.prow:active{background:var(--sunk)}
-.prow[aria-current="true"]{background:var(--surface); box-shadow:var(--shadow); border-top-color:transparent}
+.prow{--c:#68797F; background:color-mix(in srgb, var(--c) var(--tint), transparent)}
+.prow:hover{background:color-mix(in srgb, var(--c) var(--tint), transparent)}
+.prow:active{background:color-mix(in srgb, var(--c) var(--tint-hover), transparent)}
+.prow[aria-current="true"]{background:color-mix(in srgb, var(--c) var(--tint-sel), var(--surface)); box-shadow:var(--shadow); border-top-color:transparent}
 .mono{
   width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-  background:var(--sunk); color:var(--ink-2); font-family:"Saira Condensed",Arial,sans-serif;
-  font-weight:700; font-size:13.5px; letter-spacing:.03em;
+  background:var(--c,var(--sunk)); color:var(--on-c,var(--ink-2)); font-family:"Saira Condensed",Arial,sans-serif;
+  font-weight:700; font-size:13.5px; letter-spacing:.03em; filter:var(--stripe-boost);
 }
-.prow .stripe{width:4px; border-radius:2px; height:30px; filter:var(--stripe-boost)}
+.prow .stripe{width:5px; border-radius:3px; height:32px; background:var(--c); filter:var(--stripe-boost)}
 .prow .nm{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:16.5px; line-height:1.2; overflow-wrap:anywhere}
 .prow .sub{font-size:12.5px; color:var(--faint); margin-top:1px; display:flex; gap:8px; flex-wrap:wrap}
 .prow .sub .loop{color:var(--signal); font-weight:500}
@@ -447,6 +456,16 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
 var CAL_COLOR = {"1":"#7986CB","2":"#33B679","3":"#8E24AA","4":"#E67C73","5":"#F6BF26",
                  "6":"#F4511E","7":"#039BE5","8":"#616161","9":"#3F51B5","10":"#0B8043","11":"#D50000"};
 var DEFAULT_COLOR = "#68797F";
+
+/* Pick black or white for text sitting on a filled swatch (WCAG relative luminance). */
+function textOn(hex){
+  var h = String(hex || "").replace("#", "");
+  if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  if (h.length !== 6) return "#FFFFFF";
+  var lin = function(v){ v = parseInt(v, 16)/255; return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); };
+  var L = 0.2126*lin(h.slice(0,2)) + 0.7152*lin(h.slice(2,4)) + 0.0722*lin(h.slice(4,6));
+  return L > 0.45 ? "#10181B" : "#FFFFFF";
+}
 var SERVER = "Google Calendar";
 
 var $ = function(id){ return document.getElementById(id); };
@@ -614,11 +633,12 @@ function renderBoard(){
   var html = "";
   if (!hasToday){
     /* Otherwise a clear day just vanishes and the board reads as broken. */
-    html += '<div class="daybar"><span class="d">Today</span><span class="n num">clear</span></div>' +
+    html += '<div class="daybar"><span class="d now">Today</span><span class="n num">clear</span></div>' +
             '<div class="empty">Nothing on the board today.</div>' + nowline;
   }
   groups.forEach(function(g){
-    html += '<div class="daybar"><span class="d">' + esc(dayLabel(g.date)) + "</span>" +
+    html += '<div class="daybar"><span class="d' + (g.key === todayKey ? " now" : "") + '">' +
+            esc(dayLabel(g.date)) + "</span>" +
             '<span class="n num">' + g.items.length + " block" + (g.items.length===1?"":"s") + "</span></div>";
     var placed = (g.key !== todayKey);        /* the marker only belongs in today's group */
     g.items.forEach(function(ev){
@@ -639,9 +659,10 @@ function rowHtml(ev){
   if (rec && rec.status === "moved" && rec.movedTo) meta.push('<span class="to">&rarr; ' + esc(shortDay(rec.movedTo)) + "</span>");
   if (rec && rec.note) meta.push("written up");
   if (openLoops) meta.push('<span class="loop">' + openLoops + " open loop" + (openLoops===1?"":"s") + "</span>");
-  return '<button class="row" type="button" data-id="' + esc(ev.id) + '" aria-current="' + (ev.id===state.selectedId) + '">' +
+  return '<button class="row" type="button" data-id="' + esc(ev.id) + '" style="--c:' + ev.color +
+      '" aria-current="' + (ev.id===state.selectedId) + '">' +
     '<span class="t">' + (ev.allDay ? "all day" : esc(hhmm(ev.start)) + "<small>" + esc(hhmm(ev.end)) + "</small>") + "</span>" +
-    '<span class="stripe" style="background:' + ev.color + '"></span>' +
+    '<span class="stripe"></span>' +
     '<span class="body"><span class="ttl">' + esc(ev.title) + "</span>" +
       (meta.length ? '<span class="meta">' + meta.join("<span>\u00b7</span>") + "</span>" : "") +
     "</span>" +
@@ -1011,10 +1032,10 @@ function renderPeople(){
     var quiet = p.last && (Date.now() - p.last) > 30*86400000;
     var sub = [p.touches.length + " block" + (p.touches.length===1?"":"s")];
     if (p.openLoops) sub.push('<span class="loop">' + p.openLoops + " open</span>");
-    return '<button class="prow" type="button" data-person="' + esc(p.key) + '" aria-current="' +
-        (p.key === state.personKey) + '">' +
+    return '<button class="prow" type="button" data-person="' + esc(p.key) + '" style="--c:' + p.color +
+        ";--on-c:" + textOn(p.color) + '" aria-current="' + (p.key === state.personKey) + '">' +
       '<span class="mono" aria-hidden="true">' + esc(monogram(p.name)) + "</span>" +
-      '<span class="stripe" style="background:' + p.color + '"></span>' +
+      '<span class="stripe"></span>' +
       '<span><span class="nm">' + esc(p.name) + '</span><span class="sub">' + sub.join("<span>\u00b7</span>") + "</span></span>" +
       '<span class="ago' + (quiet ? " quiet" : "") + '">' + esc(ago(p.last)) + "</span></button>";
   }).join("");
