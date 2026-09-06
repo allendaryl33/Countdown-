@@ -191,6 +191,54 @@ button{font:inherit; color:inherit}
 .thread .lp{font-size:12.5px; color:var(--signal); margin-top:4px; font-weight:500}
 .thread .lp.shut{color:var(--faint); font-weight:400; text-decoration:line-through}
 
+/* ---------- to-dos ---------- */
+.tdsec{padding:16px 16px 4px 0}
+.tdsec .h{display:flex; align-items:baseline; gap:10px}
+.tdsec .h .d{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:15px; letter-spacing:.06em; text-transform:uppercase}
+.tdsec .h .d.late{color:var(--miss)}
+.tdsec .h .d.now{color:var(--signal)}
+.tdsec .h .n{color:var(--faint); font-size:12.5px}
+.tdrow{
+  display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:0 11px; align-items:center;
+  padding:10px 16px 10px 2px; border-top:1px solid var(--line-2);
+}
+.tdrow:first-of-type{border-top:0}
+.tdrow input[type=checkbox]{width:19px; height:19px; accent-color:var(--good); cursor:pointer; flex:none}
+.tdrow .tx{font-family:"Newsreader",Georgia,serif; font-size:16px; line-height:1.4; overflow-wrap:anywhere}
+.tdrow.done .tx{color:var(--faint); text-decoration:line-through}
+.tdrow .src{
+  display:block; font-family:"Saira Condensed",Arial,sans-serif; font-size:11px; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--faint); margin-top:2px;
+}
+.tdrow .src .cal{color:var(--signal)}
+.td-actions{display:flex; gap:4px; align-items:center}
+.td-actions button, .td-actions input[type=date]{
+  background:none; border:1px solid transparent; border-radius:3px; cursor:pointer; padding:3px 7px;
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:11px;
+  letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+}
+.td-actions button:hover{border-color:var(--line); background:var(--surface); color:var(--ink)}
+.td-actions .drop:hover{color:var(--miss); border-color:currentColor}
+.td-actions input[type=date]{
+  font-family:"Saira Condensed",Arial,sans-serif; font-size:11.5px; color:var(--muted);
+  border-color:var(--line); background:var(--surface); padding:2px 5px; width:8.4em;
+}
+.td-add{display:flex; gap:8px; padding:16px 16px 0 0}
+.td-add input{
+  flex:1; background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:9px 11px;
+  font-family:"Newsreader",Georgia,serif; font-size:15.5px; color:var(--ink);
+}
+.td-add input:focus{border-color:var(--focus); outline:none}
+.td-empty{padding:14px 16px 14px 0; color:var(--muted); font-size:14px}
+.boardtd{
+  border-top:1px solid var(--line-2); border-bottom:2px solid var(--line);
+  background:color-mix(in srgb, var(--signal) 5%, transparent); padding:4px 0 6px;
+}
+.boardtd .h{display:flex; align-items:baseline; gap:10px; padding:10px 16px 4px 0}
+.boardtd .h .d{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--signal)}
+.boardtd .h .n{color:var(--faint); font-size:12.5px}
+.boardtd .tdrow{padding-left:16px}
+
 /* ---------- panel ---------- */
 .panel{padding:18px 0 0 24px; display:flex; flex-direction:column; gap:22px}
 @media (max-width:900px){ .panel{padding:8px 0 0; border-top:2px solid var(--ink); margin-top:24px} }
@@ -350,6 +398,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
         <div class="viewsw" id="viewsw" role="group" aria-label="View">
           <button type="button" data-view="board" aria-pressed="true">Board</button>
           <button type="button" data-view="people" aria-pressed="false">People</button>
+          <button type="button" data-view="todos" aria-pressed="false">To-dos</button>
         </div>
         <div class="viewsw rangesw" id="rangesw" role="group" aria-label="How far ahead">
           <button type="button" data-range="1">Today</button>
@@ -362,6 +411,13 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
       <div id="board-msg"></div>
       <div id="board"></div>
       <div id="people" hidden></div>
+      <div id="todos" hidden>
+        <div class="td-add">
+          <input type="text" id="td-new" placeholder="Add a to-do…" aria-label="Add a to-do">
+          <button class="btn solid" type="button" id="td-add">Add</button>
+        </div>
+        <div id="td-list"></div>
+      </div>
     </section>
 
     <aside class="panel">
@@ -503,43 +559,50 @@ function loadRange(){
 function winEnd(){ return addDays(WIN_START, state.range); }
 
 /* ---------- record store (db when granted, localStorage otherwise) ---------- */
-var LS_KEY = "life-dispatch/records";
-var store = {
-  db: null, cache: {}, subs: [],
-  safeId: function(id){ return String(id).replace(/[^A-Za-z0-9_\-.~:@+]/g, "-").slice(0,190); },
-  emit: function(){ this.subs.forEach(function(f){ try{ f(); }catch(e){ console.warn(e); } }); },
-  subscribe: function(f){ this.subs.push(f); f(); },
-  all: function(){ return this.cache; },
-  get: function(id){ return this.cache[this.safeId(id)] || null; },
-  put: function(id, patch){
-    var k = this.safeId(id);
-    var rec = Object.assign({}, this.cache[k] || {eventId:id, loops:[]}, patch);
-    rec.eventId = id; rec.updatedAt = Date.now();
-    this.cache[k] = rec; this.emit();
-    if (this.db){
-      return this.db.doc("blocks/"+k).set(rec).catch(function(e){
-        console.warn("save failed", e); return Promise.reject(e); });
+function makeStore(coll, lsKey, idField, defaults){
+  return {
+    db: null, cache: {}, subs: [], ready: false,
+    safeId: function(id){ return String(id).replace(/[^A-Za-z0-9_\-.~:@+]/g, "-").slice(0,190); },
+    emit: function(){ this.subs.forEach(function(f){ try{ f(); }catch(e){ console.warn(e); } }); },
+    subscribe: function(f){ this.subs.push(f); f(); },
+    all: function(){ return this.cache; },
+    get: function(id){ return this.cache[this.safeId(id)] || null; },
+    put: function(id, patch){
+      var k = this.safeId(id);
+      var rec = Object.assign({}, defaults || {}, this.cache[k] || {}, patch);
+      rec[idField] = id; rec.updatedAt = Date.now();
+      this.cache[k] = rec; this.emit();
+      if (this.db) return this.db.doc(coll + "/" + k).set(rec);
+      try { localStorage.setItem(lsKey, JSON.stringify(this.cache)); } catch(e){}
+      return Promise.resolve();
+    },
+    remove: function(id){
+      var k = this.safeId(id);
+      delete this.cache[k]; this.emit();
+      if (this.db) return this.db.doc(coll + "/" + k).delete();
+      try { localStorage.setItem(lsKey, JSON.stringify(this.cache)); } catch(e){}
+      return Promise.resolve();
+    },
+    attachLocal: function(){
+      try { this.cache = JSON.parse(localStorage.getItem(lsKey) || "{}") || {}; } catch(e){ this.cache = {}; }
+      this.emit();
+    },
+    attachDb: function(db){
+      var self = this; this.db = db;
+      db.collection(coll).onSnapshot(function(snap){
+        var next = {};
+        snap.docs.forEach(function(d){
+          var v = d.data(); if (!v) return;
+          next[d.id || self.safeId(v[idField] || "")] = Object.assign({}, defaults || {}, v);
+        });
+        self.cache = next; self.ready = true; self.emit();
+      }, function(err){ console.warn(coll + " listener", err); });
     }
-    try { localStorage.setItem(LS_KEY, JSON.stringify(this.cache)); } catch(e){}
-    return Promise.resolve();
-  },
-  attachLocal: function(){
-    try { this.cache = JSON.parse(localStorage.getItem(LS_KEY) || "{}") || {}; } catch(e){ this.cache = {}; }
-    this.emit();
-  },
-  attachDb: function(db){
-    var self = this; this.db = db;
-    db.collection("blocks").onSnapshot(function(snap){
-      var next = {};
-      snap.docs.forEach(function(d){
-        var v = d.data(); if (!v) return;
-        var k = d.id || self.safeId(v.eventId || "");
-        next[k] = Object.assign({loops:[]}, v);
-      });
-      self.cache = next; self.emit();
-    }, function(err){ console.warn("blocks listener", err); });
-  }
-};
+  };
+}
+
+var store = makeStore("blocks", "life-dispatch/records", "eventId", {loops: []});
+var todos = makeStore("todos", "life-dispatch/todos", "id", {done: false, dropped: false});
 
 /* ---------- state ---------- */
 var state = {
@@ -552,7 +615,7 @@ var state = {
   selectedId: null,
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
-  view: "board", personKey: null,
+  view: "board", personKey: null, todoCalIds: {}, todoDirty: false,
   range: 2, watchArgs: {},
   mcp: null, sample: null
 };
@@ -562,7 +625,7 @@ function loadSel(){ try { return JSON.parse(localStorage.getItem(SEL_KEY) || "nu
 function saveSel(){ try { localStorage.setItem(SEL_KEY, JSON.stringify(Object.keys(state.selected))); } catch(e){} }
 
 /* ---------- event normalization ---------- */
-function normalize(payload, calId, calName){
+function normalize(payload, calId, calName, isTodoCal){
   var evs = (payload && payload.events) || [];
   var out = [];
   for (var i=0;i<evs.length;i++){
@@ -579,14 +642,22 @@ function normalize(payload, calId, calName){
       id: e.id, title: e.summary || "(untitled block)",
       start: start, end: end, allDay: allDay,
       color: CAL_COLOR[e.colorId] || DEFAULT_COLOR,
-      calId: calId, calName: calName, link: e.htmlLink || null,
+      calId: calId, calName: calName, isTodoCal: !!isTodoCal, link: e.htmlLink || null,
       location: e.location || null
     });
   }
   return out;
 }
 
-function allEvents(){
+/* Victor drops to-dos on a calendar; the dashboard adopts them and owns them from there. */
+function isTodoCalendar(name){ return /(^|\s|\b)(to-?dos?|tasks?)(\b|\s|$)/i.test(String(name || "")); }
+function todoTitleOf(ev){
+  var m = /^\s*(?:todo|to-do|task)\s*[:\u2013\-]\s*(.+)$/i.exec(ev.title || "");
+  if (m) return m[1].trim();
+  return ev.isTodoCal ? ev.title : null;
+}
+
+function rawEvents(){
   var seen = {}, out = [];
   Object.keys(state.eventsByCal).forEach(function(k){
     if (!state.selected[k]) return;
@@ -597,6 +668,12 @@ function allEvents(){
   });
   out.sort(function(a,b){ return a.start - b.start || String(a.title).localeCompare(b.title); });
   return out;
+}
+function calendarTodos(){ return rawEvents().filter(function(e){ return todoTitleOf(e) !== null; }); }
+
+function allEvents(){
+  /* Blocks only — a to-do is not a time block, it belongs in the to-do list. */
+  return rawEvents().filter(function(e){ return todoTitleOf(e) === null; });
 }
 
 /* ---------- status ---------- */
@@ -611,11 +688,20 @@ function statusOf(ev){
 var CHIP_LABEL = {open:"On board", live:"Live now", await:"Needs write-up", cleared:"Cleared", missed:"Missed", moved:"Moved"};
 
 /* ---------- board rendering ---------- */
+function todoStripHtml(){
+  var td = boardTodos();
+  if (!td.length) return "";
+  var open = td.filter(function(t){ return !t.done; }).length;
+  return '<div class="boardtd"><div class="h"><span class="d">To-do</span>' +
+    '<span class="n num">' + (open ? open + " to clear" : "all clear") + "</span></div>" +
+    td.map(todoRow).join("") + "</div>";
+}
+
 function renderBoard(){
-  var evs = allEvents(), host = $("board"), now = Date.now();
+  var evs = allEvents(), host = $("board"), now = Date.now(), strip = todoStripHtml();
   if (!evs.length){
     var span = state.range === 1 ? "today" : state.range === 2 ? "today or tomorrow" : "the next seven days";
-    host.innerHTML = '<div class="empty">' +
+    host.innerHTML = strip + '<div class="empty">' +
       (Object.keys(state.eventsByCal).length ? "Nothing on the board for " + span + "." : "Waiting on Google Calendar\u2026") +
       "</div>";
     renderStrip(evs); return;
@@ -630,7 +716,7 @@ function renderBoard(){
   var hasToday = groups.some(function(g){ return g.key === todayKey; });
   var nowline = '<div class="nowline"><span class="lbl">NOW ' + esc(hhmm(new Date())) +
                 '</span><span class="bar"></span></div>';
-  var html = "";
+  var html = strip;
   if (!hasToday){
     /* Otherwise a clear day just vanishes and the board reads as broken. */
     html += '<div class="daybar"><span class="d now">Today</span><span class="n num">clear</span></div>' +
@@ -970,6 +1056,135 @@ function addLoop(){
 $("c-loop-add").addEventListener("click", addLoop);
 $("c-loop").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); addLoop(); } });
 
+/* ---------- to-dos ---------- */
+function adoptTodos(){
+  if (!todos.ready) return;   /* adopting before the store settles would resurrect finished items */
+  calendarTodos().forEach(function(ev){
+    if (todos.get(ev.id)) return;
+    todos.put(ev.id, {
+      title: todoTitleOf(ev), day: dayKey(ev.start), done: false, dropped: false,
+      source: "calendar", calId: ev.calId, calName: ev.calName || "", calCleared: false,
+      createdAt: Date.now()
+    }).catch(function(){});
+  });
+}
+
+function todoList(){
+  var all = todos.all();
+  return Object.keys(all).map(function(k){
+    var t = Object.assign({key: k}, all[k]); return t;
+  }).filter(function(t){ return t && t.title && !t.dropped; })
+    .sort(function(a,b){
+      var ad = a.day || "9999", bd = b.day || "9999";
+      return ad.localeCompare(bd) || (a.createdAt||0) - (b.createdAt||0);
+    });
+}
+
+function todoRow(t){
+  var bits = [];
+  if (t.day) bits.push(esc(shortDay(t.day)));
+  if (t.source === "calendar") bits.push('<span class="cal">' + esc(t.calCleared ? "was on calendar" : "from calendar") + "</span>");
+  var canClear = t.source === "calendar" && t.done && !t.calCleared && state.mcp;
+  return '<div class="tdrow' + (t.done ? " done" : "") + '" data-td="' + esc(t.key) + '">' +
+    '<input type="checkbox" ' + (t.done ? "checked" : "") + ' aria-label="Mark done">' +
+    '<span><span class="tx">' + esc(t.title) + "</span>" +
+      (bits.length ? '<span class="src">' + bits.join(" · ") + "</span>" : "") + "</span>" +
+    '<span class="td-actions">' +
+      '<input type="date" value="' + esc(t.day || "") + '" aria-label="Day for this to-do">' +
+      (canClear ? '<button type="button" class="clearcal">Clear from calendar</button>' : "") +
+      '<button type="button" class="drop" aria-label="Drop this to-do">Drop</button>' +
+    "</span></div>";
+}
+
+function renderTodos(){
+  if (state.view !== "todos") return;
+  /* Don't rebuild the list under a date picker someone has open. */
+  var ae = document.activeElement;
+  if (ae && ae.closest && ae.closest("#td-list") && ae.type === "date"){
+    state.todoDirty = true; return;
+  }
+  state.todoDirty = false;
+  var list = todoList(), today = dayKey(new Date()), host = $("td-list");
+  var buckets = [
+    {id:"late",  label:"Overdue",  cls:"late", items: list.filter(function(t){ return !t.done && t.day && t.day < today; })},
+    {id:"today", label:"Today",    cls:"now",  items: list.filter(function(t){ return !t.done && t.day === today; })},
+    {id:"later", label:"Later",    cls:"",     items: list.filter(function(t){ return !t.done && t.day && t.day > today; })},
+    {id:"someday",label:"No date", cls:"",     items: list.filter(function(t){ return !t.done && !t.day; })},
+    {id:"done",  label:"Done",     cls:"",     items: list.filter(function(t){ return t.done; })}
+  ].filter(function(b){ return b.items.length; });
+
+  if (!buckets.length){
+    host.innerHTML = '<div class="td-empty">Nothing on the list. Add one above, or tell Victor ' +
+      "\u2014 anything he puts on a calendar named <b>To-dos</b>, or titled <b>TODO: something</b>, lands here.</div>";
+    return;
+  }
+  host.innerHTML = buckets.map(function(b){
+    return '<div class="tdsec"><div class="h"><span class="d ' + b.cls + '">' + b.label + "</span>" +
+      '<span class="n num">' + b.items.length + "</span></div></div>" +
+      b.items.map(todoRow).join("");
+  }).join("");
+}
+
+function boardTodos(){
+  var today = dayKey(new Date());
+  return todoList().filter(function(t){ return t.day && t.day <= today; });
+}
+
+function newTodo(){
+  var input = $("td-new"), text = input.value.trim();
+  if (!text) return;
+  var id = "t" + Date.now() + Math.floor(Math.random()*999);
+  input.value = "";
+  todos.put(id, {title: text, day: dayKey(new Date()), done: false, dropped: false,
+                 source: "app", createdAt: Date.now()}).catch(function(){});
+}
+$("td-add").addEventListener("click", newTodo);
+$("td-new").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); newTodo(); } });
+
+function todoAction(e){
+  var row = e.target.closest ? e.target.closest(".tdrow") : null;
+  if (!row) return;
+  var t = todos.all()[row.dataset.td]; if (!t) return;
+  var id = t.id || row.dataset.td;
+  if (e.target.type === "checkbox"){
+    todos.put(id, {done: e.target.checked, doneAt: e.target.checked ? Date.now() : null}).catch(function(){});
+  } else if (e.target.type === "date"){
+    todos.put(id, {day: e.target.value || null}).catch(function(){});
+  } else if (e.target.classList.contains("drop")){
+    todos.put(id, {dropped: true}).catch(function(){});
+  } else if (e.target.classList.contains("clearcal")){
+    clearFromCalendar(t, e.target);
+  }
+}
+$("td-list").addEventListener("click", todoAction);
+$("td-list").addEventListener("change", todoAction);
+$("td-list").addEventListener("focusout", function(){
+  setTimeout(function(){ if (state.todoDirty) renderTodos(); }, 0);
+});
+$("board").addEventListener("change", todoAction);
+
+function clearFromCalendar(t, btn){
+  if (!state.mcp || t.source !== "calendar") return;
+  btn.disabled = true; btn.textContent = "Clearing\u2026";
+  var input = {eventId: t.id, notificationLevel: "NONE"};
+  if (t.calId && t.calId !== "__primary__") input.calendarId = t.calId;
+  state.mcp.callTool(SERVER, "delete_event", input, {cache:false}).then(function(){
+    todos.put(t.id, {calCleared: true}).catch(function(){});
+    flash("Cleared <b>" + esc(t.title) + "</b> off the calendar. The to-do stays here.");
+    try { state.mcp.invalidate(SERVER, "list_events"); } catch(e){}
+  }).catch(function(err){
+    btn.disabled = false; btn.textContent = "Clear from calendar";
+    var code = err && err.code;
+    if (code === "server_unavailable" || code === "upstream_error"){
+      flash("Google Calendar didn't confirm that, and it may still have gone through. " +
+            "Check the calendar before trying again.", "err");
+      try { state.mcp.invalidate(SERVER, "list_events"); } catch(e2){}
+    } else {
+      flash(WRITE_ERR[code] || "Couldn't clear it off the calendar. Nothing was changed.", "err");
+    }
+  });
+}
+
 /* ---------- people ---------- */
 function splitPeople(v){
   return String(v || "").split(/[,;&/]|\band\b|\bwith\b/i)
@@ -1086,10 +1301,13 @@ function setRange(n){
     x.setAttribute("aria-pressed", String(Number(x.dataset.range) === n));
   });
   /* A watch is keyed by its arguments, so a new window means re-registering each one. */
-  var args = state.watchArgs, keys = Object.keys(state.watches);
+  var args = state.watchArgs;
+  var keys = Object.keys(state.watches).filter(function(k){
+    return !(args[k] && args[k].opts && args[k].opts.days);   /* the to-do calendar keeps its own window */
+  });
   keys.forEach(function(k){ unwatchCalendar(k); });
   keys.forEach(function(k){
-    var a = args[k]; if (a) watchCalendar(k, a.calendarId, a.label);
+    var a = args[k]; if (a) watchCalendar(k, a.calendarId, a.label, a.opts);
   });
   renderMsg(); renderBoard(); renderCloseout();
 }
@@ -1106,15 +1324,17 @@ $("viewsw").addEventListener("click", function(e){
   document.querySelectorAll("#viewsw button").forEach(function(x){
     x.setAttribute("aria-pressed", String(x.dataset.view === state.view));
   });
-  var people = state.view === "people";
-  $("board").hidden = people;
-  $("people").hidden = !people;
-  $("calbar").hidden = people;
-  $("board-msg").hidden = people;
-  $("rangesw").hidden = people;
-  $("closeout").hidden = people;
-  if (people) renderPeople();
-  renderPerson(); renderCloseout(); renderLoops();
+  var v = state.view, board = v === "board";
+  $("board").hidden = !board;
+  $("people").hidden = v !== "people";
+  $("todos").hidden = v !== "todos";
+  $("calbar").hidden = !board;
+  $("board-msg").hidden = !board;
+  $("rangesw").hidden = !board;
+  $("closeout").hidden = !board;
+  if (v === "people") renderPeople();
+  if (v === "todos") renderTodos();
+  renderPerson(); renderCloseout(); renderLoops(); renderBoard();
 });
 
 /* ---------- open loops across every block ---------- */
@@ -1208,11 +1428,13 @@ function renderMsg(){
   }).join("");
 }
 
-function watchCalendar(key, calendarId, label){
+function watchCalendar(key, calendarId, label, opts){
   if (state.watches[key]) return;
-  state.watchArgs[key] = {calendarId: calendarId, label: label};
+  opts = opts || {};
+  state.watchArgs[key] = {calendarId: calendarId, label: label, opts: opts};
   var input = {
-    startTime: isoLocal(WIN_START), endTime: isoLocal(winEnd()),
+    startTime: isoLocal(WIN_START),
+    endTime: isoLocal(opts.days ? addDays(WIN_START, opts.days) : winEnd()),
     orderBy: "startTime", pageSize: 100
   };
   if (calendarId) input.calendarId = calendarId;
@@ -1220,7 +1442,8 @@ function watchCalendar(key, calendarId, label){
   var un = state.mcp.watchTool(SERVER, "list_events", input, function(ev){
     if (ev.type === "data"){
       delete state.errorByCal[key];
-      state.eventsByCal[key] = normalize(ev.result && ev.result.payload, key, label);
+      state.eventsByCal[key] = normalize(ev.result && ev.result.payload, key, label, opts.isTodoCal);
+      adoptTodos();
       var c = ev.result && ev.result.cache;
       state.storedAt = c && c.storedAt ? c.storedAt : Date.now();
     } else {
@@ -1240,7 +1463,7 @@ function unwatchCalendar(key){
 function renderCalbar(){
   var host = $("calbar");
   if (!state.calendars.length){ host.innerHTML = ""; return; }
-  host.innerHTML = state.calendars.map(function(c){
+  host.innerHTML = state.calendars.filter(function(c){ return !state.todoCalIds[c.id]; }).map(function(c){
     return '<button class="calchip" type="button" data-cal="'+esc(c.id)+'" aria-pressed="'+(!!state.selected[c.id])+'">' +
            '<span class="dot"></span>'+esc(c.summary || c.id)+"</button>";
   }).join("");
@@ -1305,15 +1528,21 @@ document.querySelectorAll("#rangesw button").forEach(function(x){
   x.setAttribute("aria-pressed", String(Number(x.dataset.range) === state.range));
 });
 
-store.attachLocal();
+store.attachLocal(); todos.attachLocal();
 store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); renderPeople(); renderPerson(); });
+todos.subscribe(function(){ renderTodos(); renderBoard(); adoptTodos(); });
+/* Adopt anyway if the shared store never answers, so a local-only view still works. */
+setTimeout(function(){ if (!todos.ready){ todos.ready = true; adoptTodos(); } }, 6000);
 renderBoard(); renderCloseout();
 setInterval(function(){ renderBoard(); }, 60000);
 
 var claudeApi = (typeof claude !== "undefined" && claude && typeof claude.use === "function")
   ? claude : {use: function(){ return Promise.resolve(null); }};
 
-claudeApi.use("db").then(function(db){ if (db) store.attachDb(db); }).catch(function(){});
+claudeApi.use("db").then(function(db){
+  if (db){ store.attachDb(db); todos.attachDb(db); }
+  else { todos.ready = true; adoptTodos(); }
+}).catch(function(){ todos.ready = true; adoptTodos(); });
 claudeApi.use("sample").then(function(s){
   state.sample = s;
   if (!s) $("review-card").style.display = "none";
@@ -1330,9 +1559,16 @@ claudeApi.use("mcp").then(function(mcp){
   return mcp.callTool(SERVER, "list_calendars", {}, {cache:{staleTime:3600000}}).then(function(res){
     var p = res && res.payload;
     state.calendars = (p && p.calendars) || [];
+    state.calendars.forEach(function(c){
+      if (!isTodoCalendar(c.summary)) return;
+      state.todoCalIds[c.id] = true;
+      state.selected[c.id] = true;
+      watchCalendar(c.id, c.id, c.summary || "To-dos", {days: 60, isTodoCal: true});
+    });
     var saved = loadSel();
     if (saved) saved.forEach(function(id){
       if (id === "__primary__") return;
+      if (state.todoCalIds[id]) return;
       var cal = state.calendars.filter(function(c){ return c.id === id; })[0];
       if (cal){ state.selected[id] = true; watchCalendar(id, id, cal.summary || "Calendar"); }
     });

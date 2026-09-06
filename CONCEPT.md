@@ -103,6 +103,18 @@ calendar you already keep, and asks for one thing back — the write-up.
   and how long it's been. Pick someone for their full thread — every block,
   every write-up, every loop — and the open-loops card filters to them. Each
   person takes the calendar colour they show up in most.
+- **To-dos.** Victor drops them on a calendar; the dashboard adopts them and
+  owns them from there. Anything on a calendar named *To-dos*, or any event
+  titled `TODO: something`, becomes a to-do rather than a block — checked off,
+  moved to another day, or dropped, all in the dashboard's own store. Today's
+  and overdue ones ride at the top of the board. Once done, one tap clears the
+  original event off the calendar so it doesn't silt up.
+
+  Note that Google Calendar has no to-do event type — the types are `DEFAULT`,
+  `OUT_OF_OFFICE`, `FOCUS_TIME`, `WORKING_LOCATION`, `BIRTHDAY`, `FROM_GMAIL`.
+  What looks like one in the Calendar app is **Google Tasks**, a separate
+  product with a separate API and no connector here. Hence the calendar-as-inbox
+  approach: it needs nothing that doesn't already exist.
 - **Range.** Today / 2 days / Week, remembered per browser. A clear day says so
   rather than vanishing, so an empty board never reads as a broken one.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.
