@@ -192,6 +192,7 @@ button{font:inherit; color:inherit}
 .thread .lp.shut{color:var(--faint); font-weight:400; text-decoration:line-through}
 
 /* ---------- to-dos ---------- */
+
 .tdsec{padding:16px 16px 4px 0}
 .tdsec .h{display:flex; align-items:baseline; gap:10px}
 .tdsec .h .d{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:15px; letter-spacing:.06em; text-transform:uppercase}
@@ -206,6 +207,17 @@ button{font:inherit; color:inherit}
 .tdrow input[type=checkbox]{width:19px; height:19px; accent-color:var(--good); cursor:pointer; flex:none}
 .tdrow .tx{font-family:"Newsreader",Georgia,serif; font-size:16px; line-height:1.4; overflow-wrap:anywhere}
 .tdrow.done .tx{color:var(--faint); text-decoration:line-through}
+.tdrow .tm{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:12.5px;
+  letter-spacing:.05em; color:var(--on-signal); background:var(--signal);
+  padding:2px 6px; border-radius:3px; white-space:nowrap; vertical-align:2px; margin-left:4px;
+}
+.tdrow.done .tm{background:var(--line); color:var(--muted)}
+.tdrow .nt{
+  display:block; font-family:"Newsreader",Georgia,serif; font-size:13.5px; line-height:1.45;
+  color:var(--muted); margin-top:2px;
+}
+.tdrow.done .nt{color:var(--faint)}
 .tdrow .src{
   display:block; font-family:"Saira Condensed",Arial,sans-serif; font-size:11px; letter-spacing:.07em;
   text-transform:uppercase; color:var(--faint); margin-top:2px;
@@ -652,6 +664,7 @@ function normalize(payload, calId, calName, isTodoCal){
       start: start, end: end, allDay: allDay,
       color: CAL_COLOR[e.colorId] || DEFAULT_COLOR,
       calId: calId, calName: calName, isTodoCal: !!isTodoCal, link: e.htmlLink || null,
+      note: (e.description || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim(),
       location: e.location || null
     });
   }
@@ -1066,12 +1079,36 @@ $("c-loop-add").addEventListener("click", addLoop);
 $("c-loop").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); addLoop(); } });
 
 /* ---------- to-dos ---------- */
+/* Victor writes times into the note ("8 PM"). Lift them out so a call at eight
+   reads as a call at eight, and so the day sorts in the order it happens. */
+function timeIn(text){
+  var t = String(text || ""), h = null, mi = 0, m;
+  if ((m = /\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m\.?\b/i.exec(t))){
+    h = (+m[1]) % 12; mi = +(m[2] || 0);
+    if (/p/i.test(m[3])) h += 12;
+  } else if ((m = /\b([01]?\d|2[0-3]):([0-5]\d)\b/.exec(t))){
+    h = +m[1]; mi = +m[2];
+  }
+  if (h === null || h > 23) return null;
+  /* Only trust a time that IS the note ("8 PM") or opens it. A time buried in
+     prose is usually about something else — "ask about 9 AM pickup". */
+  if (t.trim().length > 24 && m.index > 8) return null;
+  var d = new Date(); d.setHours(h, mi, 0, 0);
+  return {mins: h*60 + mi, label: hhmm(d)};
+}
+
 function adoptTodos(){
   if (!todos.ready) return;   /* adopting before the store settles would resurrect finished items */
   calendarTodos().forEach(function(ev){
-    if (todos.get(ev.id)) return;
+    var rec = todos.get(ev.id);
+    if (rec){
+      /* Adopted before notes were carried across — fill it in once, never overwrite. */
+      if (rec.note === undefined && ev.note) todos.put(ev.id, {note: ev.note}).catch(function(){});
+      return;
+    }
     todos.put(ev.id, {
-      title: todoTitleOf(ev), day: dayKey(ev.start), done: false, dropped: false,
+      title: todoTitleOf(ev), day: dayKey(ev.start), note: ev.note || "",
+      done: false, dropped: false,
       source: "calendar", calId: ev.calId, calName: ev.calName || "", calCleared: false,
       createdAt: Date.now()
     }).catch(function(){});
@@ -1085,7 +1122,12 @@ function todoList(){
   }).filter(function(t){ return t && t.title && !t.dropped; })
     .sort(function(a,b){
       var ad = a.day || "9999", bd = b.day || "9999";
-      return ad.localeCompare(bd) || (a.createdAt||0) - (b.createdAt||0);
+      if (ad !== bd) return ad.localeCompare(bd);
+      var at = timeIn(a.note), bt = timeIn(b.note);
+      if (at && bt && at.mins !== bt.mins) return at.mins - bt.mins;
+      if (at && !bt) return -1;
+      if (bt && !at) return 1;
+      return (a.createdAt||0) - (b.createdAt||0);
     });
 }
 
@@ -1094,9 +1136,14 @@ function todoRow(t){
   if (t.day) bits.push(esc(shortDay(t.day)));
   if (t.source === "calendar") bits.push('<span class="cal">' + esc(t.calCleared ? "was on calendar" : "from calendar") + "</span>");
   var canClear = t.source === "calendar" && t.done && !t.calCleared && state.mcp;
+  var tm = timeIn(t.note);
+  var extra = t.note ? String(t.note).trim() : "";
+  if (tm && extra.replace(/[^A-Za-z0-9]/g, "").length <= 4) extra = "";  /* the note was only the time */
   return '<div class="tdrow' + (t.done ? " done" : "") + '" data-td="' + esc(t.key) + '">' +
     '<input type="checkbox" ' + (t.done ? "checked" : "") + ' aria-label="Mark done">' +
-    '<span><span class="tx">' + esc(t.title) + "</span>" +
+    '<span><span class="tx">' + esc(t.title) +
+      (tm ? ' <span class="tm">' + esc(tm.label) + "</span>" : "") + "</span>" +
+      (extra ? '<span class="nt">' + esc(extra) + "</span>" : "") +
       (bits.length ? '<span class="src">' + bits.join(" · ") + "</span>" : "") + "</span>" +
     '<span class="td-actions">' +
       '<input type="date" value="' + esc(t.day || "") + '" aria-label="Day for this to-do">' +
