@@ -624,6 +624,14 @@ var SEL_KEY = "life-dispatch/calendars";
 function loadSel(){ try { return JSON.parse(localStorage.getItem(SEL_KEY) || "null"); } catch(e){ return null; } }
 function saveSel(){ try { localStorage.setItem(SEL_KEY, JSON.stringify(Object.keys(state.selected))); } catch(e){} }
 
+/* An all-day date is a floating calendar day. This connector may send it as
+   "2026-09-08" or as a full "2026-09-08T00:00:00Z"; both mean that day, and
+   converting the latter through UTC would land it on the day before. */
+function parseDateOnly(raw){
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw || ""));
+  return m ? new Date(+m[1], +m[2]-1, +m[3]) : null;
+}
+
 /* ---------- event normalization ---------- */
 function normalize(payload, calId, calName, isTodoCal){
   var evs = (payload && payload.events) || [];
@@ -635,9 +643,10 @@ function normalize(payload, calId, calName, isTodoCal){
     var eRaw = e.end && (e.end.dateTime || e.end.date);
     if (!sRaw) continue;
     var allDay = !(e.start && e.start.dateTime);
-    var start = new Date(allDay ? sRaw + "T00:00:00" : sRaw);
-    var end = eRaw ? new Date(allDay ? eRaw + "T00:00:00" : eRaw) : new Date(start.getTime()+3600000);
-    if (isNaN(start)) continue;
+    var start = allDay ? parseDateOnly(sRaw) : new Date(sRaw);
+    var end = eRaw ? (allDay ? parseDateOnly(eRaw) : new Date(eRaw)) : null;
+    if (!start || isNaN(start)) continue;
+    if (!end || isNaN(end)) end = new Date(start.getTime() + (allDay ? 86400000 : 3600000));
     out.push({
       id: e.id, title: e.summary || "(untitled block)",
       start: start, end: end, allDay: allDay,
@@ -650,7 +659,7 @@ function normalize(payload, calId, calName, isTodoCal){
 }
 
 /* Victor drops to-dos on a calendar; the dashboard adopts them and owns them from there. */
-function isTodoCalendar(name){ return /(^|\s|\b)(to-?dos?|tasks?)(\b|\s|$)/i.test(String(name || "")); }
+function isTodoCalendar(name){ return /(^|\s|\b)(to[\s-]?dos?|tasks?)(\b|\s|$)/i.test(String(name || "")); }
 function todoTitleOf(ev){
   var m = /^\s*(?:todo|to-do|task)\s*[:\u2013\-]\s*(.+)$/i.exec(ev.title || "");
   if (m) return m[1].trim();
@@ -1303,6 +1312,7 @@ function setRange(n){
   /* A watch is keyed by its arguments, so a new window means re-registering each one. */
   var args = state.watchArgs;
   var keys = Object.keys(state.watches).filter(function(k){
+    if (k === "__calendars__") return false;                  /* not an events watch */
     return !(args[k] && args[k].opts && args[k].opts.days);   /* the to-do calendar keeps its own window */
   });
   keys.forEach(function(k){ unwatchCalendar(k); });
@@ -1556,9 +1566,13 @@ claudeApi.use("mcp").then(function(mcp){
   state.mcp = mcp;
   state.selected.__primary__ = true;
   watchCalendar("__primary__", null, "");
-  return mcp.callTool(SERVER, "list_calendars", {}, {cache:{staleTime:3600000}}).then(function(res){
-    var p = res && res.payload;
-    state.calendars = (p && p.calendars) || [];
+  /* Watched, not fetched once: a calendar created after the page loaded has to
+     be picked up without a reload. watchCalendar is idempotent, so re-running
+     this on every delivery only ever adds what is new. */
+  state.watches.__calendars__ = mcp.watchTool(SERVER, "list_calendars", {}, function(ev){
+    if (ev.type !== "data") return;
+    var pl = ev.result && ev.result.payload;
+    state.calendars = (pl && pl.calendars) || [];
     state.calendars.forEach(function(c){
       if (!isTodoCalendar(c.summary)) return;
       state.todoCalIds[c.id] = true;
@@ -1567,13 +1581,13 @@ claudeApi.use("mcp").then(function(mcp){
     });
     var saved = loadSel();
     if (saved) saved.forEach(function(id){
-      if (id === "__primary__") return;
-      if (state.todoCalIds[id]) return;
+      if (id === "__primary__" || state.todoCalIds[id]) return;
       var cal = state.calendars.filter(function(c){ return c.id === id; })[0];
       if (cal){ state.selected[id] = true; watchCalendar(id, id, cal.summary || "Calendar"); }
     });
-    renderCalbar();
-  }).catch(function(){ /* the primary watch is what matters; chips are a bonus */ });
+    renderCalbar(); renderBoard();
+  }, {cache:{staleTime:120000}, refetchInterval:600000});
+  return null;
 }).catch(function(){});
 
 })();
