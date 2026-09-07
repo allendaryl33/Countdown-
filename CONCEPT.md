@@ -131,6 +131,11 @@ calendar you already keep, and asks for one thing back — the write-up.
   a label you can edit, so Victor keeps saying `#backyard` while the dashboard
   reads *Backyard Landscape*. The detail panel shows the tag for exactly that
   reason: it is what to tell Victor.
+- **Filing an item.** Victor lands everything in To-dos through the calendar.
+  Deciding it belongs to a project happens later, in one of three ways: drag the
+  to-do onto a project or phase, pick one from the to-do's editor, or let a tag
+  do it at intake. Drag is a pointer gesture and touch devices do not fire it,
+  which is why the picker exists alongside.
 - **Range.** Today / 2 days / Week, remembered per browser. A clear day says so
   rather than vanishing, so an empty board never reads as a broken one.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.

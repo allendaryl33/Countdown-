@@ -213,6 +213,9 @@ button{font:inherit; color:inherit}
 .tdrow input[type=checkbox]{width:19px; height:19px; accent-color:var(--good); cursor:pointer; flex:none}
 .tdrow .tx{font-family:"Newsreader",Georgia,serif; font-size:16px; line-height:1.4; overflow-wrap:anywhere}
 .tdrow.done .tx{color:var(--faint); text-decoration:line-through}
+.tdrow[draggable="true"]{cursor:grab}
+.tdrow.dragging{opacity:.4; cursor:grabbing}
+.dropzone{outline:2px dashed var(--focus); outline-offset:-3px; background:color-mix(in srgb, var(--focus) 12%, transparent) !important}
 .tdrow .tx{cursor:text}
 .tdrow:not(.editing) .tx:hover{text-decoration:underline; text-decoration-style:dotted; text-underline-offset:3px}
 .tdrow.editing{background:var(--surface); box-shadow:var(--shadow); border-radius:4px}
@@ -730,7 +733,7 @@ var state = {
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
   view: "board", personKey: null, projectId: null,
-  todoCalIds: {}, todoDirty: false, showDropped: false, editingTodo: null,
+  todoCalIds: {}, todoDirty: false, showDropped: false, editingTodo: null, dragTodo: null,
   range: 2, watchArgs: {},
   mcp: null, sample: null
 };
@@ -1517,6 +1520,55 @@ $("pj-detail").addEventListener("click", function(e){
 });
 $("pj-detail").addEventListener("change", todoAction);
 
+/* Drag a to-do onto a project or phase to file it there. Touch devices don't
+   fire these events, which is why the editor's picker exists as well. */
+function clearDropzones(){
+  Array.prototype.forEach.call(document.querySelectorAll(".dropzone"),
+    function(el){ el.classList.remove("dropzone"); });
+}
+document.addEventListener("dragstart", function(e){
+  var row = e.target.closest ? e.target.closest(".tdrow[data-td]") : null;
+  if (!row || row.classList.contains("editing")) return;
+  state.dragTodo = row.dataset.td;
+  row.classList.add("dragging");
+  try {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", row.dataset.td);
+  } catch (err){}
+});
+document.addEventListener("dragend", function(){
+  state.dragTodo = null; clearDropzones();
+  Array.prototype.forEach.call(document.querySelectorAll(".dragging"),
+    function(el){ el.classList.remove("dragging"); });
+});
+document.addEventListener("dragover", function(e){
+  if (!state.dragTodo) return;
+  var t = e.target.closest ? e.target.closest("[data-pj]") : null;
+  if (!t) return;
+  e.preventDefault();
+  try { e.dataTransfer.dropEffect = "move"; } catch (err){}
+  if (!t.classList.contains("dropzone")){ clearDropzones(); t.classList.add("dropzone"); }
+});
+document.addEventListener("dragleave", function(e){
+  var t = e.target.closest ? e.target.closest("[data-pj]") : null;
+  if (t && !t.contains(e.relatedTarget)) t.classList.remove("dropzone");
+});
+document.addEventListener("drop", function(e){
+  var t = e.target.closest ? e.target.closest("[data-pj]") : null;
+  var key = state.dragTodo || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
+  if (!t || !key) return;
+  e.preventDefault();
+  clearDropzones();
+  var rec = todos.all()[key];
+  state.dragTodo = null;
+  if (!rec) return;
+  var pid = t.getAttribute("data-pj");
+  var pr = projects.get(pid), par = parentOf(pid) ? projects.get(parentOf(pid)) : null;
+  var where = (par ? (par.name || titleCase(parentOf(pid))) + " \u203a " : "") + ((pr && pr.name) || pid);
+  todos.put(rec.id || key, {projects: [pid], projectNames: {}}).catch(function(){});
+  flash("Filed <b>" + esc(rec.title || "that") + "</b> under " + esc(where) + ".");
+});
+
 /* a project chip anywhere jumps to that project */
 document.addEventListener("click", function(e){
   var chip = e.target.closest ? e.target.closest("[data-goproject]") : null;
@@ -1647,7 +1699,7 @@ function todoRow(t){
   var extra = t.note ? String(t.note).trim() : "";
   if (tm && extra.replace(/[^A-Za-z0-9]/g, "").length <= 4) extra = "";  /* the note was only the time */
   return '<div class="tdrow' + (t.done ? " done" : "") + (t.dropped ? " gone" : "") +
-    '" data-td="' + esc(t.key) + '">' +
+    '" draggable="true" data-td="' + esc(t.key) + '">' +
     '<input type="checkbox" ' + (t.done ? "checked" : "") + ' aria-label="Mark done">' +
     '<span><span class="tx">' + esc(t.title) +
       (tm ? ' <span class="tm">' + esc(tm.label) + "</span>" : "") + "</span>" +
