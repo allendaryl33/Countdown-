@@ -1460,14 +1460,14 @@ function renderProjects(){
   }).join("");
 }
 
-function renderProject(){
+function renderProject(force){
   var card = $("project-card");
   if (state.view !== "projects"){ card.hidden = true; return; }
   card.hidden = false;
   /* Rebuilding innerHTML destroys the focused field: focus is lost and every
      keystroke after the autosave lands nowhere. Hold off until they leave it. */
   var ae = document.activeElement;
-  if (ae && ae.closest && ae.closest("#pj-detail") &&
+  if (!force && ae && ae.closest && ae.closest("#pj-detail") &&
       (ae.tagName === "TEXTAREA" || ae.tagName === "SELECT" ||
        (ae.tagName === "INPUT" && ae.type !== "checkbox"))){
     state.projectDirty = true; return;
@@ -1510,6 +1510,11 @@ function renderProject(){
       '<input type="text" id="pj-phase-new" placeholder="Add a phase\u2026" aria-label="Add a phase">' +
       '<button class="btn" type="button" id="pj-phase-add">Add</button></div>';
   }
+
+  body += '<div class="pj-sub">' + (p.parent ? "Add a task to this phase" : "Add a task to the project") + "</div>" +
+    '<div class="addrow">' +
+      '<input type="text" id="pj-task-new" placeholder="Add a task\u2026" aria-label="Add a task">' +
+      '<button class="btn solid" type="button" id="pj-task-add">Add</button></div>';
 
   var it = projectItems(p.id, false);
   var own = p.parent ? it.todos : projectItems(p.id, true).todos;
@@ -1580,6 +1585,18 @@ $("pj-detail").addEventListener("input", function(e){
   }, 700);
 });
 
+function addTask(){
+  var input = $("pj-task-new"); if (!input) return;
+  var text = input.value.trim(); if (!text || !state.projectId) return;
+  var id = "t" + Date.now() + Math.floor(Math.random()*999);
+  input.value = "";
+  todos.put(id, {title: text, day: null, kind: "task",
+                 projects: [state.projectId], projectNames: {},
+                 done: false, dropped: false, source: "app", createdAt: Date.now()}).catch(function(){});
+  renderProject(true); renderProjects();
+  var again = $("pj-task-new"); if (again) again.focus();
+}
+
 function addPhase(){
   var input = $("pj-phase-new"); if (!input) return;
   var nm = input.value.trim(); if (!nm || !state.projectId) return;
@@ -1588,14 +1605,18 @@ function addPhase(){
     projects.put(id, {name: nm, status: "active", plan: "", createdAt: Date.now()}).catch(function(){});
   }
   input.value = "";
+  renderProject(true); renderProjects();
+  var again = $("pj-phase-new"); if (again) again.focus();
 }
 
 $("pj-detail").addEventListener("keydown", function(e){
   if (e.target.id === "pj-phase-new" && e.key === "Enter"){ e.preventDefault(); addPhase(); }
+  if (e.target.id === "pj-task-new" && e.key === "Enter"){ e.preventDefault(); addTask(); }
 });
 
 $("pj-detail").addEventListener("click", function(e){
   if (e.target.id === "pj-phase-add"){ addPhase(); return; }
+  if (e.target.id === "pj-task-add"){ addTask(); return; }
   var ph = e.target.closest ? e.target.closest(".phrow") : null;
   if (ph){ state.projectId = ph.getAttribute("data-pj"); renderProjects(); renderProject(); return; }
   if (e.target.id === "pj-status"){
