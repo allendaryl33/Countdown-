@@ -42,6 +42,9 @@
   --focus:#5FC8D3;
 }
 *{box-sizing:border-box}
+/* Several things here set display, which otherwise beats the hidden attribute
+   and leaves panes and overlays on screen when they are meant to be gone. */
+[hidden]{display:none !important}
 body{
   background:var(--ground); color:var(--ink);
   font-family:"Saira","Helvetica Neue",Arial,sans-serif;
@@ -195,6 +198,7 @@ button{font:inherit; color:inherit}
 
 .tdsec{padding:16px 16px 4px 0}
 .tdsec .h{display:flex; align-items:baseline; gap:10px}
+.tdsec .h .pjdot{width:9px; height:9px; border-radius:50%; flex:none; align-self:center; filter:var(--stripe-boost)}
 .tdsec .h .d{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:15px; letter-spacing:.06em; text-transform:uppercase}
 .tdsec .h .d.late{color:var(--miss)}
 .tdsec .h .d.now{color:var(--signal)}
@@ -451,9 +455,6 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
 .stale{font-size:11.5px; color:var(--faint); font-family:"Saira Condensed",Arial,sans-serif; letter-spacing:.06em; text-transform:uppercase}
 
 /* ---------- move sheet (long-press on touch) ---------- */
-/* display:flex would otherwise beat the hidden attribute and leave an
-   invisible overlay swallowing every tap on the page. */
-#move-sheet[hidden]{display:none !important}
 #move-sheet{position:fixed; inset:0; z-index:50; display:flex; align-items:flex-end; justify-content:center}
 @media (min-width:700px){ #move-sheet{align-items:center} }
 .sheet-bg{position:absolute; inset:0; background:rgba(10,16,19,.55)}
@@ -531,6 +532,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
           <button type="button" data-view="board" aria-pressed="true">Board</button>
           <button type="button" data-view="people" aria-pressed="false">People</button>
           <button type="button" data-view="todos" aria-pressed="false">To-dos</button>
+          <button type="button" data-view="tasks" aria-pressed="false">Tasks</button>
           <button type="button" data-view="projects" aria-pressed="false">Projects</button>
         </div>
         <div class="viewsw rangesw" id="rangesw" role="group" aria-label="How far ahead">
@@ -550,6 +552,13 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
           <button class="btn solid" type="button" id="td-add">Add</button>
         </div>
         <div id="td-list"></div>
+      </div>
+      <div id="tasks" hidden>
+        <div class="td-add">
+          <input type="text" id="tk-new" placeholder="Add a task, or “task … #project”" aria-label="Add a task">
+          <button class="btn solid" type="button" id="tk-add">Add</button>
+        </div>
+        <div id="tk-list"></div>
       </div>
       <div id="projects" hidden>
         <div class="td-add">
@@ -776,7 +785,7 @@ var state = {
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
   view: "board", personKey: null, projectId: null,
-  todoCalIds: {}, todoDirty: false, projectDirty: false,
+  todoCalIds: {}, todoDirty: false, projectDirty: false, taskDirty: false, showDroppedTasks: false,
   showDropped: false, editingTodo: null, dragTodo: null, moveKey: null, suppressClick: false,
   range: 2, watchArgs: {},
   mcp: null, sample: null
@@ -1730,7 +1739,7 @@ document.addEventListener("touchstart", function(e){
   pressTimer = setTimeout(function(){
     pressTimer = null;
     state.suppressClick = true;
-    if (state.editingTodo){ flushTodoEdit(); leaveField(); state.editingTodo = null; renderTodos(); }
+    if (state.editingTodo){ flushTodoEdit(); leaveField(); state.editingTodo = null; renderTodos(); renderTasks(); }
     row.classList.add("picked");
     openMoveSheet(row.dataset.td);
     if (navigator.vibrate){ try { navigator.vibrate(15); } catch (err){} }
@@ -1861,6 +1870,11 @@ function todoEditor(t){
       '<span class="lbl">Notes</span>' +
       '<textarea class="ed-note" rows="2" placeholder="Anything worth remembering \u2014 a time, a number, why it matters.">' +
         esc(t.note || "") + "</textarea>" +
+      '<span class="lbl">Type</span>' +
+      '<select class="ed-kind" aria-label="To-do or task">' +
+        '<option value="todo"' + (t.kind === "task" ? "" : " selected") + ">To-do \u2014 dated, shows on the board</option>" +
+        '<option value="task"' + (t.kind === "task" ? " selected" : "") + ">Task \u2014 a step in a project</option>" +
+      "</select>" +
       '<span class="lbl">Project</span>' +
       '<select class="ed-proj" aria-label="Move to project">' + projectOptions(cur) + "</select>" +
     "</span>" +
@@ -1915,17 +1929,17 @@ function renderTodos(){
     state.todoDirty = true; return;
   }
   state.todoDirty = false;
-  var list = todoList(), today = dayKey(new Date()), host = $("td-list");
+  var list = todoList().filter(function(t){ return t.kind !== "task"; });
+  var today = dayKey(new Date()), host = $("td-list");
   var buckets = [
     {id:"late",  label:"Overdue",  cls:"late", items: list.filter(function(t){ return !t.done && t.day && t.day < today; })},
     {id:"today", label:"Today",    cls:"now",  items: list.filter(function(t){ return !t.done && t.day === today; })},
     {id:"later", label:"Later",    cls:"",     items: list.filter(function(t){ return !t.done && t.day && t.day > today; })},
-    {id:"tasks", label:"Project tasks", cls:"", items: list.filter(function(t){ return !t.done && !t.day && t.kind === "task"; })},
-    {id:"someday",label:"No date", cls:"",     items: list.filter(function(t){ return !t.done && !t.day && t.kind !== "task"; })},
+    {id:"someday",label:"No date", cls:"",     items: list.filter(function(t){ return !t.done && !t.day; })},
     {id:"done",  label:"Done",     cls:"",     items: list.filter(function(t){ return t.done; })}
   ].filter(function(b){ return b.items.length; });
 
-  var gone = todoAll().filter(function(t){ return t.dropped; });
+  var gone = todoAll().filter(function(t){ return t.dropped && t.kind !== "task"; });
   if (!buckets.length && !gone.length){
     host.innerHTML = '<div class="td-empty">Nothing on the list. Add one above, or tell Victor ' +
       "\u2014 anything he puts on a calendar named <b>To-dos</b>, or titled <b>TODO: something</b>, lands here.</div>";
@@ -2007,14 +2021,14 @@ function todoAction(e){
   if (e.target.classList.contains("tx") ||
       (e.target.closest && e.target.closest(".tx") && !e.target.closest("[data-goproject]"))){
     if (state.editingTodo && state.editingTodo !== row.dataset.td){ flushTodoEdit(); leaveField(); }
-    state.editingTodo = row.dataset.td; renderTodos(); renderProject();
+    state.editingTodo = row.dataset.td; renderTodos(); renderTasks(); renderProject();
     var box = document.querySelector('.tdrow.editing .ed-title');
     if (box){ box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
     return;
   }
   if (e.target.classList.contains("done-edit")){
     flushTodoEdit(); leaveField();
-    state.editingTodo = null; renderTodos(); renderProject(); return;
+    state.editingTodo = null; renderTodos(); renderTasks(); renderProject(); return;
   }
   if (e.target.classList.contains("ed-proj")){
     var v = e.target.value;
@@ -2025,6 +2039,11 @@ function todoAction(e){
     todos.put(id, {done: e.target.checked, doneAt: e.target.checked ? Date.now() : null}).catch(function(){});
   } else if (e.target.type === "date"){
     todos.put(id, {day: e.target.value || null}).catch(function(){});
+  } else if (e.target.classList.contains("ed-kind")){
+    state.editingTodo = null;   /* it is moving to the other tab; close the editor */
+    todos.put(id, {kind: e.target.value}).catch(function(){});
+    flash("Moved <b>" + esc(t.title || "that") + "</b> to " +
+          (e.target.value === "task" ? "Tasks" : "To-dos") + ".");
   } else if (e.target.classList.contains("ed-proj")){
     var pv = e.target.value;
     todos.put(id, {projects: pv ? [pv] : [], projectNames: {}}).catch(function(){});
@@ -2046,7 +2065,7 @@ $("pj-detail").addEventListener("input", todoEdit);
 document.addEventListener("keydown", function(e){
   if (e.key === "Escape" && state.editingTodo){
     flushTodoEdit(); leaveField();
-    state.editingTodo = null; renderTodos(); renderProject();
+    state.editingTodo = null; renderTodos(); renderTasks(); renderProject();
   }
 });
 $("td-list").addEventListener("focusout", function(){
@@ -2075,6 +2094,88 @@ function clearFromCalendar(t, btn){
     }
   });
 }
+
+function renderTasks(){
+  if (state.view !== "tasks") return;
+  var ae = document.activeElement;
+  if (ae && ae.closest && ae.closest("#tk-list") &&
+      (ae.tagName === "TEXTAREA" || ae.tagName === "SELECT" ||
+       (ae.tagName === "INPUT" && ae.type !== "checkbox"))){
+    state.taskDirty = true; return;
+  }
+  state.taskDirty = false;
+  var all = todoAll().filter(function(t){ return t.kind === "task"; });
+  var live = all.filter(function(t){ return !t.dropped; });
+  var host = $("tk-list");
+  if (!all.length){
+    host.innerHTML = '<div class="td-empty">No tasks yet. Add one above, tell Victor ' +
+      "<b>task: something #project</b>, or add one straight into a phase over in Projects.</div>";
+    return;
+  }
+  /* Grouped by project, in the order the roster shows them. */
+  var groups = [], seen = {};
+  projectRows().forEach(function(pr){
+    var items = live.filter(function(t){ return !t.done && (t.projects || [])[0] === pr.id; });
+    if (!items.length) return;
+    items.forEach(function(t){ seen[t.key] = 1; });
+    var par = pr.parent ? projects.get(pr.parent) : null;
+    groups.push({
+      label: (par ? (par.name || titleCase(pr.parent)) + " \u203a " : "") + pr.name,
+      color: pr.color, items: items
+    });
+  });
+  var loose = live.filter(function(t){ return !t.done && !seen[t.key]; });
+  if (loose.length) groups.push({label: "No project", color: null, items: loose});
+  var done = live.filter(function(t){ return t.done; });
+  var gone = all.filter(function(t){ return t.dropped; });
+
+  var html = groups.map(function(g){
+    return '<div class="tdsec"><div class="h">' +
+      (g.color ? '<span class="pjdot" style="background:' + g.color + '"></span>' : "") +
+      '<span class="d">' + esc(g.label) + "</span>" +
+      '<span class="n num">' + g.items.length + "</span></div></div>" +
+      g.items.map(todoRow).join("");
+  }).join("");
+  if (done.length){
+    html += '<div class="tdsec"><div class="h"><span class="d">Done</span>' +
+      '<span class="n num">' + done.length + "</span></div></div>" + done.map(todoRow).join("");
+  }
+  if (gone.length){
+    html += '<div class="tdsec"><div class="h">' +
+      '<button type="button" class="dropbtn" id="tk-dropped-toggle" aria-expanded="' + !!state.showDroppedTasks + '">' +
+        (state.showDroppedTasks ? "\u25be" : "\u25b8") + " Dropped</button>" +
+      '<span class="n num">' + gone.length + "</span></div></div>";
+    if (state.showDroppedTasks) html += gone.map(todoRow).join("");
+  }
+  host.innerHTML = html || '<div class="td-empty">Nothing open. Everything is done or dropped.</div>';
+}
+
+function newTask(){
+  var input = $("tk-new"), text = input.value.trim();
+  if (!text) return;
+  var m = TODO_PREFIX.exec(text);
+  var body = m ? m[3].replace(/^\s*[-\u2013\u2014]\s*/, "").trim() : text;
+  var names = tagsIn(body), map = {}, ids = [];
+  names.forEach(function(n){ var k = resolveTag(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
+  var id = "t" + Date.now() + Math.floor(Math.random()*999);
+  input.value = "";
+  todos.put(id, {title: stripTags(body) || body, day: null, kind: "task",
+                 projects: ids, projectNames: map, done: false, dropped: false,
+                 source: "app", createdAt: Date.now()}).catch(function(){});
+}
+$("tk-add").addEventListener("click", newTask);
+$("tk-new").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); newTask(); } });
+$("tk-list").addEventListener("click", function(e){
+  if (e.target.id === "tk-dropped-toggle"){
+    state.showDroppedTasks = !state.showDroppedTasks; renderTasks(); return;
+  }
+  todoAction(e);
+});
+$("tk-list").addEventListener("change", todoAction);
+$("tk-list").addEventListener("input", todoEdit);
+$("tk-list").addEventListener("focusout", function(){
+  setTimeout(function(){ if (state.taskDirty) renderTasks(); }, 0);
+});
 
 /* ---------- people ---------- */
 function splitPeople(v){
@@ -2218,6 +2319,7 @@ function setView(v){
   $("board").hidden = !board;
   $("people").hidden = v !== "people";
   $("todos").hidden = v !== "todos";
+  $("tasks").hidden = v !== "tasks";
   $("projects").hidden = v !== "projects";
   $("calbar").hidden = !board;
   $("board-msg").hidden = !board;
@@ -2225,6 +2327,7 @@ function setView(v){
   $("closeout").hidden = !board;
   if (v === "people") renderPeople();
   if (v === "todos") renderTodos();
+  if (v === "tasks") renderTasks();
   if (v === "projects") renderProjects();
   renderPerson(); renderProject(); renderCloseout(); renderLoops(); renderBoard();
 }
@@ -2428,8 +2531,8 @@ document.querySelectorAll("#rangesw button").forEach(function(x){
 store.attachLocal(); todos.attachLocal(); projects.attachLocal();
 store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); renderPeople(); renderPerson();
                             ensureProjects(); renderProjects(); renderProject(); });
-todos.subscribe(function(){ renderTodos(); renderBoard(); adoptTodos(); ensureProjects(); renderProjects(); renderProject(); });
-projects.subscribe(function(){ renderProjects(); renderProject(); renderTodos(); });
+todos.subscribe(function(){ renderTodos(); renderTasks(); renderBoard(); adoptTodos(); ensureProjects(); renderProjects(); renderProject(); });
+projects.subscribe(function(){ renderProjects(); renderProject(); renderTodos(); renderTasks(); });
 /* Adopt anyway if the shared store never answers, so a local-only view still works. */
 setTimeout(function(){
   if (!todos.ready){ todos.ready = true; adoptTodos(); }

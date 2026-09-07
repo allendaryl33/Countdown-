@@ -137,8 +137,10 @@ calendar you already keep, and asks for one thing back — the write-up.
   do it at intake. Drag is a pointer gesture and touch devices do not fire it,
   which is why the picker exists alongside.
 - **Tasks vs to-dos.** `TODO:` is dated work that belongs to a day and shows on
-  the board. `TASK:` is a step in a project: no date, filed under its tag,
-  shown with a dash, and kept out of the daily list. The distinction is the
+  the board, and lives in the To-dos tab. `TASK:` is a step in a project: no
+  date, shown with a dash, and living in its own Tasks tab grouped by project.
+  Either can be turned into the other from its editor, so a misfiled item is
+  one dropdown away from the right tab. The distinction is the
   point — "call Billy Bob at 8" and "lay the base" are not the same kind of
   thing and should not compete for the same attention.
 - **Dictated tags.** A spoken hashtag arrives with spaces — `#fire pit area` —
