@@ -115,6 +115,14 @@ calendar you already keep, and asks for one thing back — the write-up.
   What looks like one in the Calendar app is **Google Tasks**, a separate
   product with a separate API and no connector here. Hence the calendar-as-inbox
   approach: it needs nothing that doesn't already exist.
+- **Projects.** A project is a tag, not a container. Anything tagged into one
+  keeps its own workflow where it lives *and* shows under the project, which is
+  the whole point: a to-do stays a to-do, and the project sees it. Say it any
+  way it comes out — `Call Snowbird #yard`, `[Yard] Order topsoil`, or
+  `Project: Yard` in the note. Tagged items name projects into existence, so
+  there is no roster to maintain. Each project carries a plan, what's still to
+  do, what's done, and the blocks already written up against it — so the
+  breakdown and the time actually spent sit on one screen.
 - **Range.** Today / 2 days / Week, remembered per browser. A clear day says so
   rather than vanishing, so an empty board never reads as a broken one.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.

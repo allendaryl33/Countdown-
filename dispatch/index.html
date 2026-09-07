@@ -204,6 +204,12 @@ button{font:inherit; color:inherit}
   padding:10px 16px 10px 2px; border-top:1px solid var(--line-2);
 }
 .tdrow:first-of-type{border-top:0}
+#pj-detail .tdrow{grid-template-columns:auto minmax(0,1fr); padding-right:0}
+#pj-detail .tdrow .td-actions{grid-column:2; justify-content:flex-start; flex-wrap:wrap; margin-top:5px}
+@media (max-width:900px){
+  .tdrow{grid-template-columns:auto minmax(0,1fr)}
+  .tdrow .td-actions{grid-column:2; justify-content:flex-start; flex-wrap:wrap; margin-top:5px}
+}
 .tdrow input[type=checkbox]{width:19px; height:19px; accent-color:var(--good); cursor:pointer; flex:none}
 .tdrow .tx{font-family:"Newsreader",Georgia,serif; font-size:16px; line-height:1.4; overflow-wrap:anywhere}
 .tdrow.done .tx{color:var(--faint); text-decoration:line-through}
@@ -263,6 +269,42 @@ button{font:inherit; color:inherit}
 .boardtd .h .d{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--signal)}
 .boardtd .h .n{color:var(--faint); font-size:12.5px}
 .boardtd .tdrow{padding-left:16px}
+
+/* ---------- projects ---------- */
+.pjrow{
+  display:grid; grid-template-columns:5px minmax(0,1fr) auto; gap:0 12px; align-items:center;
+  width:100%; text-align:left; background:none; border:0; border-top:1px solid var(--line-2);
+  padding:12px 16px 12px 0; cursor:pointer; --c:#68797F;
+  background:color-mix(in srgb, var(--c) var(--tint), transparent);
+}
+.pjrow:hover{background:color-mix(in srgb, var(--c) var(--tint-hover), transparent)}
+.pjrow[aria-current="true"]{background:color-mix(in srgb, var(--c) var(--tint-sel), var(--surface)); box-shadow:var(--shadow); border-top-color:transparent}
+.pjrow .stripe{width:5px; border-radius:3px; height:30px; background:var(--c); filter:var(--stripe-boost)}
+.pjrow .nm{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:16.5px; line-height:1.2; overflow-wrap:anywhere}
+.pjrow .sub{font-size:12.5px; color:var(--faint); margin-top:2px; display:flex; gap:8px; flex-wrap:wrap}
+.pjrow .sub .open{color:var(--signal); font-weight:500}
+.pjrow.shut .nm{color:var(--muted)}
+.bar{display:block; height:4px; border-radius:2px; background:var(--sunk); overflow:hidden; margin-top:6px; max-width:190px}
+.bar i{display:block; height:100%; min-width:2px; background:var(--c); filter:var(--stripe-boost)}
+.pjchip{
+  display:inline-block; font-family:"Saira Condensed",Arial,sans-serif; font-weight:600;
+  font-size:10.5px; letter-spacing:.07em; text-transform:uppercase; padding:1px 6px;
+  border-radius:3px; background:color-mix(in srgb, var(--pc,#68797F) 20%, transparent);
+  color:var(--ink-2); border:1px solid color-mix(in srgb, var(--pc,#68797F) 45%, transparent);
+  cursor:pointer; vertical-align:1px;
+}
+.pjchip:hover{background:color-mix(in srgb, var(--pc,#68797F) 34%, transparent)}
+.pj-head{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap}
+.pj-prog{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums}
+.pj-sub{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:11.5px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--faint); margin:14px 0 2px;
+}
+.pj-sub:first-child{margin-top:0}
+.pj-block{padding:9px 0; border-top:1px solid var(--line-2)}
+.pj-block .w{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:11.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--faint)}
+.pj-block .t{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:15px; margin-top:1px}
+.pj-block .n{font-family:"Newsreader",Georgia,serif; font-size:14.5px; line-height:1.5; color:var(--ink-2); margin-top:3px}
 
 /* ---------- panel ---------- */
 .panel{padding:18px 0 0 24px; display:flex; flex-direction:column; gap:22px}
@@ -424,6 +466,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
           <button type="button" data-view="board" aria-pressed="true">Board</button>
           <button type="button" data-view="people" aria-pressed="false">People</button>
           <button type="button" data-view="todos" aria-pressed="false">To-dos</button>
+          <button type="button" data-view="projects" aria-pressed="false">Projects</button>
         </div>
         <div class="viewsw rangesw" id="rangesw" role="group" aria-label="How far ahead">
           <button type="button" data-range="1">Today</button>
@@ -443,9 +486,26 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
         </div>
         <div id="td-list"></div>
       </div>
+      <div id="projects" hidden>
+        <div class="td-add">
+          <input type="text" id="pj-new" placeholder="Start a project…" aria-label="Start a project">
+          <button class="btn solid" type="button" id="pj-add">Add</button>
+        </div>
+        <div id="pj-list"></div>
+      </div>
     </section>
 
     <aside class="panel">
+      <div class="card" id="project-card" hidden>
+        <div class="hd">
+          <span class="sel-title" id="pj-name">Projects</span>
+          <span class="stale" id="pj-count"></span>
+        </div>
+        <div class="bd">
+          <div id="pj-detail"></div>
+        </div>
+      </div>
+
       <div class="card" id="person-card" hidden>
         <div class="hd">
           <span class="sel-title" id="p-name">People</span>
@@ -628,6 +688,7 @@ function makeStore(coll, lsKey, idField, defaults){
 
 var store = makeStore("blocks", "life-dispatch/records", "eventId", {loops: []});
 var todos = makeStore("todos", "life-dispatch/todos", "id", {done: false, dropped: false});
+var projects = makeStore("projects", "life-dispatch/projects", "id", {status: "active", plan: ""});
 
 /* ---------- state ---------- */
 var state = {
@@ -640,7 +701,8 @@ var state = {
   selectedId: null,
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
-  view: "board", personKey: null, todoCalIds: {}, todoDirty: false, showDropped: false,
+  view: "board", personKey: null, projectId: null,
+  todoCalIds: {}, todoDirty: false, showDropped: false,
   range: 2, watchArgs: {},
   mcp: null, sample: null
 };
@@ -1062,6 +1124,11 @@ function flashSaved(msg){
 function saveField(patch){
   var ev = currentEvent(); if (!ev) return;
   var meta = {title: ev.title, startsAt: ev.start.toISOString(), calendar: ev.calName || "", color: ev.color};
+  if (Object.prototype.hasOwnProperty.call(patch, "note")){
+    var ns = tagsIn(patch.note), mp = {}, xs = [];
+    ns.forEach(function(n){ var k = slug(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
+    meta.projects = xs; meta.projectNames = mp;
+  }
   store.put(ev.id, Object.assign(meta, patch))
     .then(function(){ flashSaved(); })
     .catch(function(){ $("c-saved").textContent = "Couldn't save — check your connection"; });
@@ -1101,6 +1168,208 @@ function addLoop(){
 $("c-loop-add").addEventListener("click", addLoop);
 $("c-loop").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); addLoop(); } });
 
+/* ---------- projects ---------- */
+/* A project is a tag, not a container: an item tagged to one stays in its own
+   list with its own workflow AND shows under the project. Victor can say it
+   however it comes out — "#yard", "[Yard]", or "Project: Yard" in the note. */
+function slug(n){
+  return String(n || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "").slice(0, 60);
+}
+function tagsIn(text){
+  var t = String(text || ""), out = [], m;
+  var re = /#([A-Za-z0-9][A-Za-z0-9_\-]{0,40})/g;
+  while ((m = re.exec(t))) out.push(m[1].replace(/[_-]+/g, " "));
+  if ((m = /^\s*\[([^\]]{1,40})\]/.exec(t))) out.push(m[1].trim());
+  if ((m = /\bprojects?\s*[:\u2013\-]\s*([^\n.;,]{1,40})/i.exec(t))) out.push(m[1].trim());
+  var seen = {}, keep = [];
+  out.forEach(function(n){ var k = slug(n); if (k && !seen[k]){ seen[k] = 1; keep.push(n.trim()); } });
+  return keep;
+}
+function stripTags(text){
+  return String(text || "")
+    .replace(/#[A-Za-z0-9][A-Za-z0-9_\-]{0,40}/g, "")
+    .replace(/^\s*\[[^\]]{1,40}\]\s*/, "")
+    .replace(/\s{2,}/g, " ").trim();
+}
+/* Project colour comes from the same Google Calendar palette the board uses. */
+var PJ_PALETTE = ["#0B8043","#3F51B5","#8E24AA","#E67C73","#039BE5","#F4511E","#7986CB","#33B679","#F6BF26","#D50000"];
+function projectColor(id){
+  var h = 0, str = String(id);
+  for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return PJ_PALETTE[h % PJ_PALETTE.length];
+}
+
+/* Everything tagged to a project, from either side of the app. */
+function projectItems(pid){
+  var td = todoAll().filter(function(t){
+    return !t.dropped && (t.projects || []).indexOf(pid) >= 0;
+  });
+  var recs = store.all(), blocks = [];
+  Object.keys(recs).forEach(function(k){
+    var r = recs[k];
+    if (r && (r.projects || []).indexOf(pid) >= 0) blocks.push(r);
+  });
+  blocks.sort(function(a,b){ return String(b.startsAt||"").localeCompare(String(a.startsAt||"")); });
+  return {todos: td, blocks: blocks};
+}
+
+function projectList(){
+  var all = projects.all();
+  return Object.keys(all).map(function(k){
+    var p = Object.assign({key: k}, all[k]);
+    var it = projectItems(p.id);
+    p.total = it.todos.length;
+    p.open = it.todos.filter(function(t){ return !t.done; }).length;
+    p.blocks = it.blocks.length;
+    p.last = Math.max(
+      p.updatedAt || 0,
+      it.blocks.length ? Date.parse(it.blocks[0].startsAt || 0) || 0 : 0,
+      it.todos.reduce(function(n, t){ return Math.max(n, t.updatedAt || 0); }, 0)
+    );
+    p.color = projectColor(p.id);
+    return p;
+  }).filter(function(p){ return p.name; })
+    .sort(function(a,b){
+      if ((a.status === "done") !== (b.status === "done")) return a.status === "done" ? 1 : -1;
+      if (b.open !== a.open) return b.open - a.open;
+      return (b.last || 0) - (a.last || 0);
+    });
+}
+
+/* Tagged items name projects into existence — nothing to maintain by hand. */
+function ensureProjects(){
+  if (!projects.ready) return;
+  var want = {};
+  todoAll().forEach(function(t){
+    (t.projects || []).forEach(function(id){ want[id] = want[id] || t.projectNames && t.projectNames[id]; });
+  });
+  var recs = store.all();
+  Object.keys(recs).forEach(function(k){
+    var r = recs[k];
+    (r.projects || []).forEach(function(id){ want[id] = want[id] || (r.projectNames && r.projectNames[id]); });
+  });
+  Object.keys(want).forEach(function(id){
+    if (projects.get(id)) return;
+    projects.put(id, {name: want[id] || id.replace(/-/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase(); }),
+                      status: "active", plan: "", createdAt: Date.now()}).catch(function(){});
+  });
+}
+
+function renderProjects(){
+  if (state.view !== "projects") return;
+  var list = projectList(), host = $("pj-list");
+  if (!list.length){
+    host.innerHTML = '<div class="td-empty">No projects yet. Start one above, or tag anything ' +
+      "into one \u2014 a to-do called <b>Call Snowbird #yard</b>, or a block written up with " +
+      "<b>#yard</b> in the note, creates the project and files itself under it.</div>";
+    return;
+  }
+  host.innerHTML = list.map(function(p){
+    var done = p.total - p.open, pct = p.total ? Math.round(done / p.total * 100) : 0;
+    var sub = [];
+    if (p.open) sub.push('<span class="open">' + p.open + " open</span>");
+    if (p.total) sub.push(done + " of " + p.total + " done");
+    if (p.blocks) sub.push(p.blocks + " block" + (p.blocks === 1 ? "" : "s"));
+    if (!sub.length) sub.push("nothing filed yet");
+    if (p.status === "done") sub.push("finished");
+    return '<button class="pjrow' + (p.status === "done" ? " shut" : "") + '" type="button" data-pj="' +
+        esc(p.id) + '" style="--c:' + p.color + '" aria-current="' + (p.id === state.projectId) + '">' +
+      '<span class="stripe"></span>' +
+      '<span><span class="nm">' + esc(p.name) + '</span><span class="sub">' + sub.join("<span>\u00b7</span>") + "</span>" +
+        (p.total ? '<span class="bar"><i style="width:' + pct + '%"></i></span>' : "") + "</span>" +
+      '<span class="ago">' + esc(p.last ? ago(p.last) : "") + "</span></button>";
+  }).join("");
+}
+
+function renderProject(){
+  var card = $("project-card");
+  if (state.view !== "projects"){ card.hidden = true; return; }
+  card.hidden = false;
+  var p = projectList().filter(function(x){ return x.id === state.projectId; })[0];
+  if (!p){
+    $("pj-name").textContent = "Projects";
+    $("pj-count").textContent = "";
+    $("pj-detail").innerHTML = '<div style="color:var(--muted);font-size:14px">' +
+      "Pick a project to see its plan, what's left, and the time already spent on it.</div>";
+    return;
+  }
+  var it = projectItems(p.id);
+  var done = p.total - p.open;
+  $("pj-name").textContent = p.name;
+  $("pj-count").textContent = p.total ? done + " of " + p.total + " done" : "";
+  var openTd = it.todos.filter(function(t){ return !t.done; });
+  var doneTd = it.todos.filter(function(t){ return t.done; });
+  $("pj-detail").innerHTML =
+    '<div class="pj-head"><span class="pj-prog">' +
+      (p.blocks ? p.blocks + " block" + (p.blocks === 1 ? "" : "s") + " logged" : "Nothing logged yet") + "</span>" +
+      '<button class="btn" type="button" id="pj-status">' +
+        (p.status === "done" ? "Reopen" : "Mark finished") + "</button></div>" +
+    '<div class="pj-sub">The plan</div>' +
+    '<textarea id="pj-plan" rows="4" placeholder="How does this break down? What\u2019s the next move?">' +
+      esc(p.plan || "") + "</textarea>" +
+    (openTd.length ? '<div class="pj-sub">Still to do</div>' + openTd.map(todoRow).join("") : "") +
+    (doneTd.length ? '<div class="pj-sub">Done</div>' + doneTd.map(todoRow).join("") : "") +
+    (it.blocks.length
+      ? '<div class="pj-sub">Time on it</div>' + it.blocks.map(function(r){
+          return '<div class="pj-block"><div class="w">' +
+            esc(r.startsAt ? new Date(r.startsAt).toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"}) : "\u2014") +
+            (r.status && r.status !== "open" ? " \u00b7 " + esc(r.status) : "") + "</div>" +
+            '<div class="t">' + esc(r.title || "a block") + "</div>" +
+            (r.note ? '<div class="n">' + esc(r.note) + "</div>" : "") + "</div>";
+        }).join("")
+      : "");
+}
+
+function newProject(){
+  var input = $("pj-new"), name = input.value.trim();
+  if (!name) return;
+  var id = slug(name);
+  if (!id) return;
+  input.value = "";
+  if (!projects.get(id)) {
+    projects.put(id, {name: name, status: "active", plan: "", createdAt: Date.now()}).catch(function(){});
+  }
+  state.projectId = id;
+  renderProjects(); renderProject();
+}
+$("pj-add").addEventListener("click", newProject);
+$("pj-new").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); newProject(); } });
+
+$("pj-list").addEventListener("click", function(e){
+  var row = e.target.closest ? e.target.closest(".pjrow") : null;
+  if (!row) return;
+  state.projectId = row.getAttribute("data-pj");
+  renderProjects(); renderProject();
+  if (narrow()) goTo($("project-card"));
+});
+
+var planTimer = null;
+$("pj-detail").addEventListener("input", function(e){
+  if (e.target.id !== "pj-plan") return;
+  clearTimeout(planTimer);
+  var v = e.target.value, id = state.projectId;
+  planTimer = setTimeout(function(){ projects.put(id, {plan: v}).catch(function(){}); }, 700);
+});
+$("pj-detail").addEventListener("click", function(e){
+  if (e.target.id === "pj-status"){
+    var pr = projects.get(state.projectId); if (!pr) return;
+    projects.put(state.projectId, {status: pr.status === "done" ? "active" : "done"}).catch(function(){});
+    return;
+  }
+  todoAction(e);
+});
+$("pj-detail").addEventListener("change", todoAction);
+
+/* a project chip anywhere jumps to that project */
+document.addEventListener("click", function(e){
+  var chip = e.target.closest ? e.target.closest("[data-goproject]") : null;
+  if (!chip) return;
+  e.stopPropagation();
+  state.projectId = chip.getAttribute("data-goproject");
+  setView("projects");
+});
+
 /* ---------- to-dos ---------- */
 /* Victor writes times into the note ("8 PM"). Lift them out so a call at eight
    reads as a call at eight, and so the day sorts in the order it happens. */
@@ -1126,11 +1395,23 @@ function adoptTodos(){
     var rec = todos.get(ev.id);
     if (rec){
       /* Adopted before notes were carried across — fill it in once, never overwrite. */
-      if (rec.note === undefined && ev.note) todos.put(ev.id, {note: ev.note}).catch(function(){});
+      var patch = {};
+      if (rec.note === undefined && ev.note) patch.note = ev.note;
+      if (rec.projects === undefined){
+        var ns = tagsIn(todoTitleOf(ev)).concat(tagsIn(ev.note)), mp = {}, xs = [];
+        ns.forEach(function(n){ var k = slug(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
+        patch.projects = xs; patch.projectNames = mp;
+        var clean = stripTags(todoTitleOf(ev));
+        if (xs.length && clean) patch.title = clean;
+      }
+      if (Object.keys(patch).length) todos.put(ev.id, patch).catch(function(){});
       return;
     }
+    var raw = todoTitleOf(ev), names = tagsIn(raw).concat(tagsIn(ev.note)), map = {}, ids = [];
+    names.forEach(function(n){ var k = slug(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
     todos.put(ev.id, {
-      title: todoTitleOf(ev), day: dayKey(ev.start), note: ev.note || "",
+      title: stripTags(raw) || raw, day: dayKey(ev.start), note: ev.note || "",
+      projects: ids, projectNames: map,
       done: false, dropped: false,
       source: "calendar", calId: ev.calId, calName: ev.calName || "", calCleared: false,
       createdAt: Date.now()
@@ -1184,6 +1465,14 @@ function todoRow(t){
     '<span><span class="tx">' + esc(t.title) +
       (tm ? ' <span class="tm">' + esc(tm.label) + "</span>" : "") + "</span>" +
       (extra ? '<span class="nt">' + esc(extra) + "</span>" : "") +
+      ((t.projects || []).length
+        ? '<span class="src">' + t.projects.map(function(pid){
+            var pr = projects.get(pid);
+            return '<button type="button" class="pjchip" data-goproject="' + esc(pid) +
+                   '" style="--pc:' + projectColor(pid) + '">' +
+                   esc((pr && pr.name) || pid) + "</button>";
+          }).join(" ") + "</span>"
+        : "") +
       (bits.length ? '<span class="src">' + bits.join(" · ") + "</span>" : "") + "</span>" +
     '<span class="td-actions">' +
       (t.dropped
@@ -1243,7 +1532,10 @@ function newTodo(){
   if (!text) return;
   var id = "t" + Date.now() + Math.floor(Math.random()*999);
   input.value = "";
-  todos.put(id, {title: text, day: dayKey(new Date()), done: false, dropped: false,
+  var names = tagsIn(text), map = {}, ids = [];
+  names.forEach(function(n){ var k = slug(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
+  todos.put(id, {title: stripTags(text) || text, day: dayKey(new Date()),
+                 projects: ids, projectNames: map, done: false, dropped: false,
                  source: "app", createdAt: Date.now()}).catch(function(){});
 }
 $("td-add").addEventListener("click", newTodo);
@@ -1434,10 +1726,8 @@ $("rangesw").addEventListener("click", function(e){
   if (b) setRange(Number(b.dataset.range));
 });
 
-$("viewsw").addEventListener("click", function(e){
-  var b = e.target.closest ? e.target.closest("button[data-view]") : null;
-  if (!b) return;
-  state.view = b.dataset.view;
+function setView(v){
+  state.view = v;
   document.querySelectorAll("#viewsw button").forEach(function(x){
     x.setAttribute("aria-pressed", String(x.dataset.view === state.view));
   });
@@ -1445,13 +1735,20 @@ $("viewsw").addEventListener("click", function(e){
   $("board").hidden = !board;
   $("people").hidden = v !== "people";
   $("todos").hidden = v !== "todos";
+  $("projects").hidden = v !== "projects";
   $("calbar").hidden = !board;
   $("board-msg").hidden = !board;
   $("rangesw").hidden = !board;
   $("closeout").hidden = !board;
   if (v === "people") renderPeople();
   if (v === "todos") renderTodos();
-  renderPerson(); renderCloseout(); renderLoops(); renderBoard();
+  if (v === "projects") renderProjects();
+  renderPerson(); renderProject(); renderCloseout(); renderLoops(); renderBoard();
+}
+
+$("viewsw").addEventListener("click", function(e){
+  var b = e.target.closest ? e.target.closest("button[data-view]") : null;
+  if (b) setView(b.dataset.view);
 });
 
 /* ---------- open loops across every block ---------- */
@@ -1645,11 +1942,16 @@ document.querySelectorAll("#rangesw button").forEach(function(x){
   x.setAttribute("aria-pressed", String(Number(x.dataset.range) === state.range));
 });
 
-store.attachLocal(); todos.attachLocal();
-store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); renderPeople(); renderPerson(); });
-todos.subscribe(function(){ renderTodos(); renderBoard(); adoptTodos(); });
+store.attachLocal(); todos.attachLocal(); projects.attachLocal();
+store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); renderPeople(); renderPerson();
+                            ensureProjects(); renderProjects(); renderProject(); });
+todos.subscribe(function(){ renderTodos(); renderBoard(); adoptTodos(); ensureProjects(); renderProjects(); renderProject(); });
+projects.subscribe(function(){ renderProjects(); renderProject(); renderTodos(); });
 /* Adopt anyway if the shared store never answers, so a local-only view still works. */
-setTimeout(function(){ if (!todos.ready){ todos.ready = true; adoptTodos(); } }, 6000);
+setTimeout(function(){
+  if (!todos.ready){ todos.ready = true; adoptTodos(); }
+  if (!projects.ready){ projects.ready = true; ensureProjects(); }
+}, 6000);
 renderBoard(); renderCloseout();
 setInterval(function(){ renderBoard(); }, 60000);
 
@@ -1657,9 +1959,9 @@ var claudeApi = (typeof claude !== "undefined" && claude && typeof claude.use ==
   ? claude : {use: function(){ return Promise.resolve(null); }};
 
 claudeApi.use("db").then(function(db){
-  if (db){ store.attachDb(db); todos.attachDb(db); }
-  else { todos.ready = true; adoptTodos(); }
-}).catch(function(){ todos.ready = true; adoptTodos(); });
+  if (db){ store.attachDb(db); todos.attachDb(db); projects.attachDb(db); }
+  else { todos.ready = true; projects.ready = true; adoptTodos(); ensureProjects(); }
+}).catch(function(){ todos.ready = true; projects.ready = true; adoptTodos(); ensureProjects(); });
 claudeApi.use("sample").then(function(s){
   state.sample = s;
   if (!s) $("review-card").style.display = "none";
