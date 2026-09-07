@@ -136,6 +136,16 @@ calendar you already keep, and asks for one thing back — the write-up.
   to-do onto a project or phase, pick one from the to-do's editor, or let a tag
   do it at intake. Drag is a pointer gesture and touch devices do not fire it,
   which is why the picker exists alongside.
+- **Tasks vs to-dos.** `TODO:` is dated work that belongs to a day and shows on
+  the board. `TASK:` is a step in a project: no date, filed under its tag,
+  shown with a dash, and kept out of the daily list. The distinction is the
+  point — "call Billy Bob at 8" and "lay the base" are not the same kind of
+  thing and should not compete for the same attention.
+- **Dictated tags.** A spoken hashtag arrives with spaces — `#fire pit area` —
+  and has no closing marker. The parser matches as many of its words as name
+  something that already exists, longest first, and otherwise takes up to four
+  as a new tag. So `#firepit` finds Backyard › Fire Pit without the parent
+  having to be said aloud every time.
 - **Range.** Today / 2 days / Week, remembered per browser. A clear day says so
   rather than vanishing, so an empty board never reads as a broken one.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.

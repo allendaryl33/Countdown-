@@ -216,6 +216,7 @@ button{font:inherit; color:inherit}
 .tdrow[draggable="true"]{cursor:grab}
 .tdrow.dragging{opacity:.4; cursor:grabbing}
 .dropzone{outline:2px dashed var(--focus); outline-offset:-3px; background:color-mix(in srgb, var(--focus) 12%, transparent) !important}
+.tdrow.task .tx::before{content:"\2014\00a0"; color:var(--faint); font-family:"Saira",Arial,sans-serif}
 .tdrow .tx{cursor:text}
 .tdrow:not(.editing) .tx:hover{text-decoration:underline; text-decoration-style:dotted; text-underline-offset:3px}
 .tdrow.editing{background:var(--surface); box-shadow:var(--shadow); border-radius:4px}
@@ -545,7 +546,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
       <div id="people" hidden></div>
       <div id="todos" hidden>
         <div class="td-add">
-          <input type="text" id="td-new" placeholder="Add a to-do…" aria-label="Add a to-do">
+          <input type="text" id="td-new" placeholder="Add a to-do, or “task: … #project”" aria-label="Add a to-do">
           <button class="btn solid" type="button" id="td-add">Add</button>
         </div>
         <div id="td-list"></div>
@@ -822,10 +823,17 @@ function normalize(payload, calId, calName, isTodoCal){
 
 /* Victor drops to-dos on a calendar; the dashboard adopts them and owns them from there. */
 function isTodoCalendar(name){ return /(^|\s|\b)(to[\s-]?dos?|tasks?)(\b|\s|$)/i.test(String(name || "")); }
+var TODO_PREFIX = /^\s*(?:(todo|to-do)|(task(?:\s*item)?))\s*[:\u2013\-]\s*(.+)$/i;
 function todoTitleOf(ev){
-  var m = /^\s*(?:todo|to-do|task)\s*[:\u2013\-]\s*(.+)$/i.exec(ev.title || "");
-  if (m) return m[1].trim();
-  return ev.isTodoCal ? ev.title : null;
+  var m = TODO_PREFIX.exec(ev.title || "");
+  /* "TASK: - source flagstone" — the dash is how it gets dictated, not content. */
+  if (m) return m[3].replace(/^\s*[-\u2013\u2014]\s*/, "").trim();
+  return ev.isTodoCal ? String(ev.title || "").replace(/^\s*[-\u2013\u2014]\s*/, "").trim() : null;
+}
+/* A task is a step in a project and carries no date; a to-do is dated work. */
+function todoKindOf(ev){
+  var m = TODO_PREFIX.exec(ev.title || "");
+  return (m && m[2]) ? "task" : "todo";
 }
 
 function rawEvents(){
@@ -1200,7 +1208,7 @@ function saveField(patch){
   var meta = {title: ev.title, startsAt: ev.start.toISOString(), calendar: ev.calName || "", color: ev.color};
   if (Object.prototype.hasOwnProperty.call(patch, "note")){
     var ns = tagsIn(patch.note), mp = {}, xs = [];
-    ns.forEach(function(n){ var k = tagToId(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
+    ns.forEach(function(n){ var k = resolveTag(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
     meta.projects = xs; meta.projectNames = mp;
   }
   store.put(ev.id, Object.assign(meta, patch))
@@ -1274,8 +1282,8 @@ function tagOf(pid){
 }
 function tagsIn(text){
   var t = String(text || ""), out = [], m;
-  var re = /#([A-Za-z0-9][A-Za-z0-9_\-\/]{0,60})/g;
-  while ((m = re.exec(t))) out.push(m[1].replace(/[_-]+/g, " "));
+  var re = /#([A-Za-z0-9][^#\n]{0,60})/g;   /* dictated tags carry spaces: "#fire pit area" */
+  while ((m = re.exec(t))) out.push(m[1].replace(/[_]+/g, " ").trim());
   if ((m = /^\s*\[([^\]]{1,40})\]/.exec(t))) out.push(m[1].trim());
   if ((m = /\bprojects?\s*[:\u2013\-]\s*([^\n.;,]{1,40})/i.exec(t))) out.push(m[1].trim());
   var seen = {}, keep = [];
@@ -1284,10 +1292,35 @@ function tagsIn(text){
 }
 function stripTags(text){
   return String(text || "")
-    .replace(/#[A-Za-z0-9][A-Za-z0-9_\-\/]{0,60}/g, "")
+    .replace(/#[A-Za-z0-9][^#\n]{0,60}/g, "")
     .replace(/^\s*\[[^\]]{1,40}\]\s*/, "")
     .replace(/\s{2,}/g, " ").trim();
 }
+/* "#firepit" with no parent still finds Backyard > Fire Pit, as long as only
+   one phase goes by that name. Saying the parent every time is a lot to ask. */
+function knownProject(cand){
+  if (!cand) return null;
+  if (projects.get(cand)) return cand;
+  var hits = Object.keys(projects.all()).filter(function(k){
+    return parentOf(k) && leafOf(k) === cand;
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+/* A dictated tag has no closing marker, so match as many of its words as name
+   something that already exists, longest first, and otherwise take up to four
+   as a new one. "#firepit" finds Backyard > Fire Pit without naming the parent. */
+function resolveTag(name){
+  var raw = String(name || "").trim().replace(/[.,;:!?]+$/, "");
+  if (!raw) return "";
+  if (raw.indexOf("/") >= 0) return tagToId(raw);
+  var words = raw.split(/\s+/);
+  for (var n = Math.min(words.length, 5); n >= 1; n--){
+    var hit = knownProject(tagToId(words.slice(0, n).join(" ")));
+    if (hit) return hit;
+  }
+  return tagToId(words.slice(0, 4).join(" "));
+}
+
 /* Project colour comes from the same Google Calendar palette the board uses. */
 var PJ_PALETTE = ["#0B8043","#3F51B5","#8E24AA","#E67C73","#039BE5","#F4511E","#7986CB","#33B679","#F6BF26","#D50000"];
 function projectColor(id){
@@ -1388,7 +1421,9 @@ function ensureProjects(){
     var leaf = raw.indexOf("/") >= 0 ? raw.split("/").pop().trim() : raw;
     /* A hashtag arrives as a slug; "[Fire Pit]" and "Project: Fire Pit" arrive
        already written the way he says it, so keep those verbatim. */
-    var label = /[A-Z]|\s/.test(leaf) ? leaf : titleCase(leafOf(id));
+    /* Dictated tags arrive lowercase ("fire pit area"); anything already
+       capitalised was written deliberately, so leave it alone. */
+    var label = /[A-Z]/.test(leaf) ? leaf : titleCase(leaf || leafOf(id));
     projects.put(id, {name: label || titleCase(leafOf(id)), status: "active", plan: "",
                       createdAt: Date.now()}).catch(function(){});
   });
@@ -1720,16 +1755,17 @@ function timeIn(text){
 }
 
 function adoptTodos(){
-  if (!todos.ready) return;   /* adopting before the store settles would resurrect finished items */
+  if (!todos.ready || !projects.ready) return;   /* early adoption resurrects finished items and mis-files bare tags */
   calendarTodos().forEach(function(ev){
     var rec = todos.get(ev.id);
     if (rec){
       /* Adopted before notes were carried across — fill it in once, never overwrite. */
       var patch = {};
       if (rec.note === undefined && ev.note) patch.note = ev.note;
+      if (rec.kind === undefined) patch.kind = todoKindOf(ev);
       if (rec.projects === undefined){
         var ns = tagsIn(todoTitleOf(ev)).concat(tagsIn(ev.note)), mp = {}, xs = [];
-        ns.forEach(function(n){ var k = tagToId(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
+        ns.forEach(function(n){ var k = resolveTag(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
         patch.projects = xs; patch.projectNames = mp;
         var clean = stripTags(todoTitleOf(ev));
         if (xs.length && clean) patch.title = clean;
@@ -1738,9 +1774,12 @@ function adoptTodos(){
       return;
     }
     var raw = todoTitleOf(ev), names = tagsIn(raw).concat(tagsIn(ev.note)), map = {}, ids = [];
-    names.forEach(function(n){ var k = tagToId(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
+    names.forEach(function(n){ var k = resolveTag(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
+    var kind = todoKindOf(ev);
     todos.put(ev.id, {
-      title: stripTags(raw) || raw, day: dayKey(ev.start), note: ev.note || "",
+      title: stripTags(raw) || raw,
+      day: kind === "task" ? null : dayKey(ev.start),
+      kind: kind, note: ev.note || "",
       projects: ids, projectNames: map,
       done: false, dropped: false,
       source: "calendar", calId: ev.calId, calName: ev.calName || "", calCleared: false,
@@ -1821,6 +1860,7 @@ function todoRow(t){
   var extra = t.note ? String(t.note).trim() : "";
   if (tm && extra.replace(/[^A-Za-z0-9]/g, "").length <= 4) extra = "";  /* the note was only the time */
   return '<div class="tdrow' + (t.done ? " done" : "") + (t.dropped ? " gone" : "") +
+    (t.kind === "task" ? " task" : "") +
     '" draggable="true" data-td="' + esc(t.key) + '">' +
     '<input type="checkbox" ' + (t.done ? "checked" : "") + ' aria-label="Mark done">' +
     '<span><span class="tx">' + esc(t.title) +
@@ -1859,7 +1899,8 @@ function renderTodos(){
     {id:"late",  label:"Overdue",  cls:"late", items: list.filter(function(t){ return !t.done && t.day && t.day < today; })},
     {id:"today", label:"Today",    cls:"now",  items: list.filter(function(t){ return !t.done && t.day === today; })},
     {id:"later", label:"Later",    cls:"",     items: list.filter(function(t){ return !t.done && t.day && t.day > today; })},
-    {id:"someday",label:"No date", cls:"",     items: list.filter(function(t){ return !t.done && !t.day; })},
+    {id:"tasks", label:"Project tasks", cls:"", items: list.filter(function(t){ return !t.done && !t.day && t.kind === "task"; })},
+    {id:"someday",label:"No date", cls:"",     items: list.filter(function(t){ return !t.done && !t.day && t.kind !== "task"; })},
     {id:"done",  label:"Done",     cls:"",     items: list.filter(function(t){ return t.done; })}
   ].filter(function(b){ return b.items.length; });
 
@@ -1895,9 +1936,12 @@ function newTodo(){
   if (!text) return;
   var id = "t" + Date.now() + Math.floor(Math.random()*999);
   input.value = "";
-  var names = tagsIn(text), map = {}, ids = [];
-  names.forEach(function(n){ var k = tagToId(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
-  todos.put(id, {title: stripTags(text) || text, day: dayKey(new Date()),
+  var m = TODO_PREFIX.exec(text), kind = (m && m[2]) ? "task" : "todo";
+  var body = m ? m[3].replace(/^\s*[-\u2013\u2014]\s*/, "").trim() : text;
+  var names = tagsIn(body), map = {}, ids = [];
+  names.forEach(function(n){ var k = resolveTag(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
+  todos.put(id, {title: stripTags(body) || body,
+                 day: kind === "task" ? null : dayKey(new Date()), kind: kind,
                  projects: ids, projectNames: map, done: false, dropped: false,
                  source: "app", createdAt: Date.now()}).catch(function(){});
 }
