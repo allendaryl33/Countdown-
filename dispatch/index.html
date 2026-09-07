@@ -449,6 +449,39 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
 @keyframes jump{0%,55%{border-color:var(--focus); box-shadow:0 0 0 3px var(--signal-bg), var(--shadow)}100%{border-color:var(--line)}}
 .stale{font-size:11.5px; color:var(--faint); font-family:"Saira Condensed",Arial,sans-serif; letter-spacing:.06em; text-transform:uppercase}
 
+/* ---------- move sheet (long-press on touch) ---------- */
+/* display:flex would otherwise beat the hidden attribute and leave an
+   invisible overlay swallowing every tap on the page. */
+#move-sheet[hidden]{display:none !important}
+#move-sheet{position:fixed; inset:0; z-index:50; display:flex; align-items:flex-end; justify-content:center}
+@media (min-width:700px){ #move-sheet{align-items:center} }
+.sheet-bg{position:absolute; inset:0; background:rgba(10,16,19,.55)}
+.sheet{
+  position:relative; width:100%; max-width:460px; max-height:78vh; overflow-y:auto;
+  background:var(--surface); border:1px solid var(--line); border-radius:10px 10px 0 0;
+  box-shadow:0 -8px 40px -12px rgba(0,0,0,.5); padding:14px 14px 18px;
+}
+@media (min-width:700px){ .sheet{border-radius:8px; margin:0 16px} }
+.sheet-hd{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:16px;
+  line-height:1.25; margin-bottom:10px; overflow-wrap:anywhere;
+}
+.sheet-opt{
+  display:flex; align-items:center; gap:9px; width:100%; text-align:left; background:none;
+  border:0; border-top:1px solid var(--line-2); padding:12px 4px; cursor:pointer;
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:16px; --c:#68797F;
+}
+.sheet-opt:first-of-type{border-top:0}
+.sheet-opt:hover,.sheet-opt:active{background:var(--surface-2)}
+.sheet-opt.sub{padding-left:24px; font-size:15px; font-weight:500}
+.sheet-opt .dotc{width:9px; height:9px; border-radius:50%; background:var(--c); flex:none; filter:var(--stripe-boost)}
+.sheet-cancel{
+  width:100%; margin-top:12px; background:var(--surface-2); border:1px solid var(--line);
+  border-radius:5px; padding:11px; cursor:pointer; font-family:"Saira Condensed",Arial,sans-serif;
+  font-weight:600; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+}
+.tdrow.picked{outline:2px solid var(--focus); outline-offset:-2px}
+
 /* ---------- model footer ---------- */
 .model{margin-top:40px; border-top:1px solid var(--line); padding-top:18px}
 .model .grid{
@@ -607,6 +640,15 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
     </aside>
   </div>
 
+  <div id="move-sheet" hidden role="dialog" aria-modal="true" aria-label="Move to a project">
+    <div class="sheet-bg" data-sheet-close="1"></div>
+    <div class="sheet">
+      <div class="sheet-hd" id="sheet-title">Move to…</div>
+      <div id="sheet-list"></div>
+      <button type="button" class="sheet-cancel" data-sheet-close="1">Cancel</button>
+    </div>
+  </div>
+
   <footer class="model">
     <span class="eyebrow">Why it's shaped like a service dashboard</span>
     <div class="grid">
@@ -733,7 +775,8 @@ var state = {
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
   view: "board", personKey: null, projectId: null,
-  todoCalIds: {}, todoDirty: false, showDropped: false, editingTodo: null, dragTodo: null,
+  todoCalIds: {}, todoDirty: false, projectDirty: false,
+  showDropped: false, editingTodo: null, dragTodo: null, moveKey: null, suppressClick: false,
   range: 2, watchArgs: {},
   mcp: null, sample: null
 };
@@ -1386,6 +1429,15 @@ function renderProject(){
   var card = $("project-card");
   if (state.view !== "projects"){ card.hidden = true; return; }
   card.hidden = false;
+  /* Rebuilding innerHTML destroys the focused field: focus is lost and every
+     keystroke after the autosave lands nowhere. Hold off until they leave it. */
+  var ae = document.activeElement;
+  if (ae && ae.closest && ae.closest("#pj-detail") &&
+      (ae.tagName === "TEXTAREA" || ae.tagName === "SELECT" ||
+       (ae.tagName === "INPUT" && ae.type !== "checkbox"))){
+    state.projectDirty = true; return;
+  }
+  state.projectDirty = false;
   var p = projectList().filter(function(x){ return x.id === state.projectId; })[0];
   if (!p){
     $("pj-name").textContent = "Projects";
@@ -1519,6 +1571,9 @@ $("pj-detail").addEventListener("click", function(e){
   todoAction(e);
 });
 $("pj-detail").addEventListener("change", todoAction);
+$("pj-detail").addEventListener("focusout", function(){
+  setTimeout(function(){ if (state.projectDirty) renderProject(); }, 0);
+});
 
 /* Drag a to-do onto a project or phase to file it there. Touch devices don't
    fire these events, which is why the editor's picker exists as well. */
@@ -1562,11 +1617,78 @@ document.addEventListener("drop", function(e){
   var rec = todos.all()[key];
   state.dragTodo = null;
   if (!rec) return;
-  var pid = t.getAttribute("data-pj");
-  var pr = projects.get(pid), par = parentOf(pid) ? projects.get(parentOf(pid)) : null;
-  var where = (par ? (par.name || titleCase(parentOf(pid))) + " \u203a " : "") + ((pr && pr.name) || pid);
-  todos.put(rec.id || key, {projects: [pid], projectNames: {}}).catch(function(){});
+  fileTodo(key, t.getAttribute("data-pj"));
+});
+
+/* ---------- long-press to move (touch, where drag events never fire) ---------- */
+function fileTodo(key, pid){
+  var rec = todos.all()[key]; if (!rec) return;
+  var where = "no project";
+  if (pid){
+    var pr = projects.get(pid), par = parentOf(pid) ? projects.get(parentOf(pid)) : null;
+    where = (par ? (par.name || titleCase(parentOf(pid))) + " \u203a " : "") + ((pr && pr.name) || pid);
+  }
+  todos.put(rec.id || key, {projects: pid ? [pid] : [], projectNames: {}}).catch(function(){});
   flash("Filed <b>" + esc(rec.title || "that") + "</b> under " + esc(where) + ".");
+}
+
+function closeMoveSheet(){
+  $("move-sheet").hidden = true;
+  Array.prototype.forEach.call(document.querySelectorAll(".tdrow.picked"),
+    function(el){ el.classList.remove("picked"); });
+  state.moveKey = null;
+}
+function openMoveSheet(key){
+  var t = todos.all()[key]; if (!t) return;
+  state.moveKey = key;
+  $("sheet-title").textContent = "Move \u201c" + (t.title || "this") + "\u201d to\u2026";
+  var cur = (t.projects || [])[0] || "";
+  $("sheet-list").innerHTML =
+    '<button type="button" class="sheet-opt" data-move="">\u2014 No project \u2014</button>' +
+    projectRows().map(function(p){
+      return '<button type="button" class="sheet-opt' + (p.parent ? " sub" : "") +
+        '" data-move="' + esc(p.id) + '" style="--c:' + p.color + '">' +
+        '<span class="dotc"></span>' + esc(p.name) + (p.id === cur ? " \u2713" : "") + "</button>";
+    }).join("");
+  $("move-sheet").hidden = false;
+}
+$("move-sheet").addEventListener("click", function(e){
+  if (e.target.getAttribute && e.target.getAttribute("data-sheet-close")){ closeMoveSheet(); return; }
+  var opt = e.target.closest ? e.target.closest("[data-move]") : null;
+  if (!opt || !state.moveKey) return;
+  fileTodo(state.moveKey, opt.getAttribute("data-move"));
+  closeMoveSheet();
+});
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && !$("move-sheet").hidden) closeMoveSheet();
+});
+
+var pressTimer = null, pressAt = null;
+document.addEventListener("touchstart", function(e){
+  var row = e.target.closest ? e.target.closest(".tdrow[data-td]") : null;
+  if (!row || row.classList.contains("editing")) return;
+  if (e.target.closest("input, button, select, textarea, a")) return;
+  var t = e.touches[0];
+  pressAt = {x: t.clientX, y: t.clientY, row: row};
+  clearTimeout(pressTimer);
+  pressTimer = setTimeout(function(){
+    pressTimer = null;
+    state.suppressClick = true;
+    if (state.editingTodo){ flushTodoEdit(); leaveField(); state.editingTodo = null; renderTodos(); }
+    row.classList.add("picked");
+    openMoveSheet(row.dataset.td);
+    if (navigator.vibrate){ try { navigator.vibrate(15); } catch (err){} }
+  }, 500);
+}, {passive: true});
+document.addEventListener("touchmove", function(e){
+  if (!pressTimer || !pressAt) return;
+  var t = e.touches[0];
+  if (Math.abs(t.clientX - pressAt.x) > 10 || Math.abs(t.clientY - pressAt.y) > 10){
+    clearTimeout(pressTimer); pressTimer = null;   /* they're scrolling, not pressing */
+  }
+}, {passive: true});
+["touchend","touchcancel"].forEach(function(ev){
+  document.addEventListener(ev, function(){ clearTimeout(pressTimer); pressTimer = null; }, {passive: true});
 });
 
 /* a project chip anywhere jumps to that project */
@@ -1786,6 +1908,10 @@ var edTimer = null;
 /* Save whatever the editor currently holds — both fields, every time. Keying
    the save to the field that fired loses the other one when you move between
    them faster than the debounce. */
+function leaveField(){
+  var ae = document.activeElement;
+  if (ae && ae.blur && ae !== document.body) ae.blur();
+}
 function flushTodoEdit(){
   clearTimeout(edTimer);
   var row = document.querySelector(".tdrow.editing");
@@ -1805,6 +1931,7 @@ function todoEdit(e){
 }
 
 function todoAction(e){
+  if (state.suppressClick){ state.suppressClick = false; return; }
   if (e.target.id === "dropped-toggle"){
     state.showDropped = !state.showDropped; renderTodos(); return;
   }
@@ -1814,14 +1941,14 @@ function todoAction(e){
   var id = t.id || row.dataset.td;
   if (e.target.classList.contains("tx") ||
       (e.target.closest && e.target.closest(".tx") && !e.target.closest("[data-goproject]"))){
-    if (state.editingTodo && state.editingTodo !== row.dataset.td) flushTodoEdit();
+    if (state.editingTodo && state.editingTodo !== row.dataset.td){ flushTodoEdit(); leaveField(); }
     state.editingTodo = row.dataset.td; renderTodos(); renderProject();
     var box = document.querySelector('.tdrow.editing .ed-title');
     if (box){ box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
     return;
   }
   if (e.target.classList.contains("done-edit")){
-    flushTodoEdit();
+    flushTodoEdit(); leaveField();
     state.editingTodo = null; renderTodos(); renderProject(); return;
   }
   if (e.target.classList.contains("ed-proj")){
@@ -1853,7 +1980,8 @@ $("td-list").addEventListener("input", todoEdit);
 $("pj-detail").addEventListener("input", todoEdit);
 document.addEventListener("keydown", function(e){
   if (e.key === "Escape" && state.editingTodo){
-    flushTodoEdit(); state.editingTodo = null; renderTodos(); renderProject();
+    flushTodoEdit(); leaveField();
+    state.editingTodo = null; renderTodos(); renderProject();
   }
 });
 $("td-list").addEventListener("focusout", function(){
