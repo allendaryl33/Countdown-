@@ -284,6 +284,22 @@ button{font:inherit; color:inherit}
 .pjrow .sub{font-size:12.5px; color:var(--faint); margin-top:2px; display:flex; gap:8px; flex-wrap:wrap}
 .pjrow .sub .open{color:var(--signal); font-weight:500}
 .pjrow.shut .nm{color:var(--muted)}
+.pjrow.phase{padding-left:26px}
+.pjrow.phase .nm{font-size:14.5px; font-weight:600}
+.pjrow.phase .stripe{height:20px; opacity:.75}
+.pj-tag{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:12.5px;
+  letter-spacing:.05em; color:var(--signal); background:var(--signal-bg);
+  padding:2px 7px; border-radius:3px;
+}
+.phrow{
+  display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px 10px; width:100%; text-align:left;
+  background:none; border:0; border-top:1px solid var(--line-2); padding:9px 0; cursor:pointer; --c:#68797F;
+}
+.phrow:hover{background:color-mix(in srgb, var(--c) var(--tint-hover), transparent)}
+.phrow .nm{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:15px; overflow-wrap:anywhere}
+.phrow .ct{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:13px; color:var(--muted)}
+.phrow .bar{grid-column:1/-1; max-width:none; margin-top:2px}
 .bar{display:block; height:4px; border-radius:2px; background:var(--sunk); overflow:hidden; margin-top:6px; max-width:190px}
 .bar i{display:block; height:100%; min-width:2px; background:var(--c); filter:var(--stripe-boost)}
 .pjchip{
@@ -1126,7 +1142,7 @@ function saveField(patch){
   var meta = {title: ev.title, startsAt: ev.start.toISOString(), calendar: ev.calName || "", color: ev.color};
   if (Object.prototype.hasOwnProperty.call(patch, "note")){
     var ns = tagsIn(patch.note), mp = {}, xs = [];
-    ns.forEach(function(n){ var k = slug(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
+    ns.forEach(function(n){ var k = tagToId(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
     meta.projects = xs; meta.projectNames = mp;
   }
   store.put(ev.id, Object.assign(meta, patch))
@@ -1176,9 +1192,31 @@ function slug(n){
   return String(n || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "").slice(0, 60);
 }
+/* "#backyard/grade" -> "backyard.grade". Exactly two levels: a phase holds
+   to-dos, never more phases. Anything deeper is folded into the phase. */
+function tagToId(name){
+  var parts = String(name || "").split("/").map(slug).filter(Boolean);
+  return parts.slice(0, 2).join(".");
+}
+function parentOf(pid){
+  var i = String(pid || "").indexOf(".");
+  return i > 0 ? String(pid).slice(0, i) : null;
+}
+function leafOf(pid){
+  var i = String(pid || "").indexOf(".");
+  return i > 0 ? String(pid).slice(i + 1) : String(pid || "");
+}
+function titleCase(sl){
+  return String(sl || "").replace(/[-.]/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+}
+/* What to tell Victor. */
+function tagOf(pid){
+  var par = parentOf(pid);
+  return "#" + (par ? par + "/" + leafOf(pid) : pid);
+}
 function tagsIn(text){
   var t = String(text || ""), out = [], m;
-  var re = /#([A-Za-z0-9][A-Za-z0-9_\-]{0,40})/g;
+  var re = /#([A-Za-z0-9][A-Za-z0-9_\-\/]{0,60})/g;
   while ((m = re.exec(t))) out.push(m[1].replace(/[_-]+/g, " "));
   if ((m = /^\s*\[([^\]]{1,40})\]/.exec(t))) out.push(m[1].trim());
   if ((m = /\bprojects?\s*[:\u2013\-]\s*([^\n.;,]{1,40})/i.exec(t))) out.push(m[1].trim());
@@ -1188,7 +1226,7 @@ function tagsIn(text){
 }
 function stripTags(text){
   return String(text || "")
-    .replace(/#[A-Za-z0-9][A-Za-z0-9_\-]{0,40}/g, "")
+    .replace(/#[A-Za-z0-9][A-Za-z0-9_\-\/]{0,60}/g, "")
     .replace(/^\s*\[[^\]]{1,40}\]\s*/, "")
     .replace(/\s{2,}/g, " ").trim();
 }
@@ -1201,40 +1239,73 @@ function projectColor(id){
 }
 
 /* Everything tagged to a project, from either side of the app. */
-function projectItems(pid){
-  var td = todoAll().filter(function(t){
-    return !t.dropped && (t.projects || []).indexOf(pid) >= 0;
-  });
+/* A parent sees everything under it, so roll-up needs no bookkeeping. */
+function inProject(ids, pid){
+  return (ids || []).some(function(x){ return x === pid || String(x).indexOf(pid + ".") === 0; });
+}
+function projectItems(pid, exact){
+  var hit = exact
+    ? function(ids){ return (ids || []).indexOf(pid) >= 0; }
+    : function(ids){ return inProject(ids, pid); };
+  var td = todoAll().filter(function(t){ return !t.dropped && hit(t.projects); });
   var recs = store.all(), blocks = [];
   Object.keys(recs).forEach(function(k){
     var r = recs[k];
-    if (r && (r.projects || []).indexOf(pid) >= 0) blocks.push(r);
+    if (r && hit(r.projects)) blocks.push(r);
   });
   blocks.sort(function(a,b){ return String(b.startsAt||"").localeCompare(String(a.startsAt||"")); });
   return {todos: td, blocks: blocks};
 }
 
+function statsFor(p){
+  var it = projectItems(p.id);
+  p.total = it.todos.length;
+  p.open = it.todos.filter(function(t){ return !t.done; }).length;
+  p.blocks = it.blocks.length;
+  p.pct = p.total ? Math.round((p.total - p.open) / p.total * 100) : 0;
+  p.last = Math.max(
+    p.updatedAt || 0,
+    it.blocks.length ? Date.parse(it.blocks[0].startsAt || 0) || 0 : 0,
+    it.todos.reduce(function(n, t){ return Math.max(n, t.updatedAt || 0); }, 0)
+  );
+  /* a phase wears its parent's colour, so a project reads as one family */
+  p.color = projectColor(parentOf(p.id) || p.id);
+  p.parent = parentOf(p.id);
+  return p;
+}
+
 function projectList(){
   var all = projects.all();
   return Object.keys(all).map(function(k){
-    var p = Object.assign({key: k}, all[k]);
-    var it = projectItems(p.id);
-    p.total = it.todos.length;
-    p.open = it.todos.filter(function(t){ return !t.done; }).length;
-    p.blocks = it.blocks.length;
-    p.last = Math.max(
-      p.updatedAt || 0,
-      it.blocks.length ? Date.parse(it.blocks[0].startsAt || 0) || 0 : 0,
-      it.todos.reduce(function(n, t){ return Math.max(n, t.updatedAt || 0); }, 0)
-    );
-    p.color = projectColor(p.id);
-    return p;
-  }).filter(function(p){ return p.name; })
+    return statsFor(Object.assign({key: k}, all[k]));
+  }).filter(function(p){ return p.id && p.name; });
+}
+
+function phasesOf(pid){
+  return projectList().filter(function(p){ return p.parent === pid; })
+    .sort(function(a,b){
+      if ((a.status === "done") !== (b.status === "done")) return a.status === "done" ? 1 : -1;
+      return String(a.name).localeCompare(String(b.name));
+    });
+}
+
+/* Parents first, each followed by its phases. */
+function projectRows(){
+  var list = projectList(), byId = {};
+  list.forEach(function(p){ byId[p.id] = p; });
+  var parents = list.filter(function(p){ return !p.parent; })
     .sort(function(a,b){
       if ((a.status === "done") !== (b.status === "done")) return a.status === "done" ? 1 : -1;
       if (b.open !== a.open) return b.open - a.open;
       return (b.last || 0) - (a.last || 0);
     });
+  var out = [];
+  parents.forEach(function(p){
+    out.push(p);
+    phasesOf(p.id).forEach(function(c){ out.push(c); });
+  });
+  list.forEach(function(p){ if (p.parent && !byId[p.parent]) out.push(p); });
+  return out;
 }
 
 /* Tagged items name projects into existence — nothing to maintain by hand. */
@@ -1250,15 +1321,24 @@ function ensureProjects(){
     (r.projects || []).forEach(function(id){ want[id] = want[id] || (r.projectNames && r.projectNames[id]); });
   });
   Object.keys(want).forEach(function(id){
+    var par = parentOf(id);
+    if (par && !projects.get(par)){
+      projects.put(par, {name: titleCase(par), status: "active", plan: "", createdAt: Date.now()}).catch(function(){});
+    }
     if (projects.get(id)) return;
-    projects.put(id, {name: want[id] || id.replace(/-/g, " ").replace(/\b\w/g, function(c){ return c.toUpperCase(); }),
-                      status: "active", plan: "", createdAt: Date.now()}).catch(function(){});
+    var raw = String(want[id] || "");
+    var leaf = raw.indexOf("/") >= 0 ? raw.split("/").pop().trim() : raw;
+    /* A hashtag arrives as a slug; "[Fire Pit]" and "Project: Fire Pit" arrive
+       already written the way he says it, so keep those verbatim. */
+    var label = /[A-Z]|\s/.test(leaf) ? leaf : titleCase(leafOf(id));
+    projects.put(id, {name: label || titleCase(leafOf(id)), status: "active", plan: "",
+                      createdAt: Date.now()}).catch(function(){});
   });
 }
 
 function renderProjects(){
   if (state.view !== "projects") return;
-  var list = projectList(), host = $("pj-list");
+  var list = projectRows(), host = $("pj-list");
   if (!list.length){
     host.innerHTML = '<div class="td-empty">No projects yet. Start one above, or tag anything ' +
       "into one \u2014 a to-do called <b>Call Snowbird #yard</b>, or a block written up with " +
@@ -1266,18 +1346,23 @@ function renderProjects(){
     return;
   }
   host.innerHTML = list.map(function(p){
-    var done = p.total - p.open, pct = p.total ? Math.round(done / p.total * 100) : 0;
+    var done = p.total - p.open;
     var sub = [];
     if (p.open) sub.push('<span class="open">' + p.open + " open</span>");
     if (p.total) sub.push(done + " of " + p.total + " done");
+    else sub.push("not started");
     if (p.blocks) sub.push(p.blocks + " block" + (p.blocks === 1 ? "" : "s"));
-    if (!sub.length) sub.push("nothing filed yet");
+    if (!p.parent){
+      var ph = phasesOf(p.id).length;
+      if (ph) sub.push(ph + " phase" + (ph === 1 ? "" : "s"));
+    }
     if (p.status === "done") sub.push("finished");
-    return '<button class="pjrow' + (p.status === "done" ? " shut" : "") + '" type="button" data-pj="' +
-        esc(p.id) + '" style="--c:' + p.color + '" aria-current="' + (p.id === state.projectId) + '">' +
+    return '<button class="pjrow' + (p.status === "done" ? " shut" : "") + (p.parent ? " phase" : "") +
+        '" type="button" data-pj="' + esc(p.id) + '" style="--c:' + p.color +
+        '" aria-current="' + (p.id === state.projectId) + '">' +
       '<span class="stripe"></span>' +
       '<span><span class="nm">' + esc(p.name) + '</span><span class="sub">' + sub.join("<span>\u00b7</span>") + "</span>" +
-        (p.total ? '<span class="bar"><i style="width:' + pct + '%"></i></span>' : "") + "</span>" +
+        (p.total ? '<span class="bar"><i style="width:' + p.pct + '%"></i></span>' : "") + "</span>" +
       '<span class="ago">' + esc(p.last ? ago(p.last) : "") + "</span></button>";
   }).join("");
 }
@@ -1291,44 +1376,76 @@ function renderProject(){
     $("pj-name").textContent = "Projects";
     $("pj-count").textContent = "";
     $("pj-detail").innerHTML = '<div style="color:var(--muted);font-size:14px">' +
-      "Pick a project to see its plan, what's left, and the time already spent on it.</div>";
+      "Pick a project to see its phases, what's left, and the time already spent on it.</div>";
     return;
   }
-  var it = projectItems(p.id);
-  var done = p.total - p.open;
-  $("pj-name").textContent = p.name;
-  $("pj-count").textContent = p.total ? done + " of " + p.total + " done" : "";
-  var openTd = it.todos.filter(function(t){ return !t.done; });
-  var doneTd = it.todos.filter(function(t){ return t.done; });
-  $("pj-detail").innerHTML =
-    '<div class="pj-head"><span class="pj-prog">' +
-      (p.blocks ? p.blocks + " block" + (p.blocks === 1 ? "" : "s") + " logged" : "Nothing logged yet") + "</span>" +
-      '<button class="btn" type="button" id="pj-status">' +
-        (p.status === "done" ? "Reopen" : "Mark finished") + "</button></div>" +
-    '<div class="pj-sub">The plan</div>' +
-    '<textarea id="pj-plan" rows="4" placeholder="How does this break down? What\u2019s the next move?">' +
-      esc(p.plan || "") + "</textarea>" +
-    (openTd.length ? '<div class="pj-sub">Still to do</div>' + openTd.map(todoRow).join("") : "") +
-    (doneTd.length ? '<div class="pj-sub">Done</div>' + doneTd.map(todoRow).join("") : "") +
-    (it.blocks.length
-      ? '<div class="pj-sub">Time on it</div>' + it.blocks.map(function(r){
-          return '<div class="pj-block"><div class="w">' +
-            esc(r.startsAt ? new Date(r.startsAt).toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"}) : "\u2014") +
-            (r.status && r.status !== "open" ? " \u00b7 " + esc(r.status) : "") + "</div>" +
-            '<div class="t">' + esc(r.title || "a block") + "</div>" +
-            (r.note ? '<div class="n">' + esc(r.note) + "</div>" : "") + "</div>";
+  var par = p.parent ? projects.get(p.parent) : null;
+  $("pj-name").textContent = (par ? (par.name || titleCase(p.parent)) + " \u203a " : "") + p.name;
+  $("pj-count").textContent = p.total ? (p.total - p.open) + " of " + p.total + " done" : "";
+
+  var head = '<div class="pj-head">' +
+    '<span class="pj-tag" title="What to tell Victor">' + esc(tagOf(p.id)) + "</span>" +
+    '<span class="pj-prog">' + (p.blocks ? p.blocks + " block" + (p.blocks === 1 ? "" : "s") + " logged" : "Nothing logged yet") + "</span>" +
+    '<button class="btn" type="button" id="pj-status">' + (p.status === "done" ? "Reopen" : "Mark finished") + "</button>" +
+    "</div>" +
+    '<label class="fl"><span class="eyebrow">Name</span>' +
+      '<input type="text" id="pj-rename" value="' + esc(p.name) + '" aria-label="Project name"></label>';
+
+  var body = "";
+  var phases = p.parent ? [] : phasesOf(p.id);
+  if (!p.parent){
+    /* Parent view: the phases are the breakdown, and they roll up here. */
+    body += '<div class="pj-sub">Phases</div>';
+    body += phases.length
+      ? phases.map(function(c){
+          return '<button class="phrow" type="button" data-pj="' + esc(c.id) + '" style="--c:' + c.color + '">' +
+            '<span class="nm">' + esc(c.name) + (c.status === "done" ? " \u2713" : "") + "</span>" +
+            '<span class="ct num">' + (c.total ? (c.total - c.open) + "/" + c.total : "\u2014") + "</span>" +
+            '<span class="bar"><i style="width:' + c.pct + '%"></i></span></button>';
         }).join("")
-      : "");
+      : '<div style="color:var(--muted);font-size:13.5px;padding:2px 0 6px">No phases yet.</div>';
+    body += '<div class="addrow" style="margin-top:8px">' +
+      '<input type="text" id="pj-phase-new" placeholder="Add a phase\u2026" aria-label="Add a phase">' +
+      '<button class="btn" type="button" id="pj-phase-add">Add</button></div>';
+  }
+
+  var it = projectItems(p.id, false);
+  var own = p.parent ? it.todos : projectItems(p.id, true).todos;
+  var openTd = own.filter(function(t){ return !t.done; });
+  var doneTd = own.filter(function(t){ return t.done; });
+
+  body += '<div class="pj-sub">The plan</div>' +
+    '<textarea id="pj-plan" rows="4" placeholder="How does this break down? What\u2019s the next move?">' +
+      esc(p.plan || "") + "</textarea>";
+  if (openTd.length) body += '<div class="pj-sub">Still to do' + (p.parent ? "" : " \u00b7 no phase") + "</div>" + openTd.map(todoRow).join("");
+  if (doneTd.length) body += '<div class="pj-sub">Done' + (p.parent ? "" : " \u00b7 no phase") + "</div>" + doneTd.map(todoRow).join("");
+  if (!p.parent && !openTd.length && !doneTd.length && phases.length){
+    body += '<div class="pj-sub">Unphased</div><div style="color:var(--muted);font-size:13.5px">' +
+      "Everything here is filed under a phase.</div>";
+  }
+  if (it.blocks.length){
+    body += '<div class="pj-sub">Time on it</div>' + it.blocks.map(function(r){
+      return '<div class="pj-block"><div class="w">' +
+        esc(r.startsAt ? new Date(r.startsAt).toLocaleDateString([], {weekday:"short", month:"short", day:"numeric"}) : "\u2014") +
+        (r.status && r.status !== "open" ? " \u00b7 " + esc(r.status) : "") + "</div>" +
+        '<div class="t">' + esc(r.title || "a block") + "</div>" +
+        (r.note ? '<div class="n">' + esc(r.note) + "</div>" : "") + "</div>";
+    }).join("");
+  }
+  $("pj-detail").innerHTML = head + body;
 }
 
 function newProject(){
   var input = $("pj-new"), name = input.value.trim();
   if (!name) return;
-  var id = slug(name);
+  var id = tagToId(name);
   if (!id) return;
   input.value = "";
-  if (!projects.get(id)) {
-    projects.put(id, {name: name, status: "active", plan: "", createdAt: Date.now()}).catch(function(){});
+  var par = parentOf(id);
+  if (par && !projects.get(par)) projects.put(par, {name: titleCase(par), status:"active", plan:"", createdAt: Date.now()}).catch(function(){});
+  if (!projects.get(id)){
+    var label = name.indexOf("/") >= 0 ? name.split("/").pop().trim() : name;
+    projects.put(id, {name: label, status: "active", plan: "", createdAt: Date.now()}).catch(function(){});
   }
   state.projectId = id;
   renderProjects(); renderProject();
@@ -1351,7 +1468,34 @@ $("pj-detail").addEventListener("input", function(e){
   var v = e.target.value, id = state.projectId;
   planTimer = setTimeout(function(){ projects.put(id, {plan: v}).catch(function(){}); }, 700);
 });
+var renameTimer = null;
+$("pj-detail").addEventListener("input", function(e){
+  if (e.target.id !== "pj-rename") return;
+  clearTimeout(renameTimer);
+  var v = e.target.value.trim(), id = state.projectId;
+  renameTimer = setTimeout(function(){
+    if (v) projects.put(id, {name: v}).catch(function(){});
+  }, 700);
+});
+
+function addPhase(){
+  var input = $("pj-phase-new"); if (!input) return;
+  var nm = input.value.trim(); if (!nm || !state.projectId) return;
+  var id = state.projectId + "." + slug(nm);
+  if (slug(nm) && !projects.get(id)){
+    projects.put(id, {name: nm, status: "active", plan: "", createdAt: Date.now()}).catch(function(){});
+  }
+  input.value = "";
+}
+
+$("pj-detail").addEventListener("keydown", function(e){
+  if (e.target.id === "pj-phase-new" && e.key === "Enter"){ e.preventDefault(); addPhase(); }
+});
+
 $("pj-detail").addEventListener("click", function(e){
+  if (e.target.id === "pj-phase-add"){ addPhase(); return; }
+  var ph = e.target.closest ? e.target.closest(".phrow") : null;
+  if (ph){ state.projectId = ph.getAttribute("data-pj"); renderProjects(); renderProject(); return; }
   if (e.target.id === "pj-status"){
     var pr = projects.get(state.projectId); if (!pr) return;
     projects.put(state.projectId, {status: pr.status === "done" ? "active" : "done"}).catch(function(){});
@@ -1399,7 +1543,7 @@ function adoptTodos(){
       if (rec.note === undefined && ev.note) patch.note = ev.note;
       if (rec.projects === undefined){
         var ns = tagsIn(todoTitleOf(ev)).concat(tagsIn(ev.note)), mp = {}, xs = [];
-        ns.forEach(function(n){ var k = slug(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
+        ns.forEach(function(n){ var k = tagToId(n); if (k && xs.indexOf(k) < 0){ xs.push(k); mp[k] = n; } });
         patch.projects = xs; patch.projectNames = mp;
         var clean = stripTags(todoTitleOf(ev));
         if (xs.length && clean) patch.title = clean;
@@ -1408,7 +1552,7 @@ function adoptTodos(){
       return;
     }
     var raw = todoTitleOf(ev), names = tagsIn(raw).concat(tagsIn(ev.note)), map = {}, ids = [];
-    names.forEach(function(n){ var k = slug(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
+    names.forEach(function(n){ var k = tagToId(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
     todos.put(ev.id, {
       title: stripTags(raw) || raw, day: dayKey(ev.start), note: ev.note || "",
       projects: ids, projectNames: map,
@@ -1533,7 +1677,7 @@ function newTodo(){
   var id = "t" + Date.now() + Math.floor(Math.random()*999);
   input.value = "";
   var names = tagsIn(text), map = {}, ids = [];
-  names.forEach(function(n){ var k = slug(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
+  names.forEach(function(n){ var k = tagToId(n); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = n; } });
   todos.put(id, {title: stripTags(text) || text, day: dayKey(new Date()),
                  projects: ids, projectNames: map, done: false, dropped: false,
                  source: "app", createdAt: Date.now()}).catch(function(){});

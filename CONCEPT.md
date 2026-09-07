@@ -123,6 +123,14 @@ calendar you already keep, and asks for one thing back — the write-up.
   there is no roster to maintain. Each project carries a plan, what's still to
   do, what's done, and the blocks already written up against it — so the
   breakdown and the time actually spent sit on one screen.
+- **Phases.** Two levels, parent and phase, and deliberately no more: a phase
+  holds to-dos, never more phases. `#backyard/grade` files an item into the
+  Grade phase of Backyard; `#backyard` alone files it at project level. Roll-up
+  is derived rather than tracked — the parent counts everything beneath it, so
+  "2 of 8 done" needs no bookkeeping. A project's id is its tag and its name is
+  a label you can edit, so Victor keeps saying `#backyard` while the dashboard
+  reads *Backyard Landscape*. The detail panel shows the tag for exactly that
+  reason: it is what to tell Victor.
 - **Range.** Today / 2 days / Week, remembered per browser. A clear day says so
   rather than vanishing, so an empty board never reads as a broken one.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.
