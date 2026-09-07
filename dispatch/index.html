@@ -369,6 +369,8 @@ textarea,input[type=text]{
 input[type=text]{font-family:"Saira",Arial,sans-serif; font-size:14px}
 textarea::placeholder,input::placeholder{color:var(--faint); font-style:italic}
 textarea:focus,input:focus{background:var(--surface); border-color:var(--focus); outline:none}
+.hint{font-size:11.5px; color:var(--faint); font-style:italic; margin-top:-2px}
+.saved.ok{color:var(--good)}
 .saved{font-size:11.5px; color:var(--faint); font-family:"Saira Condensed",Arial,sans-serif; letter-spacing:.08em; text-transform:uppercase; min-height:14px}
 .btn{
   background:var(--surface); border:1px solid var(--line); border-radius:4px;
@@ -611,6 +613,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
           <label class="fl">
             <span class="eyebrow">What actually happened</span>
             <textarea id="c-note" rows="4" placeholder="Two sentences is plenty. What came out of it?"></textarea>
+            <span class="hint">Saves itself as you type — there is nothing to press.</span>
           </label>
           <label class="fl">
             <span class="eyebrow">Who was in it</span>
@@ -1203,14 +1206,21 @@ function renderCloseout(){
   });
   if (document.activeElement !== $("c-note")) $("c-note").value = rec.note || "";
   if (document.activeElement !== $("c-people")) $("c-people").value = rec.people || "";
+  if (document.activeElement !== $("c-note") && document.activeElement !== $("c-people")){
+    var written = (rec.note || rec.people || rec.status);
+    setSaved(written && rec.updatedAt ? savedStamp(rec.updatedAt) : "", !!written);
+  }
   renderPicker();
   renderLoops();
 }
 
-function flashSaved(msg){
-  var el = $("c-saved"); el.textContent = msg || "Saved";
-  clearTimeout(flashSaved._t);
-  flashSaved._t = setTimeout(function(){ el.textContent = ""; }, 1800);
+function setSaved(text, good){
+  var el = $("c-saved");
+  el.textContent = text || "";
+  el.classList.toggle("ok", !!good);
+}
+function savedStamp(ts){
+  return "Saved \u00b7 " + hhmm(new Date(ts || Date.now()));
 }
 function saveField(patch){
   var ev = currentEvent(); if (!ev) return;
@@ -1221,8 +1231,8 @@ function saveField(patch){
     meta.projects = xs; meta.projectNames = mp;
   }
   store.put(ev.id, Object.assign(meta, patch))
-    .then(function(){ flashSaved(); })
-    .catch(function(){ $("c-saved").textContent = "Couldn't save — check your connection"; });
+    .then(function(){ setSaved(savedStamp(), true); })
+    .catch(function(){ setSaved("Couldn't save \u2014 check your connection", false); });
 }
 
 $("c-status").addEventListener("click", function(e){
@@ -1241,10 +1251,12 @@ $("c-status").addEventListener("click", function(e){
 });
 $("c-note").addEventListener("input", function(){
   clearTimeout(noteTimer); var v = this.value;
+  setSaved("Saving\u2026", false);
   noteTimer = setTimeout(function(){ saveField({note: v}); }, 700);
 });
 $("c-people").addEventListener("input", function(){
   clearTimeout(peopleTimer); var v = this.value;
+  setSaved("Saving\u2026", false);
   peopleTimer = setTimeout(function(){ saveField({people: v}); }, 700);
 });
 function addLoop(){
