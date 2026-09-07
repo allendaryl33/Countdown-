@@ -213,6 +213,18 @@ button{font:inherit; color:inherit}
 .tdrow input[type=checkbox]{width:19px; height:19px; accent-color:var(--good); cursor:pointer; flex:none}
 .tdrow .tx{font-family:"Newsreader",Georgia,serif; font-size:16px; line-height:1.4; overflow-wrap:anywhere}
 .tdrow.done .tx{color:var(--faint); text-decoration:line-through}
+.tdrow .tx{cursor:text}
+.tdrow:not(.editing) .tx:hover{text-decoration:underline; text-decoration-style:dotted; text-underline-offset:3px}
+.tdrow.editing{background:var(--surface); box-shadow:var(--shadow); border-radius:4px}
+.ed{display:flex; flex-direction:column; gap:6px; padding:2px 0}
+.ed input[type=text], .ed textarea, .ed select{
+  width:100%; background:var(--surface-2); color:var(--ink); border:1px solid var(--line);
+  border-radius:4px; padding:7px 9px; font-family:"Newsreader",Georgia,serif; font-size:15.5px;
+}
+.ed select{font-family:"Saira",Arial,sans-serif; font-size:14px}
+.ed input:focus, .ed textarea:focus, .ed select:focus{background:var(--surface); border-color:var(--focus); outline:none}
+.ed .lbl{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:10.5px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--faint); margin-bottom:-3px}
 .tdrow .tm{
   font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:12.5px;
   letter-spacing:.05em; color:var(--on-signal); background:var(--signal);
@@ -718,7 +730,7 @@ var state = {
   autoSelect: true,
   pickerOpen: false, pickerMonth: null,
   view: "board", personKey: null, projectId: null,
-  todoCalIds: {}, todoDirty: false, showDropped: false,
+  todoCalIds: {}, todoDirty: false, showDropped: false, editingTodo: null,
   range: 2, watchArgs: {},
   mcp: null, sample: null
 };
@@ -1595,11 +1607,42 @@ function todoList(){
     });
 }
 
+/* Every project and phase, indented, for the move-it-to control. */
+function projectOptions(sel){
+  var rows = projectRows();
+  return '<option value="">\u2014 no project \u2014</option>' + rows.map(function(p){
+    var label = (p.parent ? "\u2003\u203a " : "") + p.name;
+    return '<option value="' + esc(p.id) + '"' + (sel === p.id ? " selected" : "") + ">" +
+      esc(label) + "</option>";
+  }).join("");
+}
+
+function todoEditor(t){
+  var cur = (t.projects || [])[0] || "";
+  return '<div class="tdrow editing" data-td="' + esc(t.key) + '">' +
+    '<input type="checkbox" ' + (t.done ? "checked" : "") + ' aria-label="Mark done">' +
+    '<span class="ed">' +
+      '<span class="lbl">To-do</span>' +
+      '<input type="text" class="ed-title" value="' + esc(t.title || "") + '" aria-label="To-do">' +
+      '<span class="lbl">Notes</span>' +
+      '<textarea class="ed-note" rows="2" placeholder="Anything worth remembering \u2014 a time, a number, why it matters.">' +
+        esc(t.note || "") + "</textarea>" +
+      '<span class="lbl">Project</span>' +
+      '<select class="ed-proj" aria-label="Move to project">' + projectOptions(cur) + "</select>" +
+    "</span>" +
+    '<span class="td-actions">' +
+      '<input type="date" value="' + esc(t.day || "") + '" aria-label="Day for this to-do">' +
+      '<button type="button" class="done-edit">Done</button>' +
+      '<button type="button" class="drop" aria-label="Drop this to-do">Drop</button>' +
+    "</span></div>";
+}
+
 function todoRow(t){
   var bits = [];
   if (t.day) bits.push(esc(shortDay(t.day)));
   if (t.source === "calendar") bits.push('<span class="cal">' + esc(t.calCleared ? "was on calendar" : "from calendar") + "</span>");
   var canClear = t.source === "calendar" && t.done && !t.calCleared && state.mcp;
+  if (state.editingTodo === t.key) return todoEditor(t);
   var tm = timeIn(t.note);
   var extra = t.note ? String(t.note).trim() : "";
   if (tm && extra.replace(/[^A-Za-z0-9]/g, "").length <= 4) extra = "";  /* the note was only the time */
@@ -1631,7 +1674,9 @@ function renderTodos(){
   if (state.view !== "todos") return;
   /* Don't rebuild the list under a date picker someone has open. */
   var ae = document.activeElement;
-  if (ae && ae.closest && ae.closest("#td-list") && ae.type === "date"){
+  if (ae && ae.closest && ae.closest("#td-list") &&
+      (ae.tagName === "TEXTAREA" || ae.tagName === "SELECT" ||
+       (ae.tagName === "INPUT" && ae.type !== "checkbox"))){
     state.todoDirty = true; return;
   }
   state.todoDirty = false;
@@ -1685,6 +1730,28 @@ function newTodo(){
 $("td-add").addEventListener("click", newTodo);
 $("td-new").addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); newTodo(); } });
 
+var edTimer = null;
+/* Save whatever the editor currently holds — both fields, every time. Keying
+   the save to the field that fired loses the other one when you move between
+   them faster than the debounce. */
+function flushTodoEdit(){
+  clearTimeout(edTimer);
+  var row = document.querySelector(".tdrow.editing");
+  if (!row) return;
+  var t = todos.all()[row.dataset.td]; if (!t) return;
+  var ti = row.querySelector(".ed-title"), no = row.querySelector(".ed-note");
+  var patch = {};
+  if (ti && ti.value.trim() && ti.value.trim() !== t.title) patch.title = ti.value.trim();
+  if (no && no.value !== (t.note || "")) patch.note = no.value;
+  if (Object.keys(patch).length) todos.put(t.id || row.dataset.td, patch).catch(function(){});
+}
+function todoEdit(e){
+  var cls = e.target.className || "";
+  if (cls.indexOf("ed-title") < 0 && cls.indexOf("ed-note") < 0) return;
+  clearTimeout(edTimer);
+  edTimer = setTimeout(flushTodoEdit, 700);
+}
+
 function todoAction(e){
   if (e.target.id === "dropped-toggle"){
     state.showDropped = !state.showDropped; renderTodos(); return;
@@ -1693,10 +1760,30 @@ function todoAction(e){
   if (!row) return;
   var t = todos.all()[row.dataset.td]; if (!t) return;
   var id = t.id || row.dataset.td;
+  if (e.target.classList.contains("tx") ||
+      (e.target.closest && e.target.closest(".tx") && !e.target.closest("[data-goproject]"))){
+    if (state.editingTodo && state.editingTodo !== row.dataset.td) flushTodoEdit();
+    state.editingTodo = row.dataset.td; renderTodos(); renderProject();
+    var box = document.querySelector('.tdrow.editing .ed-title');
+    if (box){ box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+    return;
+  }
+  if (e.target.classList.contains("done-edit")){
+    flushTodoEdit();
+    state.editingTodo = null; renderTodos(); renderProject(); return;
+  }
+  if (e.target.classList.contains("ed-proj")){
+    var v = e.target.value;
+    todos.put(id, {projects: v ? [v] : [], projectNames: {}}).catch(function(){});
+    return;
+  }
   if (e.target.type === "checkbox"){
     todos.put(id, {done: e.target.checked, doneAt: e.target.checked ? Date.now() : null}).catch(function(){});
   } else if (e.target.type === "date"){
     todos.put(id, {day: e.target.value || null}).catch(function(){});
+  } else if (e.target.classList.contains("ed-proj")){
+    var pv = e.target.value;
+    todos.put(id, {projects: pv ? [pv] : [], projectNames: {}}).catch(function(){});
   } else if (e.target.classList.contains("drop")){
     var title = t.title;
     todos.put(id, {dropped: true}).catch(function(){});
@@ -1710,6 +1797,13 @@ function todoAction(e){
 }
 $("td-list").addEventListener("click", todoAction);
 $("td-list").addEventListener("change", todoAction);
+$("td-list").addEventListener("input", todoEdit);
+$("pj-detail").addEventListener("input", todoEdit);
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && state.editingTodo){
+    flushTodoEdit(); state.editingTodo = null; renderTodos(); renderProject();
+  }
+});
 $("td-list").addEventListener("focusout", function(){
   setTimeout(function(){ if (state.todoDirty) renderTodos(); }, 0);
 });
