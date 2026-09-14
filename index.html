@@ -243,6 +243,93 @@ textarea.input{resize:vertical;min-height:76px}
 .datenav button{border:0;background:none;padding:6px 10px;border-radius:4px;color:var(--muted)}
 .datenav button:hover{background:#eef2f6;color:var(--text)}
 .datenav .today-lbl{padding:0 10px;font-weight:650;font-size:13.5px;min-width:180px;text-align:center}
+/* mode switch */
+.segmented{display:inline-flex;background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px;gap:2px}
+.segmented button{border:0;background:none;padding:6px 14px;border-radius:4px;color:var(--muted);font-weight:550;font-size:13px}
+.segmented button:hover{background:#eef2f6;color:var(--text)}
+.segmented button.on{background:var(--navy);color:#fff}
+
+/* unscheduled tray */
+.tray{
+  background:var(--orange-soft);border:1px solid #f2d7bd;border-radius:8px;
+  padding:10px 12px;margin-bottom:14px;
+}
+.tray-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.tray-head .nm{font-weight:650;font-size:13px;color:#b95b12}
+.tray-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.tray-strip .minicard{flex:0 0 190px}
+
+/* week grid */
+.weekwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+.weekgrid{display:grid;grid-template-columns:150px repeat(7,minmax(132px,1fr));min-width:1060px}
+.wk-corner{background:#fafcfd;border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:10px 12px}
+.wk-day{
+  background:#fafcfd;border-bottom:1px solid var(--line);border-right:1px solid var(--line);
+  padding:8px 10px;text-align:center;
+}
+.wk-day:last-child{border-right:0}
+.wk-day .dn{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650}
+.wk-day .dd{font-size:17px;font-weight:700;letter-spacing:-.01em;margin-top:1px;font-variant-numeric:tabular-nums}
+.wk-day.today .dd{color:var(--orange)}
+.wk-day.today{background:var(--orange-soft)}
+.wk-techcell{
+  border-bottom:1px solid #eef2f6;border-right:1px solid var(--line);padding:10px 12px;
+  display:flex;gap:8px;align-items:flex-start;background:#fafcfd;
+}
+.wk-techcell .nm{font-weight:600;font-size:13px;line-height:1.25}
+.wk-cell{
+  border-bottom:1px solid #eef2f6;border-right:1px solid #eef2f6;padding:6px;
+  min-height:74px;display:flex;flex-direction:column;gap:5px;
+}
+.wk-cell:nth-child(8n+1){border-right:1px solid var(--line)}
+.wk-cell.today{background:#fffaf5}
+.wk-cell.dragover{background:#e2eef7;outline:2px dashed var(--blue);outline-offset:-3px}
+.wk-row-unassigned .wk-cell{background:#fdf6ef}
+.wk-row-unassigned .wk-cell.dragover{background:#e2eef7}
+
+/* month grid */
+.monthgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.mo-head{
+  background:#fafcfd;border-bottom:1px solid var(--line);padding:8px 10px;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650;text-align:center;
+}
+.mo-cell{
+  border-bottom:1px solid #eef2f6;border-right:1px solid #eef2f6;padding:6px 7px;
+  min-height:108px;display:flex;flex-direction:column;gap:4px;
+}
+.mo-cell:nth-child(7n){border-right:0}
+.mo-cell.out{background:#fafbfc}
+.mo-cell.out .dnum{color:var(--muted-2)}
+.mo-cell.today{background:#fffaf5}
+.mo-cell.dragover{background:#e2eef7;outline:2px dashed var(--blue);outline-offset:-3px}
+.mo-cell .dtop{display:flex;align-items:center;gap:5px}
+.mo-cell .dnum{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
+.mo-cell.today .dnum{color:var(--orange)}
+.mo-cell .dcount{margin-left:auto;font-size:10.5px;color:var(--muted);font-weight:600}
+.mo-more{font-size:11px;color:var(--blue);font-weight:600;cursor:pointer;padding-left:2px}
+.mo-more:hover{text-decoration:underline}
+.mo-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-bottom:10px;font-size:12px;color:var(--muted)}
+.mo-legend .lg-item{display:inline-flex;align-items:center;gap:6px}
+.mo-legend .lg-dot{width:8px;height:8px;border-radius:50%;flex:0 0 8px}
+
+/* compact card used in week + month + tray */
+.minicard{
+  background:#fff;border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:5px;
+  padding:5px 7px;cursor:grab;font-size:11.5px;line-height:1.35;
+}
+.minicard:hover{border-color:#c6d2de;box-shadow:0 1px 4px rgba(16,36,56,.1)}
+.minicard.dragging{opacity:.4}
+.minicard.pri-Emergency{border-left-color:var(--red)}
+.minicard.pri-High{border-left-color:var(--orange)}
+.minicard.pri-Low{border-left-color:#c3ccd6}
+.minicard.st-complete{border-left-color:var(--green);background:#fbfdfc}
+.minicard.st-cancelled{opacity:.5}
+.minicard .mc-top{display:flex;align-items:center;gap:5px}
+.minicard .mc-win{font-weight:700;color:var(--navy);font-size:10.5px;white-space:nowrap}
+.minicard .mc-dot{width:7px;height:7px;border-radius:50%;flex:0 0 7px;margin-left:auto}
+.minicard .mc-cust{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.minicard .mc-type{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 .board{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
 .col{
   flex:1 1 238px;min-width:238px;max-width:340px;background:#eaeff4;border-radius:8px;padding:8px;min-height:180px;
@@ -494,6 +581,54 @@ function addDays(s, n){
   d.setDate(d.getDate() + n);
   return ymd(d);
 }
+function addMonths(s, n){
+  const d = parseYmd(s) || new Date();
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, last));
+  return ymd(d);
+}
+/* Weeks run Sunday to Saturday, the way a US wall calendar does. */
+function startOfWeek(s){
+  const d = parseYmd(s) || new Date();
+  d.setDate(d.getDate() - d.getDay());
+  return ymd(d);
+}
+function weekDays(s){
+  const a = startOfWeek(s);
+  return Array.from({ length:7 }, (_, i) => addDays(a, i));
+}
+/* Whole weeks covering the anchor's month, so the grid always has full rows. */
+function monthCells(s){
+  const d = parseYmd(s) || new Date();
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const daysIn = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  const weeks = Math.ceil((first.getDay() + daysIn) / 7);
+  let cur = startOfWeek(ymd(first));
+  const cells = [];
+  for (let i = 0; i < weeks * 7; i++){ cells.push(cur); cur = addDays(cur, 1); }
+  return cells;
+}
+function sameMonth(a, b){
+  const x = parseYmd(a), y = parseYmd(b);
+  return !!x && !!y && x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth();
+}
+function fmtMonth(s){
+  const d = parseYmd(s);
+  return d ? d.toLocaleDateString(undefined, { month:"long", year:"numeric" }) : "—";
+}
+function fmtWeekRange(s){
+  const days = weekDays(s);
+  const a = parseYmd(days[0]), b = parseYmd(days[6]);
+  const sameY = a.getFullYear() === b.getFullYear();
+  const left = a.toLocaleDateString(undefined, { month:"short", day:"numeric" });
+  const right = b.toLocaleDateString(undefined,
+    sameY && a.getMonth() === b.getMonth() ? { day:"numeric" } : { month:"short", day:"numeric" });
+  return `${left} – ${right}, ${b.getFullYear()}`;
+}
+
 function fmtDate(s, opts){
   const d = parseYmd(s);
   if (!d) return "—";
@@ -834,6 +969,18 @@ const Store = {
     // Assigning a brand-new job is what actually schedules it.
     if (techId && job.status === "new" && job.scheduledDate) job.status = "scheduled";
     if (!techId && job.status === "scheduled") job.status = "new";
+    this.save();
+  },
+
+  setDate(job, dateStr){
+    const prev = job.scheduledDate;
+    if (prev === dateStr) return;
+    job.scheduledDate = dateStr || null;
+    this.addLog(job, dateStr
+      ? `Moved to ${fmtDate(dateStr, { weekday:"long", month:"long", day:"numeric" })}`
+      : "Taken off the schedule");
+    if (dateStr && job.status === "new" && job.techId) job.status = "scheduled";
+    if (!dateStr && job.status === "scheduled") job.status = "new";
     this.save();
   },
 
@@ -1284,6 +1431,7 @@ const App = {
   filters: { status:"", techId:"", type:"", when:"upcoming" },
   estFilter: "open",
   waiverTab: "templates",
+  scheduleMode: "day",
   customerSort: "name"
 };
 
@@ -1578,37 +1726,85 @@ function viewDashboard(){
    View: Schedule board (drag a job onto a technician)
    ============================================================ */
 function viewSchedule(){
+  const mode = App.scheduleMode;
+  const label = mode === "day" ? fmtDateLong(App.date)
+              : mode === "week" ? fmtWeekRange(App.date)
+              : fmtMonth(App.date);
+  const seg = (id, txt) =>
+    `<button class="${mode===id?"on":""}" data-smode="${id}">${esc(txt)}</button>`;
+
+  // Jobs with no date at all have nowhere to sit on the board — park them
+  // above it so they can be dragged onto a day.
+  const loose = Store.data.jobs.filter(j => !j.scheduledDate && isOpen(j));
+
+  const body = mode === "day" ? dayBoard() : mode === "week" ? weekGrid() : monthGrid();
+
+  return `
+  <div class="board-bar">
+    <div class="segmented">${seg("day","Day")}${seg("week","Week")}${seg("month","Month")}</div>
+    <div class="datenav">
+      <button data-date="prev" title="Previous ${esc(mode)}">‹</button>
+      <span class="today-lbl">${esc(label)}</span>
+      <button data-date="next" title="Next ${esc(mode)}">›</button>
+    </div>
+    <button class="btn sm" data-date="today">Today</button>
+    ${mode==="day" ? `<input class="input" type="date" style="width:auto" id="board-date" value="${esc(App.date)}">` : ""}
+    <div class="spacer" style="flex:1"></div>
+    <span class="filter-note">${esc(scheduleHint(mode))}</span>
+    ${mode==="day" ? `<button class="btn sm" data-action="print-board">🖨 Tickets</button>` : ""}
+    <button class="btn sm accent" data-action="new-job">＋ New Job</button>
+  </div>
+
+  ${loose.length ? `
+    <div class="tray">
+      <div class="tray-head">
+        <span class="nm">⚠ ${loose.length} job${loose.length===1?"":"s"} with no date</span>
+        <span class="t-sub" style="font-size:12px">— drag one onto a day to schedule it</span>
+      </div>
+      <div class="tray-strip">
+        ${loose.map(j => miniCard(j, { showDate:false })).join("")}
+      </div>
+    </div>` : ""}
+
+  ${body}`;
+}
+
+function scheduleHint(mode){
+  const n = (list) => list.length;
+  if (mode === "day"){
+    const c = n(Store.data.jobs.filter(j => j.scheduledDate === App.date));
+    return `${c} job${c===1?"":"s"} · drag a card onto a technician to assign`;
+  }
+  if (mode === "week"){
+    const days = weekDays(App.date);
+    const c = n(Store.data.jobs.filter(j => days.includes(j.scheduledDate)));
+    return `${c} job${c===1?"":"s"} this week · drag to change the day or the tech`;
+  }
+  const c = n(Store.data.jobs.filter(j => sameMonth(j.scheduledDate, App.date)));
+  return `${c} job${c===1?"":"s"} this month · click a day to open it`;
+}
+
+function sortForBoard(list){
+  return list.slice().sort((a,b) => {
+    const w = WINDOWS.indexOf(a.window) - WINDOWS.indexOf(b.window);
+    return w !== 0 ? w : PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
+  });
+}
+
+/* ---------- Day: a column per technician ---------- */
+function dayBoard(){
   const d = App.date;
   const dayJobs = Store.data.jobs.filter(j => j.scheduledDate === d);
   const cols = [
     { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
     ...Store.activeTechs().map(t => ({ key:t.id, name:t.name, color:t.color, skill:t.skill }))
   ];
-  const sortJobs = list => list.slice().sort((a,b) => {
-    const w = WINDOWS.indexOf(a.window) - WINDOWS.indexOf(b.window);
-    return w !== 0 ? w : PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
-  });
-
   return `
-  <div class="board-bar">
-    <div class="datenav">
-      <button data-date="prev" title="Previous day">‹</button>
-      <span class="today-lbl">${esc(fmtDateLong(d))}</span>
-      <button data-date="next" title="Next day">›</button>
-    </div>
-    <button class="btn sm" data-date="today">Today</button>
-    <input class="input" type="date" style="width:auto" id="board-date" value="${esc(d)}">
-    <div class="spacer" style="flex:1"></div>
-    <span class="filter-note">${dayJobs.length} job${dayJobs.length===1?"":"s"} · drag a card onto a technician to assign</span>
-    <button class="btn sm" data-action="print-board">🖨 Tickets</button>
-    <button class="btn sm accent" data-action="new-job">＋ New Job</button>
-  </div>
-
   <div class="board">
     ${cols.map(c => {
-      const list = sortJobs(dayJobs.filter(j => (j.techId||"") === c.key));
+      const list = sortForBoard(dayJobs.filter(j => (j.techId||"") === c.key));
       return `
-      <div class="col ${c.unassigned?'unassigned':''}" data-col="${esc(c.key)}">
+      <div class="col ${c.unassigned?'unassigned':''}" data-drop data-drop-tech="${esc(c.key)}" data-drop-date="${esc(d)}">
         <div class="col-head">
           <span class="avatar" style="background:${esc(c.color)}">${c.unassigned?"?":esc(initials(c.name))}</span>
           <div>
@@ -1622,6 +1818,102 @@ function viewSchedule(){
       </div>`;
     }).join("")}
   </div>`;
+}
+
+/* ---------- Week: technicians down, days across ---------- */
+function weekGrid(){
+  const days = weekDays(App.date);
+  const today = todayStr();
+  const inWeek = Store.data.jobs.filter(j => days.includes(j.scheduledDate));
+  const rows = [
+    { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
+    ...Store.activeTechs().map(t => ({ key:t.id, name:t.name, color:t.color, skill:t.skill }))
+  ];
+
+  const head = `<div class="wk-corner"></div>` + days.map(d => {
+    const dt = parseYmd(d);
+    return `<div class="wk-day ${d===today?"today":""}">
+      <div class="dn">${esc(dt.toLocaleDateString(undefined,{weekday:"short"}))}</div>
+      <div class="dd">${dt.getDate()}</div>
+    </div>`;
+  }).join("");
+
+  const body = rows.map(r => {
+    const mine = inWeek.filter(j => (j.techId||"") === r.key);
+    return `<div class="wk-techcell">
+        <span class="avatar" style="background:${esc(r.color)}">${r.unassigned?"?":esc(initials(r.name))}</span>
+        <div><div class="nm">${esc(r.name)}</div>
+          <div class="t-sub" style="font-size:11px">${mine.length} this week</div></div>
+      </div>` +
+      days.map(d => {
+        const list = sortForBoard(mine.filter(j => j.scheduledDate === d));
+        return `<div class="wk-cell ${d===today?"today":""}" data-drop
+                     data-drop-tech="${esc(r.key)}" data-drop-date="${esc(d)}">
+          ${list.map(j => miniCard(j, { showTech:false })).join("")}
+        </div>`;
+      }).join("");
+  }).join("");
+
+  return `<div class="weekwrap"><div class="weekgrid">${head}${body}</div></div>`;
+}
+
+/* ---------- Month: a calendar, colour-coded by technician ---------- */
+function monthGrid(){
+  const cells = monthCells(App.date);
+  const today = todayStr();
+  const PER_CELL = 3;
+  const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  const legend = Store.activeTechs().map(t =>
+    `<span class="lg-item"><span class="lg-dot" style="background:${esc(t.color)}"></span>${esc(t.name)}</span>`).join("")
+    + `<span class="lg-item"><span class="lg-dot" style="background:#c3ccd6"></span>Unassigned</span>`;
+
+  return `<div class="mo-legend">${legend}</div>
+  <div class="monthgrid">
+    ${names.map(n => `<div class="mo-head">${esc(n)}</div>`).join("")}
+    ${cells.map(d => {
+      const list = sortForBoard(Store.data.jobs.filter(j => j.scheduledDate === d));
+      const shown = list.slice(0, PER_CELL);
+      const rest = list.length - shown.length;
+      return `<div class="mo-cell ${sameMonth(d, App.date)?"":"out"} ${d===today?"today":""}"
+                   data-drop data-drop-date="${esc(d)}" data-goday="${esc(d)}" title="Open ${esc(fmtDate(d))}">
+        <div class="dtop">
+          <span class="dnum">${parseYmd(d).getDate()}</span>
+          ${list.length?`<span class="dcount">${list.length}</span>`:""}
+        </div>
+        ${shown.map(j => miniCard(j, { compact:true })).join("")}
+        ${rest > 0 ? `<div class="mo-more" data-goday="${esc(d)}">+${rest} more</div>` : ""}
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
+/* One compact card, used in the week grid, the month grid and the tray. */
+function miniCard(j, opts){
+  opts = opts || {};
+  const tech = Store.tech(j.techId);
+  return `
+  <div class="minicard pri-${esc(j.priority)} st-${esc(j.status)}" draggable="true" data-job="${j.id}">
+    <div class="mc-top">
+      <span class="mc-win">${esc(opts.compact ? shortWindow(j.window) : j.window)}</span>
+      ${opts.showTech === false ? "" :
+        (tech ? `<span class="mc-dot" style="background:${esc(tech.color)}" title="${esc(tech.name)}"></span>`
+              : `<span class="mc-dot" style="background:#c3ccd6" title="Unassigned"></span>`)}
+    </div>
+    <div class="mc-cust">${esc(custName(j.customerId))}</div>
+    <div class="mc-type">${esc(j.type)}</div>
+  </div>`;
+}
+
+/* "8:00–10:00" is too wide for a month cell; "8a" is enough. */
+function shortWindow(w){
+  if (!w) return "";
+  if (w.startsWith("ASAP")) return "ASAP";
+  if (w === "Anytime") return "Any";
+  const m = /^(\d+):(\d+)/.exec(w);
+  if (!m) return w;
+  const h = Number(m[1]);
+  return h + (h >= 8 && h < 12 ? "a" : "p");
 }
 
 function jobCardHtml(j){
@@ -1641,35 +1933,53 @@ function jobCardHtml(j){
 function wireBoard(){
   let draggedId = null;
 
-  $$(".jobcard").forEach(card => {
+  $$("[data-job][draggable='true']").forEach(card => {
     card.addEventListener("dragstart", e => {
       draggedId = card.dataset.job;
       card.classList.add("dragging");
       e.dataTransfer.effectAllowed = "move";
-      // Some browsers need data set for the drag to start at all.
+      // Some browsers won't start a drag unless data is set.
       try { e.dataTransfer.setData("text/plain", draggedId); } catch(_){}
     });
     card.addEventListener("dragend", () => {
       draggedId = null;
       card.classList.remove("dragging");
-      $$(".col").forEach(c => c.classList.remove("dragover"));
+      $$("[data-drop]").forEach(c => c.classList.remove("dragover"));
     });
   });
 
-  $$(".col").forEach(col => {
-    col.addEventListener("dragover", e => { e.preventDefault(); e.dataTransfer.dropEffect="move"; col.classList.add("dragover"); });
-    col.addEventListener("dragleave", () => col.classList.remove("dragover"));
-    col.addEventListener("drop", e => {
+  $$("[data-drop]").forEach(cell => {
+    cell.addEventListener("dragover", e => {
       e.preventDefault();
-      col.classList.remove("dragover");
+      e.dataTransfer.dropEffect = "move";
+      cell.classList.add("dragover");
+    });
+    cell.addEventListener("dragleave", () => cell.classList.remove("dragover"));
+    cell.addEventListener("drop", e => {
+      e.preventDefault();
+      cell.classList.remove("dragover");
       const id = draggedId || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
       const job = id && Store.job(id);
       if (!job) return;
-      const techId = col.dataset.col || null;
-      if ((job.techId||"") === (techId||"")) return;
-      Store.assign(job, techId);
+
+      // A cell can carry a date, a technician, or both. Whatever it names,
+      // the job takes; anything it doesn't name is left alone.
+      const newDate = cell.dataset.dropDate;
+      const hasTech = Object.prototype.hasOwnProperty.call(cell.dataset, "dropTech");
+      const newTech = hasTech ? (cell.dataset.dropTech || null) : job.techId;
+
+      const dateChanged = newDate != null && newDate !== job.scheduledDate;
+      const techChanged = hasTech && (newTech || "") !== (job.techId || "");
+      if (!dateChanged && !techChanged) return;
+
+      if (dateChanged) Store.setDate(job, newDate);
+      if (techChanged) Store.assign(job, newTech);
       render();
-      toast(techId ? `#${job.no} → ${Store.tech(techId).name}` : `#${job.no} moved to Unassigned`, "ok");
+
+      const bits = [];
+      if (techChanged) bits.push(newTech ? Store.tech(newTech).name : "Unassigned");
+      if (dateChanged) bits.push(fmtDate(newDate));
+      toast(`#${job.no} → ${bits.join(" · ")}`, "ok");
     });
   });
 }
@@ -3702,11 +4012,21 @@ document.addEventListener("click", e => {
   const nav = hit("[data-nav]");
   if (nav){ App.search = ""; $("#global-search").value = ""; return go(nav.dataset.nav); }
 
-  /* --- date navigation --- */
+  /* --- schedule mode --- */
+  const sm = hit("[data-smode]");
+  if (sm){ App.scheduleMode = sm.dataset.smode; return render(); }
+
+  /* --- date navigation, stepped by whichever view is showing --- */
   const dn = hit("[data-date]");
   if (dn){
     const k = dn.dataset.date;
-    App.date = k === "today" ? todayStr() : addDays(App.date, k === "next" ? 1 : -1);
+    if (k === "today"){ App.date = todayStr(); }
+    else {
+      const dir = k === "next" ? 1 : -1;
+      App.date = App.scheduleMode === "month" ? addMonths(App.date, dir)
+               : App.scheduleMode === "week"  ? addDays(App.date, dir * 7)
+               : addDays(App.date, dir);
+    }
     return render();
   }
 
@@ -3955,8 +4275,17 @@ document.addEventListener("click", e => {
 
   /* --- generic row / card open (last) --- */
   const estEl = hit("[data-estimate]"); if (estEl) return openEstimate(estEl.dataset.estimate);
+
   const jobEl = hit("[data-job]");   if (jobEl) return openJob(jobEl.dataset.job);
   const cusEl = hit("[data-customer]"); if (cusEl) return openCustomer(cusEl.dataset.customer);
+  /* Opening a day from the month grid — after the card handlers above, so
+     clicking a job opens the job rather than the day underneath it. */
+  const gd = hit("[data-goday]");
+  if (gd){
+    App.date = gd.dataset.goday;
+    App.scheduleMode = "day";
+    return render();
+  }
 
   /* --- toolbar actions --- */
   const act = hit("[data-action]");

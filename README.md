@@ -12,9 +12,18 @@ connection required.
 **Dashboard** — today at a glance: job counts, open emergencies, anything still
 without a technician, and the day laid out tech by tech.
 
-**Schedule board** — a column per technician plus an Unassigned column. Drag a
-job card onto a technician to assign it; dropping a new job onto a tech marks it
-Scheduled. Step forward and back through days, or jump to any date.
+**Schedule** — three views of the same work, switched from the toolbar:
+
+- **Day** — a column per technician plus an Unassigned column. Drag a job card
+  onto a technician to assign it.
+- **Week** — technicians down the side, the seven days across. Drag a job to
+  another cell to change the day, the technician, or both at once.
+- **Month** — a calendar coloured by technician, with a legend. Click any day to
+  open it in Day view. Drag a job to another date to move it.
+
+The arrows step by whatever you're looking at — a day, a week, or a month — and
+**Today** always brings you back. Jobs with no date at all sit in a strip above
+the board so they can be dragged onto a day and scheduled.
 
 **Estimates** — quote work before it's agreed to. An estimate can go to someone
 who isn't a customer yet, so quoting ten people doesn't leave ten names in your
