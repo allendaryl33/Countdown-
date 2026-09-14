@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Park City Plumbing — Service Dispatch</title>
+<title>Park City Plumbing Inc. — Service Dispatch</title>
 <style>
 :root{
   --navy:#0f2740; --navy-2:#16354f;
@@ -40,7 +40,7 @@ a{color:var(--blue)}
   width:30px;height:30px;border-radius:7px;background:var(--orange);
   display:grid;place-items:center;font-size:16px;flex:0 0 30px;
 }
-.brand .name{color:#fff;font-weight:700;font-size:14px;line-height:1.15;letter-spacing:-.01em}
+.brand .name{color:#fff;font-weight:700;font-size:14px;line-height:1.2;letter-spacing:-.01em;text-wrap:balance}
 .brand .sub{font-size:11px;color:#8ba2b9;letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
 nav{padding:10px 10px;flex:1;overflow:auto}
 nav .nav-label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#6f88a1;padding:12px 8px 6px}
@@ -339,7 +339,7 @@ textarea.input{resize:vertical;min-height:76px}
       <div class="mark">
         <div class="logo">🔧</div>
         <div>
-          <div class="name">Park City<br>Plumbing</div>
+          <div class="name" id="brand-name">Park City Plumbing Inc.</div>
         </div>
       </div>
       <div class="sub">Service Dispatch</div>
@@ -375,7 +375,7 @@ textarea.input{resize:vertical;min-height:76px}
 <script>
 "use strict";
 /* ============================================================
-   Park City Plumbing — Service Dispatch
+   Park City Plumbing Inc. — Service Dispatch
    Single-file prototype. All data persists to localStorage.
    ============================================================ */
 
@@ -566,6 +566,11 @@ const Store = {
           this.data.counterWaiver   = this.data.counterWaiver   || 5000;
           // Added with payment tracking — older jobs have no payment block.
           this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
+          // Incorporated: bring the stored name up to date, but never overwrite
+          // a name the office set themselves.
+          if (this.data.settings && this.data.settings.company === "Park City Plumbing"){
+            this.data.settings.company = "Park City Plumbing Inc.";
+          }
           return;
         }
       } catch(e){ console.warn("Saved data was unreadable; starting fresh.", e); }
@@ -994,7 +999,7 @@ function seedData(){
     version: 2,
     counter: n,
     counterEst: en,
-    settings: { company:"Park City Plumbing", laborRate:145, phone:"(435) 555-0100" },
+    settings: { company:"Park City Plumbing Inc.", laborRate:145, phone:"(435) 555-0100" },
     counterWaiver: 5000,
     techs, customers, jobs, estimates,
     priceBook: seedPriceBook(),
@@ -1301,6 +1306,7 @@ function go(view){
 }
 
 function render(){
+  renderBrand();
   renderNav();
   const v = VIEWS.find(x => x.id === App.view) || VIEWS[0];
   $("#crumb").textContent = v.crumb;
@@ -1322,6 +1328,11 @@ function render(){
     }
   }
   if (App.view === "schedule" && !App.search.trim()) wireBoard();
+}
+
+function renderBrand(){
+  const el = $("#brand-name");
+  if (el) el.textContent = Store.data.settings.company || "Park City Plumbing Inc.";
 }
 
 function renderNav(){
@@ -3669,7 +3680,7 @@ function importJson(file){
       Store.data = parsed;
       Store.data.techs     = Store.data.techs     || [];
       Store.data.customers = Store.data.customers || [];
-      Store.data.settings  = Store.data.settings  || { company:"Park City Plumbing", laborRate:145, phone:"" };
+      Store.data.settings  = Store.data.settings  || { company:"Park City Plumbing Inc.", laborRate:145, phone:"" };
       Store.save(); render();
       toast("Backup restored", "ok");
     } catch(e){
@@ -3972,7 +3983,7 @@ document.addEventListener("click", e => {
     case "import":     $("#import-file").click(); break;
     case "save-settings": {
       const s = Store.data.settings;
-      s.company = $("#set-company").value.trim() || "Park City Plumbing";
+      s.company = $("#set-company").value.trim() || "Park City Plumbing Inc.";
       s.phone   = $("#set-phone").value.trim();
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");

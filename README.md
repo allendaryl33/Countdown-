@@ -1,4 +1,4 @@
-# Park City Plumbing — Service Dispatch
+# Park City Plumbing Inc. — Service Dispatch
 
 A dispatch board for the office: take service calls, put jobs on the schedule,
 assign technicians, and track each job from the phone call to a signed ticket.
