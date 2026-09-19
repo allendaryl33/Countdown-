@@ -385,8 +385,28 @@ button{font:inherit; color:inherit}
 .mcell .more{font-size:10.5px; color:var(--faint); font-family:"Saira Condensed",Arial,sans-serif}
 .mtodo{
   align-self:flex-start; font-family:"Saira Condensed",Arial,sans-serif; font-weight:700;
-  font-size:10px; letter-spacing:.06em; color:var(--on-signal); background:var(--signal);
-  border-radius:3px; padding:0 4px; margin-top:auto;
+  font-size:10px; letter-spacing:.06em; color:var(--ink-2); background:var(--sunk);
+  border:1px solid var(--line); border-radius:3px; padding:0 4px; margin-top:auto;
+}
+.mtodo::before{content:"\2610\00a0"; font-weight:400}
+
+/* ---- legend: nothing on the grid should need guessing ---- */
+.mlegend{
+  display:flex; flex-wrap:wrap; gap:6px 18px; align-items:center;
+  padding:10px 16px 0 0; font-size:12px; color:var(--muted);
+}
+.mlegend span{display:flex; align-items:center; gap:6px}
+.mlegend i{font-style:normal}
+.mlegend .k-today{
+  width:17px; height:17px; border-radius:50%; background:var(--signal); color:var(--on-signal);
+  display:flex; align-items:center; justify-content:center; flex:none;
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:10.5px;
+}
+.mlegend .k-dot{width:7px; height:7px; border-radius:2px; background:var(--muted); flex:none}
+.mlegend .k-todo{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:10px;
+  color:var(--ink-2); background:var(--sunk); border:1px solid var(--line);
+  border-radius:3px; padding:0 4px; flex:none;
 }
 @media (max-width:760px){
   .mcell{min-height:56px; padding:4px 3px}
@@ -992,7 +1012,7 @@ function renderMonth(){
     var cls = "mcell" + (out ? " out" : "") + (k === today ? " today" : "");
     html += '<button class="' + cls + '" type="button" data-day="' + k +
             '" aria-pressed="' + (k === state.pickedDay) + '">' +
-      '<span class="dn">' + d.getDate() + "</span>" +
+      '<span class="dn"' + (k === today ? ' title="Today"' : "") + ">" + d.getDate() + "</span>" +
       '<span class="mrow-dots">' +
         list.slice(0, 3).map(function(ev){
           return '<span class="mev"><span class="dot" style="background:' + ev.color + '"></span>' +
@@ -1000,10 +1020,18 @@ function renderMonth(){
         }).join("") +
       "</span>" +
       (list.length > 3 ? '<span class="more">+' + (list.length - 3) + " more</span>" : "") +
-      (td.length ? '<span class="mtodo">' + td.length + "</span>" : "") +
+      (td.length ? '<span class="mtodo" title="' + td.length + " to-do" + (td.length===1?"":"s") +
+        ' due">' + td.length + "</span>" : "") +
     "</button>";
   }
   html += "</div>";
+
+  html += '<div class="mlegend">' +
+    '<span><i class="k-today">' + (new Date()).getDate() + "</i>today</span>" +
+    '<span><i class="k-dot"></i>a block, in its calendar colour</span>' +
+    '<span><i class="k-todo">2</i>to-dos due that day</span>' +
+    "<span>tap a day for its blocks</span>" +
+  "</div>";
 
   /* the picked day's blocks, so a write-up is still one tap away */
   var pick = state.pickedDay, picked = pick ? (byDay[pick] || []) : [];
