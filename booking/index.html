@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come see us</title>
+<meta name="description" content="Find a time to come by.">
+<meta property="og:title" content="Come see us">
+<meta property="og:description" content="Here's roughly when I'm around. Grab whatever suits.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Saira+Condensed:wght@600;700&display=swap">
+<style>
+/* ─────────────────────────────────────────────────────────────
+   EDIT THESE FOUR THINGS. Nothing else needs touching.
+   They live in the <script> at the bottom of this file.
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --paper:#F0EFEC; --card:#FFFFFF; --sunk:#E7E6E1;
+  --ink:#1E1D1A; --ink-2:#454340; --muted:#6E6D67; --faint:#9A988F;
+  --line:#DDDCD6; --line-2:#E8E7E2;
+  --signal:#B35309; --signal-soft:#F7E7D4;
+  --shadow:0 1px 2px rgba(36,31,25,.05), 0 14px 40px -20px rgba(36,31,25,.28);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#16130F; --card:#1F1B16; --sunk:#241F19;
+    --ink:#F0EAE0; --ink-2:#D2C8BA; --muted:#9C9081; --faint:#6E6558;
+    --line:#332C24; --line-2:#292219;
+    --signal:#F0A85A; --signal-soft:#33230F;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 16px 44px -22px rgba(0,0,0,.8);
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Newsreader",Georgia,serif; font-size:19px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:560px; margin:0 auto; padding:56px 22px 72px}
+@media (max-width:520px){ .wrap{padding:36px 20px 56px} }
+.eyebrow{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:12px;
+  letter-spacing:.18em; text-transform:uppercase; color:var(--faint);
+}
+h1{
+  font-size:clamp(38px,9vw,52px); line-height:1.04; font-weight:600;
+  margin:10px 0 0; letter-spacing:-.015em; text-wrap:balance;
+}
+.lede{font-size:20px; color:var(--ink-2); margin:18px 0 0; text-wrap:pretty}
+.card{
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  box-shadow:var(--shadow); padding:22px 24px; margin:34px 0 0;
+}
+@media (max-width:520px){ .card{padding:20px 18px} }
+.when{list-style:none; margin:12px 0 0; padding:0}
+.when li{
+  display:flex; gap:14px; align-items:baseline;
+  padding:11px 0; border-top:1px solid var(--line-2);
+}
+.when li:first-child{border-top:0; padding-top:4px}
+.when .day{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:14px;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--signal);
+  flex:none; width:7.2em; padding-top:3px;
+}
+.when .what{color:var(--ink-2); font-size:18px}
+.actions{display:flex; flex-direction:column; gap:12px; margin:30px 0 0}
+.btn{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  padding:17px 22px; border-radius:10px; text-decoration:none; cursor:pointer;
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:16.5px;
+  letter-spacing:.06em; text-transform:uppercase; border:1px solid transparent;
+  transition:transform .08s ease;
+}
+.btn:active{transform:translateY(1px)}
+.btn.go{background:var(--ink); color:var(--paper)}
+.btn.go:hover{opacity:.9}
+.btn.alt{background:var(--card); color:var(--ink); border-color:var(--line)}
+.btn.alt:hover{border-color:var(--muted)}
+.reassure{
+  display:flex; gap:11px; align-items:flex-start; margin:30px 0 0;
+  padding:15px 17px; background:var(--sunk); border-radius:9px;
+  font-size:16px; color:var(--ink-2); line-height:1.5;
+}
+.reassure .mark{color:var(--signal); font-weight:600; flex:none}
+.sign{margin:38px 0 0; font-size:18px; color:var(--muted); font-style:italic}
+.foot{margin:30px 0 0; font-size:14.5px; color:var(--faint); line-height:1.5}
+a{color:inherit}
+.setup{
+  margin:34px 0 0; padding:16px 18px; border:1px dashed var(--signal);
+  border-radius:9px; background:var(--signal-soft); color:var(--ink-2); font-size:16px;
+}
+.setup b{font-family:"Saira Condensed",Arial,sans-serif; letter-spacing:.04em}
+.setup code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:14px;
+  background:var(--card); padding:1px 5px; border-radius:4px; border:1px solid var(--line);
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <span class="eyebrow" id="eyebrow">Daryl &amp; Jess</span>
+  <h1 id="heading">Come see us.</h1>
+  <p class="lede" id="lede">
+    No need to ask first, and no need to work around us — if a time is showing, it genuinely works.
+  </p>
+
+  <section class="card">
+    <span class="eyebrow">When we're usually around</span>
+    <ul class="when" id="when"></ul>
+  </section>
+
+  <div class="actions">
+    <a class="btn go" id="book" href="#">Find a time</a>
+    <a class="btn alt" id="text" href="#">Or just text me</a>
+  </div>
+
+  <p class="reassure">
+    <span class="mark">&#9679;</span>
+    <span id="reassure">This only shows the times I'm free — it can't see what's in my calendar,
+    and nothing you pick tells you anything about the rest of my week.</span>
+  </p>
+
+  <p class="sign" id="sign">See you soon.</p>
+
+  <div class="setup" id="setup" hidden>
+    <b>Setup, only you can see this.</b><br>
+    Open <code>booking/index.html</code> and fill in <code>SETTINGS</code> at the bottom.
+    Make the booking link in Google&nbsp;Calendar: <b>Create &rarr; Appointment schedule</b>,
+    then copy its public booking page URL.
+  </div>
+
+  <p class="foot" id="foot"></p>
+</main>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   THE ONLY PART TO EDIT
+   ───────────────────────────────────────────────────────────── */
+const SETTINGS = {
+  // Paste the public link from Google Calendar → Create → Appointment schedule.
+  // Leave empty and the page quietly falls back to "just text me".
+  bookingUrl: "",
+
+  // Your number, digits only, with country code. Leave empty to hide the text option.
+  textNumber: "",
+
+  // What the page says.
+  eyebrow: "Daryl & Jess",
+  heading: "Come see us.",
+  lede: "No need to ask first, and no need to work around us — if a time is showing, it genuinely works.",
+  signoff: "See you soon.",
+
+  // Roughly when you're around. Keep it short and honest; the booking page has the real slots.
+  windows: [
+    ["Tuesdays",  "evenings, after the little one's down"],
+    ["Thursdays", "evenings"],
+    ["Saturdays", "mornings, before the yard work starts"]
+  ],
+
+  // Prefilled text message.
+  textMessage: "Hey Daryl — when are you around?"
+};
+
+(function(){
+  const $ = (id) => document.getElementById(id);
+  const set = (id, v) => { const el = $(id); if (el && v) el.textContent = v; };
+
+  set("eyebrow", SETTINGS.eyebrow);
+  set("heading", SETTINGS.heading);
+  set("lede", SETTINGS.lede);
+  set("sign", SETTINGS.signoff);
+  if (SETTINGS.heading) document.title = SETTINGS.heading;
+
+  $("when").innerHTML = (SETTINGS.windows || []).map(function(w){
+    return '<li><span class="day"></span><span class="what"></span></li>';
+  }).join("");
+  Array.prototype.forEach.call($("when").children, function(li, i){
+    li.querySelector(".day").textContent = SETTINGS.windows[i][0];
+    li.querySelector(".what").textContent = SETTINGS.windows[i][1];
+  });
+
+  const book = $("book"), text = $("text");
+  const num = String(SETTINGS.textNumber || "").replace(/[^\d+]/g, "");
+
+  if (SETTINGS.bookingUrl){
+    book.href = SETTINGS.bookingUrl;
+    book.rel = "noopener";
+  } else {
+    /* No booking link yet — texting becomes the way in, rather than a dead button. */
+    book.hidden = true;
+    $("reassure").textContent =
+      "Easiest is just to message me — I'll find something that works for both of us.";
+    $("setup").hidden = false;
+  }
+
+  if (num){
+    text.href = "sms:" + num + "?&body=" + encodeURIComponent(SETTINGS.textMessage || "");
+    if (!SETTINGS.bookingUrl){ text.classList.remove("alt"); text.classList.add("go"); }
+  } else {
+    text.hidden = true;
+    if (!SETTINGS.bookingUrl) $("setup").hidden = false;
+  }
+
+  $("foot").textContent = SETTINGS.bookingUrl
+    ? "Booked times land straight in my calendar and I get a note about it."
+    : "";
+})();
+</script>
+</body>
+</html>
