@@ -107,8 +107,8 @@ a{color:inherit}
     No need to ask first, and no need to work around us — if a time is showing, it genuinely works.
   </p>
 
-  <section class="card">
-    <span class="eyebrow">When we're usually around</span>
+  <section class="card" id="whencard" hidden>
+    <span class="eyebrow">When I'm usually around</span>
     <ul class="when" id="when"></ul>
   </section>
 
@@ -142,23 +142,21 @@ a{color:inherit}
 const SETTINGS = {
   // Paste the public link from Google Calendar → Create → Appointment schedule.
   // Leave empty and the page quietly falls back to "just text me".
-  bookingUrl: "",
+  bookingUrl: "https://calendar.app.google/hLwiRhSq6v3AV2bT8",
 
   // Your number, digits only, with country code. Leave empty to hide the text option.
   textNumber: "",
 
   // What the page says.
-  eyebrow: "Daryl & Jess",
+  eyebrow: "Daryl",
   heading: "Come see us.",
   lede: "No need to ask first, and no need to work around us — if a time is showing, it genuinely works.",
   signoff: "See you soon.",
 
-  // Roughly when you're around. Keep it short and honest; the booking page has the real slots.
-  windows: [
-    ["Tuesdays",  "evenings, after the little one's down"],
-    ["Thursdays", "evenings"],
-    ["Saturdays", "mornings, before the yard work starts"]
-  ],
+  // Roughly when you're around, in your own words. The card is hidden until you
+  // fill this in — the booking page has the real slots either way.
+  //   windows: [ ["Tuesdays", "evenings"], ["Saturdays", "mornings"] ],
+  windows: [],
 
   // Prefilled text message.
   textMessage: "Hey Daryl — when are you around?"
@@ -174,13 +172,17 @@ const SETTINGS = {
   set("sign", SETTINGS.signoff);
   if (SETTINGS.heading) document.title = SETTINGS.heading;
 
-  $("when").innerHTML = (SETTINGS.windows || []).map(function(w){
-    return '<li><span class="day"></span><span class="what"></span></li>';
-  }).join("");
-  Array.prototype.forEach.call($("when").children, function(li, i){
-    li.querySelector(".day").textContent = SETTINGS.windows[i][0];
-    li.querySelector(".what").textContent = SETTINGS.windows[i][1];
-  });
+  var wins = SETTINGS.windows || [];
+  if (wins.length){
+    $("whencard").hidden = false;
+    $("when").innerHTML = wins.map(function(){
+      return '<li><span class="day"></span><span class="what"></span></li>';
+    }).join("");
+    Array.prototype.forEach.call($("when").children, function(li, i){
+      li.querySelector(".day").textContent = wins[i][0];
+      li.querySelector(".what").textContent = wins[i][1];
+    });
+  }
 
   const book = $("book"), text = $("text");
   const num = String(SETTINGS.textNumber || "").replace(/[^\d+]/g, "");
