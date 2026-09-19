@@ -148,6 +148,12 @@ calendar you already keep, and asks for one thing back — the write-up.
   something that already exists, longest first, and otherwise takes up to four
   as a new tag. So `#firepit` finds Backyard › Fire Pit without the parent
   having to be said aloud every time.
+- **Month.** The fourth range draws a grid rather than a longer list, because
+  "the next thirty days" as a scroll is not a glance. Days carry their blocks
+  as coloured dots in the calendar's own colours, an amber ring on today, and a
+  badge counting that day's to-dos; tapping one opens its blocks underneath, so
+  a write-up stays one tap away. Costs nothing extra — the same `list_events`
+  call with a wider window, and no new permission.
 - **Range.** Today / 2 days / Week, remembered per browser. A clear day says so
   rather than vanishing, so an empty board never reads as a broken one.
 - Colour comes from your Google Calendar `colorId`. Nothing invented.

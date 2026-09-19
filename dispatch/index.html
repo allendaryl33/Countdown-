@@ -342,6 +342,65 @@ button{font:inherit; color:inherit}
 .pj-block .t{font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:15px; margin-top:1px}
 .pj-block .n{font-family:"Newsreader",Georgia,serif; font-size:14.5px; line-height:1.5; color:var(--ink-2); margin-top:3px}
 
+/* ---------- month grid ---------- */
+.mhead{display:flex; align-items:center; gap:12px; padding:16px 16px 10px 0}
+.mhead .mn{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:17px;
+  letter-spacing:.05em; text-transform:uppercase; flex:1;
+}
+.mnav{
+  background:var(--surface); border:1px solid var(--line); border-radius:4px;
+  width:30px; height:30px; cursor:pointer; font-size:15px; line-height:1; padding:0; flex:none;
+}
+.mnav:hover{border-color:var(--muted)}
+.mgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:var(--line-2);
+  border:1px solid var(--line-2); border-radius:4px; overflow:hidden; margin-right:16px}
+.mgrid .wd{
+  background:var(--ground); text-align:center; padding:6px 0 5px;
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:10.5px;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--faint);
+}
+.mcell{
+  background:var(--surface); min-height:92px; padding:5px 5px 6px; cursor:pointer;
+  display:flex; flex-direction:column; gap:3px; border:0; text-align:left; width:100%;
+  font:inherit; color:inherit;
+}
+.mcell:hover{background:var(--surface-2)}
+.mcell.out{background:var(--ground); opacity:.55}
+.mcell[aria-pressed="true"]{background:color-mix(in srgb, var(--focus) 14%, var(--surface))}
+.mcell .dn{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:13px;
+  color:var(--ink-2); font-variant-numeric:tabular-nums; line-height:1;
+}
+.mcell.today .dn{
+  color:var(--on-signal); background:var(--signal); border-radius:50%;
+  width:20px; height:20px; display:flex; align-items:center; justify-content:center; margin:-2px 0 1px -1px;
+}
+.mev{
+  display:flex; align-items:center; gap:4px; font-size:11px; line-height:1.25;
+  color:var(--ink-2); overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+}
+.mev .dot{width:6px; height:6px; border-radius:2px; flex:none; filter:var(--stripe-boost)}
+.mev .tt{overflow:hidden; text-overflow:ellipsis}
+.mcell .more{font-size:10.5px; color:var(--faint); font-family:"Saira Condensed",Arial,sans-serif}
+.mtodo{
+  align-self:flex-start; font-family:"Saira Condensed",Arial,sans-serif; font-weight:700;
+  font-size:10px; letter-spacing:.06em; color:var(--on-signal); background:var(--signal);
+  border-radius:3px; padding:0 4px; margin-top:auto;
+}
+@media (max-width:760px){
+  .mcell{min-height:56px; padding:4px 3px}
+  .mev .tt{display:none}
+  .mev{gap:3px}
+  .mev .dot{width:7px; height:7px; border-radius:50%}
+  .mrow-dots{display:flex; gap:3px; flex-wrap:wrap}
+  .mcell .more{display:none}
+}
+.mday{border-top:2px solid var(--ink); margin:22px 16px 0 0; padding-top:4px}
+.mday .h{display:flex; align-items:baseline; gap:10px; padding:10px 0 4px}
+.mday .h .d{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:15px; letter-spacing:.06em; text-transform:uppercase}
+.mday .h .n{color:var(--faint); font-size:12.5px}
+
 /* ---------- panel ---------- */
 .panel{padding:18px 0 0 24px; display:flex; flex-direction:column; gap:22px}
 @media (max-width:900px){ .panel{padding:8px 0 0; border-top:2px solid var(--ink); margin-top:24px} }
@@ -541,6 +600,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
           <button type="button" data-range="1">Today</button>
           <button type="button" data-range="2">2 days</button>
           <button type="button" data-range="7">Week</button>
+          <button type="button" data-range="0">Month</button>
         </div>
       </div>
       <div class="calbar" id="calbar"></div>
@@ -725,9 +785,20 @@ var RANGE_KEY = "life-dispatch/range";
 function loadRange(){
   var v = 0;
   try { v = parseInt(localStorage.getItem(RANGE_KEY), 10); } catch(e){}
-  return (v === 1 || v === 2 || v === 7) ? v : 2;
+  return (v === 1 || v === 2 || v === 7 || v === MONTH) ? v : 2;
 }
-function winEnd(){ return addDays(WIN_START, state.range); }
+var MONTH = 0;   /* sentinel: the range control's month mode */
+function monthStart(d){ return new Date(d.getFullYear(), d.getMonth(), 1); }
+function winStart(){
+  return state.range === MONTH ? (state.monthAnchor || monthStart(new Date())) : WIN_START;
+}
+function winEnd(){
+  if (state.range === MONTH){
+    var a = winStart();
+    return new Date(a.getFullYear(), a.getMonth() + 1, 1);
+  }
+  return addDays(WIN_START, state.range);
+}
 
 /* ---------- record store (db when granted, localStorage otherwise) ---------- */
 function makeStore(coll, lsKey, idField, defaults){
@@ -790,7 +861,7 @@ var state = {
   view: "board", personKey: null, projectId: null,
   todoCalIds: {}, todoDirty: false, projectDirty: false, taskDirty: false, showDroppedTasks: false,
   showDropped: false, editingTodo: null, dragTodo: null, moveKey: null, suppressClick: false,
-  range: 2, watchArgs: {},
+  range: 2, watchArgs: {}, monthAnchor: null, pickedDay: null,
   mcp: null, sample: null
 };
 
@@ -888,10 +959,73 @@ function todoStripHtml(){
     td.map(todoRow).join("") + "</div>";
 }
 
+function renderMonth(){
+  var host = $("board"), a = winStart(), today = dayKey(new Date());
+  var first = new Date(a.getFullYear(), a.getMonth(), 1);
+  var days = new Date(a.getFullYear(), a.getMonth() + 1, 0).getDate();
+  var lead = first.getDay();
+
+  /* bucket everything by day once, rather than filtering per cell */
+  var byDay = {};
+  allEvents().forEach(function(ev){
+    (byDay[dayKey(ev.start)] = byDay[dayKey(ev.start)] || []).push(ev);
+  });
+  var tdByDay = {};
+  todoList().forEach(function(t){
+    if (t.day && !t.done) (tdByDay[t.day] = tdByDay[t.day] || []).push(t);
+  });
+
+  var html = '<div class="mhead">' +
+    '<span class="mn">' + esc(first.toLocaleDateString([], {month:"long", year:"numeric"})) + "</span>" +
+    '<button class="mnav" type="button" data-mstep="-1" aria-label="Previous month">&lsaquo;</button>' +
+    '<button class="mnav" type="button" data-mstep="1" aria-label="Next month">&rsaquo;</button>' +
+  '</div><div class="mgrid">';
+  ["S","M","T","W","T","F","S"].forEach(function(w){
+    html += '<div class="wd" aria-hidden="true">' + w + "</div>";
+  });
+
+  var cells = Math.ceil((lead + days) / 7) * 7;
+  for (var i = 0; i < cells; i++){
+    var d = new Date(a.getFullYear(), a.getMonth(), 1 + (i - lead));
+    var k = dayKey(d), out = d.getMonth() !== a.getMonth();
+    var list = byDay[k] || [], td = tdByDay[k] || [];
+    var cls = "mcell" + (out ? " out" : "") + (k === today ? " today" : "");
+    html += '<button class="' + cls + '" type="button" data-day="' + k +
+            '" aria-pressed="' + (k === state.pickedDay) + '">' +
+      '<span class="dn">' + d.getDate() + "</span>" +
+      '<span class="mrow-dots">' +
+        list.slice(0, 3).map(function(ev){
+          return '<span class="mev"><span class="dot" style="background:' + ev.color + '"></span>' +
+                 '<span class="tt">' + esc(ev.title) + "</span></span>";
+        }).join("") +
+      "</span>" +
+      (list.length > 3 ? '<span class="more">+' + (list.length - 3) + " more</span>" : "") +
+      (td.length ? '<span class="mtodo">' + td.length + "</span>" : "") +
+    "</button>";
+  }
+  html += "</div>";
+
+  /* the picked day's blocks, so a write-up is still one tap away */
+  var pick = state.pickedDay, picked = pick ? (byDay[pick] || []) : [];
+  if (pick){
+    var pd = fromYmd(pick);
+    html += '<div class="mday"><div class="h"><span class="d">' +
+      esc(pd.toLocaleDateString([], {weekday:"long", month:"long", day:"numeric"})) + "</span>" +
+      '<span class="n num">' + (picked.length ? picked.length + " block" + (picked.length===1?"":"s") : "clear") +
+      "</span></div></div>" +
+      (picked.length ? picked.map(rowHtml).join("")
+        : '<div class="empty">Nothing on the board that day.</div>');
+  }
+  host.innerHTML = html;
+  renderStrip(allEvents());
+}
+
 function renderBoard(){
+  if (state.view === "board" && state.range === MONTH) return renderMonth();
   var evs = allEvents(), host = $("board"), now = Date.now(), strip = todoStripHtml();
   if (!evs.length){
-    var span = state.range === 1 ? "today" : state.range === 2 ? "today or tomorrow" : "the next seven days";
+    var span = state.range === 1 ? "today" : state.range === 2 ? "today or tomorrow"
+             : state.range === MONTH ? "this month" : "the next seven days";
     host.innerHTML = strip + '<div class="empty">' +
       (Object.keys(state.eventsByCal).length ? "Nothing on the board for " + span + "." : "Waiting on Google Calendar\u2026") +
       "</div>";
@@ -976,6 +1110,14 @@ function goTo(el){
 }
 
 $("board").addEventListener("click", function(e){
+  var nav = e.target.closest ? e.target.closest("[data-mstep]") : null;
+  if (nav){ stepMonth(Number(nav.dataset.mstep)); return; }
+  var cell = e.target.closest ? e.target.closest(".mcell") : null;
+  if (cell){
+    state.pickedDay = state.pickedDay === cell.dataset.day ? null : cell.dataset.day;
+    renderBoard();
+    return;
+  }
   var row = e.target.closest ? e.target.closest(".row") : null;
   if (!row) return;
   state.selectedId = row.getAttribute("data-id");
@@ -2304,7 +2446,12 @@ function setRange(n){
   document.querySelectorAll("#rangesw button").forEach(function(x){
     x.setAttribute("aria-pressed", String(Number(x.dataset.range) === n));
   });
-  /* A watch is keyed by its arguments, so a new window means re-registering each one. */
+  rewatch();
+  renderMsg(); renderBoard(); renderCloseout();
+}
+
+/* A watch is keyed by its arguments, so a new window means re-registering each one. */
+function rewatch(){
   var args = state.watchArgs;
   var keys = Object.keys(state.watches).filter(function(k){
     if (k === "__calendars__") return false;                  /* not an events watch */
@@ -2314,7 +2461,13 @@ function setRange(n){
   keys.forEach(function(k){
     var a = args[k]; if (a) watchCalendar(k, a.calendarId, a.label, a.opts);
   });
-  renderMsg(); renderBoard(); renderCloseout();
+}
+
+function stepMonth(n){
+  var a = winStart();
+  state.monthAnchor = new Date(a.getFullYear(), a.getMonth() + n, 1);
+  state.pickedDay = null;
+  rewatch(); renderMsg(); renderBoard();
 }
 
 $("rangesw").addEventListener("click", function(e){
@@ -2445,7 +2598,7 @@ function watchCalendar(key, calendarId, label, opts){
   opts = opts || {};
   state.watchArgs[key] = {calendarId: calendarId, label: label, opts: opts};
   var input = {
-    startTime: isoLocal(WIN_START),
+    startTime: isoLocal(opts.days ? WIN_START : winStart()),
     endTime: isoLocal(opts.days ? addDays(WIN_START, opts.days) : winEnd()),
     orderBy: "startTime", pageSize: 100
   };
