@@ -3,6 +3,15 @@
 A dispatch board for the office: take service calls, put jobs on the schedule,
 assign technicians, and track each job from the phone call to a signed ticket.
 
+## Going live
+
+The app ships loaded with a sample shop so it demos well. **Data & Setup →
+Set up for real jobs** clears it: the demo customers, jobs, estimates and signed
+waivers go, your **price book and waiver templates stay** (edit those, don't
+retype them), and you're set up as the first technician with your own rate. Job
+numbering can start wherever you like, so it can continue from work you've
+already invoiced by hand.
+
 ## Brand colours
 
 Service area is Edmonton, Alberta — the sample customers, phone numbers and
@@ -26,6 +35,14 @@ connection required.
 
 **Dashboard** — today at a glance: job counts, open emergencies, anything still
 without a technician, and the day laid out tech by tech.
+
+**Today** — the field view, and where the app opens. Your run for the day as a
+list of stops: arrival window, customer, address, what's wrong, and the site
+notes that matter before you knock. Tap to call, tap for directions, sign a
+waiver, and move the job along with one button that says what actually happens
+next — *On my way*, *I'm here*, *Mark done*. Anything still owed from earlier
+in the week sits at the bottom. On a phone the sidebar becomes a bottom bar and
+everything else lives behind **More**.
 
 **Schedule** — three views of the same work, switched from the toolbar:
 

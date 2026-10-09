@@ -68,6 +68,124 @@ nav button .count.alert{background:var(--amber);color:#fff}
 .sidebar-foot{padding:12px 16px;border-top:1px solid rgba(255,255,255,.09);font-size:11px;color:#6f8ca6}
 
 #main{flex:1;min-width:0;display:flex;flex-direction:column}
+
+/* ---------- Phone layout ---------- */
+#mobile-nav{display:none}
+.nav-sheet{display:none}
+@media (max-width:820px){
+  #sidebar{display:none}
+  #mobile-nav{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
+    background:var(--navy);border-top:1px solid rgba(255,255,255,.1);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));
+  }
+  #mobile-nav button{
+    flex:1;background:none;border:0;color:#9db4cb;display:flex;flex-direction:column;
+    align-items:center;gap:3px;padding:6px 2px;font-size:10.5px;font-weight:600;border-radius:7px;
+    position:relative;min-height:46px;
+  }
+  #mobile-nav button .ico{font-size:17px;line-height:1}
+  #mobile-nav button.active{color:var(--gold)}
+  #mobile-nav button .dot{
+    position:absolute;top:4px;right:calc(50% - 18px);min-width:15px;height:15px;
+    border-radius:8px;background:var(--amber);color:#fff;font-size:9.5px;line-height:15px;
+    font-weight:700;padding:0 3px;
+  }
+  main.content{padding:14px 13px 86px}
+  header.topbar{padding:10px 13px;gap:9px;flex-wrap:wrap}
+  .topbar h1{font-size:17px}
+  .topbar .crumb{display:none}
+  .search{order:3;flex-basis:100%}
+  .search input{width:100%}
+  #btn-new-estimate{display:none}
+  .stat-row{grid-template-columns:1fr 1fr;gap:10px}
+  .two-col{grid-template-columns:1fr}
+  .modal{max-width:100%}
+  .modal-body{max-height:calc(100vh - 190px);padding:15px}
+  .modal-head,.modal-foot{padding:13px 15px}
+  .overlay{padding:10px 8px}
+  .row2,.row3{grid-template-columns:1fr}
+  .board{flex-direction:column}
+  .col{flex:1 1 auto;max-width:none;width:100%}
+  .toolbar{gap:6px}
+  .tpl-grid{grid-template-columns:1fr}
+}
+.nav-sheet.open{
+  display:flex;position:fixed;inset:0;z-index:70;background:rgba(10,42,66,.5);
+  align-items:flex-end;
+}
+.nav-sheet .sheet{
+  background:#fff;width:100%;border-radius:14px 14px 0 0;padding:10px 10px
+  calc(14px + env(safe-area-inset-bottom,0px));max-height:76vh;overflow:auto;
+}
+.nav-sheet .sheet h4{
+  font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  padding:12px 12px 6px;margin:0;
+}
+.nav-sheet .sheet button{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;
+  border:0;padding:13px 12px;border-radius:9px;font-size:15px;color:var(--text);
+}
+.nav-sheet .sheet button:hover{background:var(--bg)}
+.nav-sheet .sheet button .ico{width:22px;text-align:center;font-size:17px}
+.nav-sheet .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:6px auto 2px}
+
+/* ---------- Today: the field view ---------- */
+.today-head{
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px;
+}
+.today-head .big{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.today-head .sub{color:var(--muted);font-size:14px}
+.today-sum{
+  display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;
+}
+.today-sum .pill{
+  background:var(--card);border:1px solid var(--line);border-radius:20px;
+  padding:6px 13px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;
+}
+.today-sum .pill b{font-variant-numeric:tabular-nums}
+.today-sum .pill.cash{border-color:#bfe0cc;background:var(--green-soft);color:var(--green)}
+.today-sum .pill.warn{border-color:#f0d6bb;background:var(--amber-soft);color:#9c5712}
+
+.stop{
+  background:var(--card);border:1px solid var(--line);border-radius:11px;
+  box-shadow:var(--shadow);margin-bottom:11px;overflow:hidden;
+  border-left:4px solid var(--blue);
+}
+.stop.pri-Emergency{border-left-color:var(--red)}
+.stop.pri-High{border-left-color:var(--amber)}
+.stop.st-complete{border-left-color:var(--green);opacity:.75}
+.stop.st-cancelled{opacity:.5}
+.stop-main{display:flex;gap:12px;padding:13px 14px;cursor:pointer;align-items:flex-start}
+.stop-main:hover{background:#fafcfd}
+.stop-when{
+  flex:0 0 62px;text-align:center;padding-top:1px;
+}
+.stop-when .w{font-size:14px;font-weight:700;color:var(--navy);line-height:1.2;letter-spacing:-.01em}
+.stop-when .n{font-size:10.5px;color:var(--muted);margin-top:2px}
+.stop-body{flex:1;min-width:0}
+.stop-body .cust{font-weight:650;font-size:15.5px;line-height:1.25}
+.stop-body .addr{font-size:13.5px;color:var(--muted);margin-top:2px}
+.stop-body .what{font-size:13.5px;margin-top:5px}
+.stop-body .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.stop-acts{
+  display:flex;gap:7px;padding:0 14px 12px;flex-wrap:wrap;
+}
+.stop-acts .btn{flex:1;min-width:92px;justify-content:center;padding:10px 10px}
+.stop-acts a.btn{text-decoration:none}
+.stop-flag{
+  font-size:12.5px;padding:7px 14px;background:var(--amber-soft);color:#9c5712;
+  border-top:1px solid #f0d6bb;font-weight:550;
+}
+.today-empty{
+  background:var(--card);border:1px dashed var(--line);border-radius:11px;
+  padding:34px 20px;text-align:center;color:var(--muted);
+}
+.today-empty .big{font-size:30px;opacity:.5;margin-bottom:9px}
+.sec-head{
+  font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+  font-weight:650;margin:22px 0 9px;
+}
 header.topbar{
   background:var(--card);border-bottom:1px solid var(--line);padding:14px 24px;
   display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20;
@@ -461,6 +579,9 @@ textarea.input{resize:vertical;min-height:76px}
     </header>
     <main class="content" id="view"></main>
   </div>
+
+  <nav id="mobile-nav" aria-label="Main"></nav>
+  <div class="nav-sheet" id="nav-sheet" hidden></div>
 </div>
 
 <div id="modal-root"></div>
@@ -735,6 +856,34 @@ const Store = {
 
   reset(){
     this.data = seedData();
+    this.save();
+  },
+
+  /* Going live. Clears the sample shop but keeps the things worth keeping:
+     the price book and the waiver templates, both of which are edited, not
+     re-typed. Company settings come from the form. */
+  goLive(opts){
+    const book = this.data.priceBook;
+    const templates = this.data.waiverTemplates;
+    this.data = {
+      version: 3,
+      counter: Number(opts.startJobNo) || 1000,
+      counterEst: 2000,
+      counterWaiver: 5000,
+      settings: {
+        company: opts.company,
+        phone: opts.phone,
+        laborRate: Number(opts.laborRate) || 0
+      },
+      techs: opts.techName
+        ? [{ id: uid("tech"), name: opts.techName, phone: opts.techPhone || opts.phone,
+             color: TECH_COLORS[0], skill: opts.techSkill || "", active: true }]
+        : [],
+      customers: [], jobs: [], estimates: [], signedWaivers: [],
+      priceBook: book,
+      waiverTemplates: templates,
+      liveSince: Date.now()
+    };
     this.save();
   },
 
@@ -1436,7 +1585,7 @@ function seedPriceBook(){
    App state + routing
    ============================================================ */
 const App = {
-  view: "dashboard",
+  view: "today",
   date: todayStr(),
   search: "",
   filters: { status:"", techId:"", type:"", when:"upcoming" },
@@ -1447,6 +1596,7 @@ const App = {
 };
 
 const VIEWS = [
+  { id:"today",     label:"Today",     icon:"🚐", crumb:"Field" },
   { id:"dashboard", label:"Dashboard", icon:"▦",  crumb:"Dispatch" },
   { id:"schedule",  label:"Schedule",  icon:"🗓", crumb:"Dispatch" },
   { id:"estimates", label:"Estimates", icon:"📋", crumb:"Work" },
@@ -1458,6 +1608,31 @@ const VIEWS = [
   { id:"data",      label:"Data & Setup", icon:"⚙", crumb:"Setup" }
 ];
 
+function openNavSheet(){
+  const groups = [
+    ["Field",    ["today"]],
+    ["Dispatch", ["dashboard","schedule"]],
+    ["Work",     ["estimates","jobs","customers","waivers"]],
+    ["Setup",    ["techs","pricebook","data"]]
+  ];
+  const sheet = $("#nav-sheet");
+  sheet.innerHTML = `<div class="sheet">
+    <div class="grab"></div>
+    ${groups.map(([label, ids]) => `<h4>${esc(label)}</h4>` + ids.map(id => {
+      const v = VIEWS.find(x => x.id === id);
+      return `<button data-nav="${id}"><span class="ico">${v.icon}</span>${esc(v.label)}</button>`;
+    }).join("")).join("")}
+  </div>`;
+  sheet.hidden = false;
+  sheet.classList.add("open");
+}
+function closeNavSheet(){
+  const sheet = $("#nav-sheet");
+  if (!sheet) return;
+  sheet.classList.remove("open");
+  sheet.hidden = true;
+}
+
 function go(view){
   App.view = view;
   render();
@@ -1467,6 +1642,7 @@ function go(view){
 function render(){
   renderBrand();
   renderNav();
+  renderMobileNav();
   const v = VIEWS.find(x => x.id === App.view) || VIEWS[0];
   $("#crumb").textContent = v.crumb;
   $("#page-title").textContent = v.label;
@@ -1476,6 +1652,7 @@ function render(){
   else {
     switch(App.view){
       case "schedule":  host.innerHTML = viewSchedule();  break;
+      case "today":     host.innerHTML = viewToday();     break;
       case "estimates": host.innerHTML = viewEstimates(); break;
       case "waivers":   host.innerHTML = viewWaivers();   break;
       case "pricebook": host.innerHTML = viewPriceBook(); break;
@@ -1483,7 +1660,8 @@ function render(){
       case "customers": host.innerHTML = viewCustomers(); break;
       case "techs":     host.innerHTML = viewTechs();     break;
       case "data":      host.innerHTML = viewData();      break;
-      default:          host.innerHTML = viewDashboard();
+      case "dashboard": host.innerHTML = viewDashboard(); break;
+      default:          host.innerHTML = viewToday();
     }
   }
   if (App.view === "schedule" && !App.search.trim()) wireBoard();
@@ -1494,10 +1672,35 @@ function renderBrand(){
   if (el) el.textContent = Store.data.settings.company || "Poseidon Plumbing & Gasfitting Ltd.";
 }
 
+const MOBILE_NAV = ["today","schedule","jobs","estimates"];
+
+function renderMobileNav(){
+  const el = $("#mobile-nav");
+  if (!el) return;
+  const t = todayStr();
+  const jobs = Store.data.jobs;
+  const badge = {
+    today: jobs.filter(j => j.scheduledDate === t && isOpen(j)).length,
+    schedule: jobs.filter(j => !j.techId && isOpen(j)).length,
+    jobs: 0,
+    estimates: Store.openEstimates().length
+  };
+  el.innerHTML = MOBILE_NAV.map(id => {
+    const v = VIEWS.find(x => x.id === id);
+    const n = badge[id];
+    return `<button class="${App.view===id?"active":""}" data-nav="${id}">
+      <span class="ico">${v.icon}</span>${esc(v.label)}
+      ${n ? `<span class="dot">${n}</span>` : ""}
+    </button>`;
+  }).join("") +
+  `<button data-navsheet><span class="ico">☰</span>More</button>`;
+}
+
 function renderNav(){
   const jobs = Store.data.jobs;
   const t = todayStr();
   const counts = {
+    today: jobs.filter(j => j.scheduledDate === t && isOpen(j)).length,
     schedule: jobs.filter(j => j.scheduledDate === t && j.status !== "cancelled").length,
     estimates: Store.openEstimates().length,
     jobs: jobs.filter(j => !["complete","cancelled"].includes(j.status)).length,
@@ -1521,6 +1724,7 @@ function renderNav(){
     }).join("")}`;
 
   $("#nav").innerHTML =
+    group("Field", ["today"]) +
     group("Dispatch", ["dashboard","schedule"]) +
     group("Work", ["estimates","jobs","customers","waivers"]) +
     group("Setup", ["techs","pricebook","data"]);
@@ -1576,6 +1780,109 @@ function jobRows(list, opts){
 const JOB_TABLE_HEAD = `<thead><tr>
   <th>Job</th><th>Customer</th><th>Type</th><th>Scheduled</th><th>Technician</th><th>Status</th><th>Payment</th><th class="num">Total</th>
 </tr></thead>`;
+
+/* ============================================================
+   View: Today — the field view. Built for a phone in one hand,
+   standing in somebody's utility room.
+   ============================================================ */
+function viewToday(){
+  const t = todayStr();
+  const mine = Store.data.jobs
+    .filter(j => j.scheduledDate === t && j.status !== "cancelled")
+    .sort((a,b) => {
+      const w = WINDOWS.indexOf(a.window) - WINDOWS.indexOf(b.window);
+      return w !== 0 ? w : PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
+    });
+  const open = mine.filter(isOpen);
+  const done = mine.filter(j => j.status === "complete");
+  const collected = mine.reduce((s,j) => s + (Number((j.payment||{}).amountPaid) || 0), 0);
+  const owed = mine.filter(j => j.status === "complete").reduce((s,j) => s + Store.balance(j), 0);
+  const overdue = Store.outstanding().filter(j => j.scheduledDate < t);
+
+  return `
+  <div class="today-head">
+    <span class="big">${open.length ? open.length + " stop" + (open.length===1?"":"s") + " left" : "Day's done"}</span>
+    <span class="sub">${esc(fmtDateLong(t))}</span>
+  </div>
+
+  <div class="today-sum">
+    <span class="pill"><b>${mine.length}</b> booked</span>
+    <span class="pill"><b>${done.length}</b> done</span>
+    ${collected ? `<span class="pill cash">＋${esc(money(collected))} in</span>` : ""}
+    ${owed ? `<span class="pill warn">${esc(money(owed))} to collect</span>` : ""}
+  </div>
+
+  ${open.length ? open.map(stopCard).join("")
+    : `<div class="today-empty">
+         <div class="big">🚐</div>
+         <div style="font-weight:600;color:var(--text);margin-bottom:4px">Nothing booked for today.</div>
+         <div>Take a call, or check the week.</div>
+       </div>`}
+
+  ${done.length ? `<div class="sec-head">Finished today</div>${done.map(stopCard).join("")}` : ""}
+
+  ${overdue.length ? `
+    <div class="sec-head">Still owed from earlier</div>
+    ${overdue.slice(0,5).map(j => `
+      <div class="stop" data-job="${j.id}" style="cursor:pointer;border-left-color:var(--amber)">
+        <div class="stop-main">
+          <div class="stop-when"><div class="w">${esc(money(Store.balance(j)))}</div>
+            <div class="n">${esc(fmtDate(j.scheduledDate))}</div></div>
+          <div class="stop-body">
+            <div class="cust">${esc(custName(j.customerId))}</div>
+            <div class="addr">${esc(j.type)} · ${esc((j.payment||{}).ref || "no invoice ref")}</div>
+          </div>
+        </div>
+      </div>`).join("")}` : ""}`;
+}
+
+/* One stop on the run, with the actions you'd actually reach for on site. */
+function stopCard(j){
+  const c = Store.customer(j.customerId);
+  const addr = custAddr(j.customerId);
+  const next = NEXT_STATUS[j.status];
+  const missing = Store.missingFor(j);
+  const paid = Store.payState(j);
+  const bal = Store.balance(j);
+  const mapQ = encodeURIComponent(addr + ", AB");
+  const tel = String(c && c.phone || "").replace(/\D/g,"");
+
+  // The forward button says what actually happens next, in field words.
+  const stepWord = { scheduled:"On my way", dispatched:"I'm here",
+                     in_progress:"Mark done", new:"Schedule it" }[j.status] || null;
+
+  return `
+  <div class="stop pri-${esc(j.priority)} st-${esc(j.status)}">
+    <div class="stop-main" data-job="${j.id}">
+      <div class="stop-when">
+        <div class="w">${esc(fieldWindow(j.window))}</div>
+        <div class="n">#${j.no}</div>
+      </div>
+      <div class="stop-body">
+        <div class="cust">${esc(custName(j.customerId))}</div>
+        <div class="addr">${esc(addr) || "No address on file"}</div>
+        <div class="what">${esc(j.type)}</div>
+        <div class="tags">
+          ${statusBadge(j.status)}
+          ${j.priority !== "Normal" ? priorityBadge(j.priority) : ""}
+          ${j.status === "complete" && bal > 0.005 ? `<span class="badge pay-invoiced"><span class="dot"></span>${esc(money(bal))} owing</span>` : ""}
+          ${paid === "paid" ? `<span class="badge pay-paid"><span class="dot"></span>Paid</span>` : ""}
+        </div>
+      </div>
+    </div>
+
+    ${c && c.notes ? `<div class="stop-flag">📌 ${esc(c.notes)}</div>` : ""}
+    ${missing.length ? `<div class="stop-flag">✍ Needs signing: ${esc(missing.map(w => w.title).join(" · "))}</div>` : ""}
+
+    <div class="stop-acts">
+      ${tel ? `<a class="btn" href="tel:${esc(tel)}">📞 Call</a>` : ""}
+      ${addr ? `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${mapQ}" target="_blank" rel="noopener noreferrer">🧭 Directions</a>` : ""}
+      ${missing.length ? `<button class="btn" data-add-waiver="${j.id}">✍ Waiver</button>` : ""}
+      ${stepWord && next ? `<button class="btn accent" data-advance="${j.id}">${esc(stepWord)}</button>` : ""}
+      ${j.status === "complete" && bal > 0.005 ? `<button class="btn accent" data-job="${j.id}">💵 Take payment</button>` : ""}
+    </div>
+  </div>`;
+}
 
 /* ============================================================
    View: Dashboard
@@ -1805,6 +2112,11 @@ function sortForBoard(list){
 /* ---------- Day: a column per technician ---------- */
 function dayBoard(){
   const d = App.date;
+  if (!Store.activeTechs().length){
+    return `<div class="today-empty"><div class="big">🔧</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px">No technicians yet.</div>
+      <div>Add yourself under Technicians and the board fills in.</div></div>`;
+  }
   const dayJobs = Store.data.jobs.filter(j => j.scheduledDate === d);
   const cols = [
     { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
@@ -1914,6 +2226,15 @@ function miniCard(j, opts){
     <div class="mc-cust">${esc(custName(j.customerId))}</div>
     <div class="mc-type">${esc(j.type)}</div>
   </div>`;
+}
+
+/* On a field card the arrival window is the thing that matters: "10–12". */
+function fieldWindow(w){
+  if (!w) return "";
+  if (w.startsWith("ASAP")) return "ASAP";
+  if (w === "Anytime") return "Any time";
+  const m = /^(\d+):\d+–(\d+):\d+/.exec(w);
+  return m ? m[1] + "–" + m[2] : w;
 }
 
 /* "8:00–10:00" is too wide for a month cell; "8a" is enough. */
@@ -2356,6 +2677,20 @@ function viewData(){
       </div>
 
       <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Going live</h3></div>
+        <div class="card-body">
+          ${d.liveSince
+            ? `<p class="t-sub" style="margin-top:0">Running real jobs since
+                 ${esc(fmtStamp(d.liveSince).split(" · ")[0])}.</p>
+               <button class="btn" data-action="golive">Run setup again</button>`
+            : `<p class="t-sub" style="margin-top:0">Still on the sample shop. When you're ready for
+                 real work, this clears the demo customers and jobs, keeps your price book and waiver
+                 templates, and sets you up as the first technician.</p>
+               <button class="btn accent" data-action="golive">Set up for real jobs →</button>`}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Danger zone</h3></div>
         <div class="card-body">
           <p class="t-sub" style="margin-top:0">Wipes everything in this browser and reloads the sample day.</p>
@@ -2489,7 +2824,9 @@ function closeModal(){
   document.body.style.overflow = "";
 }
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && $("#modal-root").innerHTML) closeModal();
+  if (e.key !== "Escape") return;
+  if ($("#modal-root").innerHTML) return closeModal();
+  closeNavSheet();
 });
 
 /* ---------- Job detail ---------- */
@@ -3590,6 +3927,87 @@ function saveTemplateFromForm(id){
   render();
 }
 
+/* ---------- Go live: clear the demo and set the shop up ---------- */
+function openGoLive(){
+  const st = Store.data.settings;
+  const d = Store.data;
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">One-time setup</div><h2>Start running real jobs</h2></div>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
+        <strong>This clears the sample shop.</strong> The ${d.customers.length} demo customers,
+        ${d.jobs.length} jobs, ${d.estimates.length} estimates and ${d.signedWaivers.length}
+        signed waivers are deleted. Your <strong>price book (${d.priceBook.length} items)</strong>
+        and <strong>waiver templates (${Store.activeTemplates().length})</strong> are kept — edit
+        those, don't retype them. Export a backup first if you want the samples back.
+      </div>
+
+      <div class="row2">
+        <div class="field"><label>Company name *</label>
+          <input class="input" id="gl-company" value="${esc(st.company)}"></div>
+        <div class="field"><label>Phone customers call</label>
+          <input class="input" id="gl-phone" value="${esc(st.phone)}" placeholder="(780) 555-0100"></div>
+      </div>
+
+      <div class="section-title" style="margin-top:6px">You, as the first technician</div>
+      <div class="row3">
+        <div class="field"><label>Your name *</label>
+          <input class="input" id="gl-tech" placeholder="The name that goes on the board"></div>
+        <div class="field"><label>Your mobile</label>
+          <input class="input" id="gl-techphone"></div>
+        <div class="field"><label>Ticket</label>
+          <input class="input" id="gl-skill" value="Journeyman · Gasfitter B"></div>
+      </div>
+      <p class="t-sub" style="margin:0 0 14px">You can add more people later under Technicians.</p>
+
+      <div class="row2">
+        <div class="field"><label>Your hourly rate</label>
+          <input class="input" id="gl-rate" type="number" min="0" step="5" value="${esc(st.laborRate)}">
+          <div class="hint">Prices new jobs. Change it any time — past jobs keep their own rate.</div></div>
+        <div class="field"><label>First job number</label>
+          <input class="input" id="gl-jobno" type="number" min="1" step="1" value="1000">
+          <div class="hint">Job numbering starts one above this. Set it higher if you've already
+            invoiced work by hand.</div></div>
+      </div>
+
+      <div class="err" id="gl-err" style="display:none">Company name and your name are both needed.</div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn danger" data-do-golive>Clear the samples and go live</button>
+    </div>`, { wide:true });
+}
+
+function doGoLive(){
+  const company = $("#gl-company").value.trim();
+  const techName = $("#gl-tech").value.trim();
+  if (!company || !techName){
+    $("#gl-err").style.display = "block";
+    if (!company) $("#gl-company").classList.add("invalid");
+    if (!techName) $("#gl-tech").classList.add("invalid");
+    return;
+  }
+  if (!confirm("Delete the sample customers, jobs, estimates and signed waivers?\n\nThis cannot be undone. Your price book and waiver templates are kept.")) return;
+
+  Store.goLive({
+    company,
+    phone: $("#gl-phone").value.trim(),
+    laborRate: $("#gl-rate").value,
+    startJobNo: $("#gl-jobno").value,
+    techName,
+    techPhone: $("#gl-techphone").value.trim(),
+    techSkill: $("#gl-skill").value.trim()
+  });
+  closeModal();
+  App.view = "today";
+  render();
+  toast("You're live. Take the first call.", "ok");
+}
+
 /* ---------- Price book item ---------- */
 function openPriceForm(id){
   const i = id ? Store.priceItem(id) : null;
@@ -4020,8 +4438,15 @@ document.addEventListener("click", e => {
   if (hit("[data-close]")) return closeModal();
 
   /* --- navigation --- */
+  if (hit("[data-navsheet]")) return openNavSheet();
+  if (e.target.id === "nav-sheet") return closeNavSheet();
+
   const nav = hit("[data-nav]");
-  if (nav){ App.search = ""; $("#global-search").value = ""; return go(nav.dataset.nav); }
+  if (nav){
+    App.search = ""; $("#global-search").value = "";
+    closeNavSheet();
+    return go(nav.dataset.nav);
+  }
 
   /* --- schedule mode --- */
   const sm = hit("[data-smode]");
@@ -4046,7 +4471,12 @@ document.addEventListener("click", e => {
   if (adv){
     const j = Store.job(adv.dataset.advance);
     const n = NEXT_STATUS[j.status];
-    if (n){ Store.setStatus(j, n); render(); openJob(j.id); toast(`#${j.no} → ${STATUS_LABEL[n]}`, "ok"); }
+    if (!n) return;
+    Store.setStatus(j, n);
+    const inField = App.view === "today";
+    render();
+    if (!inField) openJob(j.id);          // on the field list, stay on the list
+    toast(`#${j.no} → ${STATUS_LABEL[n]}`, "ok");
     return;
   }
   const editJob = hit("[data-edit-job]");
@@ -4218,6 +4648,8 @@ document.addEventListener("click", e => {
     t.archived = true; Store.save(); closeModal(); render(); toast("Template deleted");
     return;
   }
+  if (hit("[data-do-golive]")) return doGoLive();
+
   const saveT = hit("[data-save-template]");
   if (saveT) return saveTemplateFromForm(saveT.dataset.saveTemplate || null);
 
@@ -4307,6 +4739,7 @@ document.addEventListener("click", e => {
     case "new-price":    openPriceForm(null); break;
     case "export-est-csv": exportEstimatesCsv(); break;
     case "new-template":  openTemplateForm(null); break;
+    case "golive":        openGoLive(); break;
     case "export-waivers": exportWaiversCsv(); break;
     case "new-customer": openCustomerForm(null); break;
     case "new-tech":     openTechForm(null); break;
