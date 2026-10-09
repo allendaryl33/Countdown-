@@ -782,6 +782,11 @@ function addDays(s, n){
   d.setDate(d.getDate() + n);
   return ymd(d);
 }
+function daysBetween(a, b){
+  const x = parseYmd(a), y = parseYmd(b);
+  if (!x || !y) return 0;
+  return Math.round((y - x) / 86400000);
+}
 function addMonths(s, n){
   const d = parseYmd(s) || new Date();
   const day = d.getDate();
@@ -904,6 +909,11 @@ const Store = {
           this.data.settings.zones    = this.data.settings.zones    || defaultZones();
           this.data.settings.messages = this.data.settings.messages || defaultMessages();
           this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
+          // A demo should always demo. Real work is never moved.
+          if (this.data.demo && !this.data.liveSince && this.data.seededOn
+              && this.data.seededOn !== todayStr()){
+            this.shiftDemoDates(daysBetween(this.data.seededOn, todayStr()));
+          }
           // Added with payment tracking — older jobs have no payment block.
           this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
           // Renamed on rebrand. Only a name this app shipped as a default is
@@ -934,6 +944,54 @@ const Store = {
     this.save();
   },
 
+  /* Sample data is stamped with the day it was created, so a demo opened a
+     month later shows an empty board. Slide the whole sample forward, keeping
+     yesterday yesterday and tomorrow tomorrow. Never runs on a live shop. */
+  shiftDemoDates(days){
+    if (!days) return;
+    const ms = days * 86400000;
+    const ts = v => (typeof v === "number" && v > 0) ? v + ms : v;
+    const stamps = o => { (o.log || []).forEach(l => l.ts = ts(l.ts)); };
+
+    (this.data.jobs || []).forEach(j => {
+      if (j.scheduledDate) j.scheduledDate = addDays(j.scheduledDate, days);
+      j.createdAt = ts(j.createdAt);
+      j.completedAt = ts(j.completedAt);
+      if (j.payment){
+        j.payment.invoicedAt = ts(j.payment.invoicedAt);
+        j.payment.paidAt = ts(j.payment.paidAt);
+      }
+      stamps(j);
+    });
+    (this.data.estimates || []).forEach(e => {
+      e.createdAt = ts(e.createdAt); e.sentAt = ts(e.sentAt); e.decidedAt = ts(e.decidedAt);
+      stamps(e);
+    });
+    (this.data.signedWaivers || []).forEach(w => { w.signedAt = ts(w.signedAt); });
+
+    this.data.seededOn = todayStr();
+    this.save();
+  },
+
+  /* For sample data saved before it carried its own date: the day with the
+     most jobs on it was "today" when the sample was made. */
+  inferredSampleDay(){
+    const tally = {};
+    (this.data.jobs || []).forEach(j => {
+      if (j.scheduledDate) tally[j.scheduledDate] = (tally[j.scheduledDate] || 0) + 1;
+    });
+    let best = null, n = 0;
+    Object.keys(tally).forEach(d => { if (tally[d] > n){ n = tally[d]; best = d; } });
+    return best;
+  },
+
+  /* Still on the sample, and the sample has drifted into the past. */
+  sampleIsStale(){
+    if (this.data.liveSince) return false;
+    const day = this.data.seededOn || this.inferredSampleDay();
+    return !!day && daysBetween(day, todayStr()) > 0;
+  },
+
   /* Going live. Clears the sample shop but keeps the things worth keeping:
      the price book and the waiver templates, both of which are edited, not
      re-typed. Company settings come from the form. */
@@ -956,6 +1014,7 @@ const Store = {
         ? [{ id: uid("tech"), name: opts.techName, phone: opts.techPhone || opts.phone,
              color: TECH_COLORS[0], skill: opts.techSkill || "", active: true }]
         : [],
+      demo: false,
       customers: [], jobs: [], estimates: [], signedWaivers: [],
       priceBook: book,
       waiverTemplates: templates,
@@ -1455,6 +1514,10 @@ function seedData(){
 
   return {
     version: 2,
+    // The sample bakes in real dates, so it carries the day it was made and
+    // gets re-anchored on open. Cleared the moment the shop goes live.
+    demo: true,
+    seededOn: t,
     counter: n,
     counterEst: en,
     settings: { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"(780) 555-0100",
@@ -1951,7 +2014,18 @@ function viewToday(){
   const owed = mine.filter(j => j.status === "complete").reduce((s,j) => s + Store.balance(j), 0);
   const overdue = Store.outstanding().filter(j => j.scheduledDate < t);
 
+  const staleDay = Store.sampleIsStale() ? (Store.data.seededOn || Store.inferredSampleDay()) : null;
+
   return `
+  ${staleDay ? `
+    <div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea;margin-bottom:14px">
+      <strong>This sample day is dated ${esc(fmtDate(staleDay, { weekday:"long", month:"long", day:"numeric" }))}.</strong>
+      The demo jobs are still here, they've just aged — which is why today looks empty.
+      <div style="margin-top:9px">
+        <button class="btn sm accent" data-action="resync-demo">Move the sample to today</button>
+      </div>
+    </div>` : ""}
+
   <div class="today-head">
     <span class="big">${open.length ? open.length + " stop" + (open.length===1?"":"s") + " left" : "Day's done"}</span>
     <span class="sub">${esc(fmtDateLong(t))}</span>
@@ -2082,6 +2156,14 @@ function viewDashboard(){
     <div class="stat"><div class="label">Estimates out</div><div class="value">${estSent.length}</div>
       <div class="foot">${esc(money(estValue))} awaiting a yes</div></div>
   </div>
+
+  ${Store.sampleIsStale() ? `
+    <div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea;margin-bottom:16px">
+      <strong>The sample day has aged out.</strong> These demo jobs were dated
+      ${esc(fmtDate(Store.data.seededOn || Store.inferredSampleDay(), { month:"long", day:"numeric" }))},
+      so today reads empty.
+      <button class="btn sm accent" style="margin-left:8px" data-action="resync-demo">Move it to today</button>
+    </div>` : ""}
 
   <div class="two-col">
     <div>
@@ -5107,6 +5189,14 @@ document.addEventListener("click", e => {
     case "export-est-csv": exportEstimatesCsv(); break;
     case "new-template":  openTemplateForm(null); break;
     case "golive":        openGoLive(); break;
+    case "resync-demo": {
+      const from = Store.data.seededOn || Store.inferredSampleDay();
+      Store.shiftDemoDates(daysBetween(from, todayStr()));
+      Store.data.demo = true;          // so it re-anchors by itself from now on
+      Store.save(); render();
+      toast("Sample moved to today", "ok");
+      break;
+    }
     case "edit-messages": openMessageSetup(); break;
     case "export-waivers": exportWaiversCsv(); break;
     case "new-customer": openCustomerForm(null); break;
