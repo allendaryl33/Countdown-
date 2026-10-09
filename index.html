@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Poseidon Plumbing and Heating Ltd. — Service Dispatch</title>
+<title>Poseidon Plumbing &amp; Gasfitting Ltd. — Service Dispatch</title>
 <style>
 :root{
   /* Poseidon — deep sea navy, marine blue, and brass for the accent.
@@ -434,7 +434,7 @@ textarea.input{resize:vertical;min-height:76px}
       <div class="mark">
         <div class="logo" aria-hidden="true">Ψ</div>
         <div>
-          <div class="name" id="brand-name">Poseidon Plumbing and Heating Ltd.</div>
+          <div class="name" id="brand-name">Poseidon Plumbing &amp; Gasfitting Ltd.</div>
         </div>
       </div>
       <div class="sub">Service Dispatch</div>
@@ -470,7 +470,7 @@ textarea.input{resize:vertical;min-height:76px}
 <script>
 "use strict";
 /* ============================================================
-   Poseidon Plumbing and Heating Ltd. — Service Dispatch
+   Poseidon Plumbing & Gasfitting Ltd. — Service Dispatch
    Single-file prototype. All data persists to localStorage.
    ============================================================ */
 
@@ -494,7 +494,7 @@ const NEXT_STATUS = {
 };
 
 const JOB_TYPES = [
-  "Drain Cleaning","Leak Repair","Water Heater","Boiler / Radiant Heat",
+  "Drain Cleaning","Leak Repair","Water Heater","Furnace","Boiler / Radiant Heat",
   "Frozen Pipe","Fixture Install","Sewer / Camera","Remodel Rough-in",
   "Backflow Test","Gas Line","Well / Pump","Other"
 ];
@@ -538,6 +538,7 @@ const JOB_TYPE_WAIVERS = {
   "Drain Cleaning":       ["drain-condition"],
   "Sewer / Camera":       ["camera-limits","drain-condition"],
   "Gas Line":             ["gas-pressure"],
+  "Furnace":              ["gas-safety"],
   "Boiler / Radiant Heat":["boiler-service"],
   "Water Heater":         ["water-heater"],
   "Frozen Pipe":          ["freeze-shutoff"],
@@ -711,9 +712,10 @@ const Store = {
           this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
           // Renamed on rebrand. Only a name this app shipped as a default is
           // carried forward — anything the office typed is left alone.
-          const SHIPPED_DEFAULTS = ["Park City Plumbing", "Park City Plumbing Inc."];
+          const SHIPPED_DEFAULTS = ["Park City Plumbing", "Park City Plumbing Inc.",
+                                    "Poseidon Plumbing and Heating Ltd."];
           if (this.data.settings && SHIPPED_DEFAULTS.includes(this.data.settings.company)){
-            this.data.settings.company = "Poseidon Plumbing and Heating Ltd.";
+            this.data.settings.company = "Poseidon Plumbing & Gasfitting Ltd.";
           }
           return;
         }
@@ -1011,19 +1013,19 @@ const Store = {
 function seedData(){
   const t = todayStr();
   const techs = [
-    { id:"tech_1", name:"Marco Reyes",   phone:"4355550118", color:TECH_COLORS[0], skill:"Journeyman · Boilers", active:true },
-    { id:"tech_2", name:"Dana Whitfield",phone:"4355550142", color:TECH_COLORS[1], skill:"Master · Service",     active:true },
-    { id:"tech_3", name:"Sam Okafor",    phone:"4355550176", color:TECH_COLORS[2], skill:"Journeyman · Drains",  active:true },
-    { id:"tech_4", name:"Ellie Nakamura",phone:"4355550193", color:TECH_COLORS[3], skill:"Apprentice",           active:true }
+    { id:"tech_1", name:"Marco Reyes",   phone:"7805550118", color:TECH_COLORS[0], skill:"Journeyman · Gasfitter B", active:true },
+    { id:"tech_2", name:"Dana Whitfield",phone:"7805550142", color:TECH_COLORS[1], skill:"Journeyman · Service",     active:true },
+    { id:"tech_3", name:"Sam Okafor",    phone:"5875550176", color:TECH_COLORS[2], skill:"Journeyman · Drains",  active:true },
+    { id:"tech_4", name:"Ellie Nakamura",phone:"7805550193", color:TECH_COLORS[3], skill:"Apprentice",           active:true }
   ];
 
   const customers = [
-    { id:"cus_1", name:"Holly Bennett",       phone:"4355550231", email:"holly.bennett@example.com", address:"482 Deer Valley Dr",   city:"Park City",  notes:"Gate code 4417. Dog is friendly." },
-    { id:"cus_2", name:"Silver Ridge HOA",    phone:"4355550288", email:"manager@silverridge.example", address:"1200 Silver Ridge Rd", city:"Park City", notes:"Bill to HOA management. Unit access via front office." },
-    { id:"cus_3", name:"Tomás Delgado",       phone:"4355550304", email:"tdelgado@example.com",      address:"77 Empire Ave",        city:"Park City",  notes:"" },
-    { id:"cus_4", name:"Wasatch Brew Co.",    phone:"4355550377", email:"ops@wasatchbrew.example",   address:"1650 Bonanza Dr",      city:"Park City",  notes:"Commercial. Prefers before 10am — kitchen opens at 11." },
-    { id:"cus_5", name:"Priya Raghunathan",   phone:"4355550412", email:"priya.r@example.com",       address:"3390 Pinebrook Blvd",  city:"Park City",  notes:"Second home — often vacant, call before rolling." },
-    { id:"cus_6", name:"Grant Halvorsen",     phone:"4355550455", email:"",                          address:"908 Woodside Ave",     city:"Park City",  notes:"" }
+    { id:"cus_1", name:"Holly Bennett",            phone:"7805550231", email:"holly.bennett@example.com",   address:"10832 Saskatchewan Dr NW", city:"Edmonton", notes:"Gate code 4417. Dog is friendly." },
+    { id:"cus_2", name:"Glenora Gates Condo Corp", phone:"7805550288", email:"manager@glenoragates.example", address:"11240 Jasper Ave NW",     city:"Edmonton", notes:"Bill to the property manager. Unit access via the front desk." },
+    { id:"cus_3", name:"Tomás Delgado",            phone:"5875550304", email:"tdelgado@example.com",        address:"9617 76 Ave NW",           city:"Edmonton", notes:"" },
+    { id:"cus_4", name:"Ironwood Brewing Co.",     phone:"7805550377", email:"ops@ironwoodbrewing.example",  address:"10345 104 St NW",          city:"Edmonton", notes:"Commercial. Prefers before 10am — kitchen opens at 11." },
+    { id:"cus_5", name:"Priya Raghunathan",        phone:"7805550412", email:"priya.r@example.com",         address:"14820 Riverbend Rd NW",    city:"Edmonton", notes:"Snowbird — away November to April. Call the caretaker before rolling." },
+    { id:"cus_6", name:"Grant Halvorsen",          phone:"5875550455", email:"",                            address:"8715 149 St NW",           city:"Edmonton", notes:"" }
   ];
 
   let n = 1000;
@@ -1065,7 +1067,7 @@ function seedData(){
          scheduledDate:addDays(t,1), window:"8:00–10:00", techId:"tech_3", status:"scheduled" }),
 
     mk({ customerId:"cus_1", type:"Backflow Test", priority:"Low",
-         description:"Annual backflow certification on the irrigation RPZ. Paperwork goes to the water district.",
+         description:"Annual backflow certification on the irrigation RPZ. Paperwork goes to EPCOR.",
          scheduledDate:addDays(t,1), window:"10:00–12:00", techId:null, status:"new" }),
 
     mk({ customerId:"cus_4", type:"Gas Line", priority:"Normal",
@@ -1111,7 +1113,7 @@ function seedData(){
       log:[{ts:Date.now()-6*86400000,text:"Estimate created"},{ts:Date.now()-5*86400000,text:"Status: Draft → Sent"}] },
 
     { id:uid("est"), no:++en, customerId:null,
-      lead:{ name:"Cassie Moreau", phone:"4355550567", email:"cassie.moreau@example.com", address:"215 Aspen Springs Dr", city:"Park City" },
+      lead:{ name:"Cassie Moreau", phone:"7805550567", email:"cassie.moreau@example.com", address:"3422 Allan Way SW", city:"Edmonton" },
       type:"Water Heater", status:"draft",
       description:"Called about a 12-year-old 50gal gas unit making noise. Wants a price on straight replacement before committing.",
       validDays:30, createdAt:Date.now()-2*86400000, sentAt:null, decidedAt:null, jobId:null,
@@ -1155,7 +1157,7 @@ function seedData(){
     version: 2,
     counter: n,
     counterEst: en,
-    settings: { company:"Poseidon Plumbing and Heating Ltd.", laborRate:145, phone:"(435) 555-0100" },
+    settings: { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"(780) 555-0100" },
     counterWaiver: 5000,
     techs, customers, jobs, estimates,
     priceBook: seedPriceBook(),
@@ -1169,8 +1171,8 @@ function seedData(){
 
    These are drafts modelled on language that is common in service
    plumbing, gas fitting, drain cleaning and boiler work. They have NOT
-   been reviewed by an attorney or an insurance carrier, and what a
-   waiver can actually disclaim varies by state — nothing here waives
+   been reviewed by a lawyer or an insurance carrier, and what a
+   waiver can actually disclaim varies by province — nothing here waives
    gross negligence or willful misconduct anywhere. Have counsel and
    your carrier review before a customer signs one. Every template is
    editable, and you can add your own.
@@ -1372,7 +1374,7 @@ function seedWaiverTemplates(){
     t("excavation", "Excavation & Private Underground Utility Waiver", "All trades",
       "Any digging — sewer or water line repair or replacement, gas line trenching, well and pump work.",
       [
-        "The work at {{service_address}} requires excavation. {{company}} will request a public utility locate through the state one-call service before digging, as required by law.",
+        "The work at {{service_address}} requires excavation. {{company}} will request a public utility locate through Utility Safety Partners (formerly Alberta One-Call) before digging, as required by law. Locate requests need lead time, and busy seasons slow them down.",
         "A public locate marks public utilities only. It does NOT mark privately owned lines on the property. Irrigation and sprinkler lines, landscape lighting, invisible pet fencing, private electrical runs to sheds, garages, gates, wells or pumps, septic components, drain tile, data and low-voltage cabling, propane lines and private water lines are the Customer's to identify and mark.",
         "The Customer agrees to identify and mark all known private underground installations before excavation begins, and accepts that {{company}} is not responsible for damage to private lines that were not marked or disclosed.",
         "Excavation disturbs the surface. Restoration is to rough grade with the excavated soil unless a finished restoration is separately quoted. Sod, landscaping, plantings, mature root systems, paving, driveways, patios and retaining structures within the work area may be damaged or removed, and their replacement is not included. Settlement over a backfilled trench is normal and may continue for a season or more.",
@@ -1391,7 +1393,7 @@ function seedWaiverTemplates(){
         "During work at {{service_address}} on {{date}}, {{company}} encountered material suspected to contain asbestos, lead, or mould growth. Suspected material and location: ____________________________________________",
         "{{company}} is a plumbing and mechanical contractor. It is not licensed or equipped for hazardous material abatement, testing, or remediation, and it will not disturb, remove or work through suspected hazardous material.",
         "Work in the affected area has been stopped and will not resume until the Customer has arranged assessment and, where required, abatement by an appropriately licensed specialist, and has provided documentation that the area is clear.",
-        "The Customer understands that disturbing asbestos-containing insulation or lead paint, or working in an area with active mould growth, presents a health risk to occupants and to trades on site, and that federal and state rules govern how such material must be handled.",
+        "The Customer understands that disturbing asbestos-containing insulation or lead paint, or working in an area with active mould growth, presents a health risk to occupants and to trades on site, and that federal and provincial rules govern how such material must be handled.",
         "Time already spent on site is billable at standard rates. Rescheduling after clearance is subject to normal availability."
       ],
       [
@@ -1489,7 +1491,7 @@ function render(){
 
 function renderBrand(){
   const el = $("#brand-name");
-  if (el) el.textContent = Store.data.settings.company || "Poseidon Plumbing and Heating Ltd.";
+  if (el) el.textContent = Store.data.settings.company || "Poseidon Plumbing & Gasfitting Ltd.";
 }
 
 function renderNav(){
@@ -2074,8 +2076,8 @@ function viewEstimates(){
 const LEGAL_NOTE = `<div class="legal-note">
   <strong>Before you use these with a customer:</strong> these templates are drafts
   modelled on language that is common in service plumbing, gas, drain and boiler work.
-  They have not been reviewed by an attorney or by your insurance carrier, and what a
-  waiver can actually disclaim varies by state — no waiver anywhere covers gross
+  They have not been reviewed by a lawyer or by your insurance carrier, and what a
+  waiver can actually disclaim varies by province — no waiver anywhere covers gross
   negligence or willful misconduct. Have counsel and your carrier review them, then edit
   the wording here to match what they approve.
 </div>`;
@@ -2697,11 +2699,11 @@ function openJobForm(id){
       <div id="new-cust" style="display:none;border:1px solid var(--line);border-radius:7px;padding:14px;background:#fafcfd;margin-bottom:14px">
         <div class="row2">
           <div class="field"><label>Name *</label><input class="input" id="nc-name" placeholder="Homeowner or business"></div>
-          <div class="field"><label>Phone</label><input class="input" id="nc-phone" placeholder="(435) 555-0100"></div>
+          <div class="field"><label>Phone</label><input class="input" id="nc-phone" placeholder="(780) 555-0100"></div>
         </div>
         <div class="row2">
           <div class="field" style="margin-bottom:0"><label>Service address</label><input class="input" id="nc-address" placeholder="482 Deer Valley Dr"></div>
-          <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="nc-city" value="Park City"></div>
+          <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="nc-city" value="Edmonton"></div>
         </div>
       </div>
 
@@ -2761,7 +2763,7 @@ function saveJobFromForm(id){
         phone: $("#nc-phone").value.trim(),
         email: "",
         address: $("#nc-address").value.trim(),
-        city: $("#nc-city").value.trim() || "Park City",
+        city: $("#nc-city").value.trim() || "Edmonton",
         notes: "", createdAt: Date.now()
       };
       Store.data.customers.push(c);
@@ -2973,7 +2975,7 @@ function openEstimateForm(id){
         <div class="field"><label>Email</label><input class="input" id="l-email" value="${esc(lead?lead.email:"")}"></div>
         <div class="row2">
           <div class="field" style="margin-bottom:0"><label>Service address</label><input class="input" id="l-address" value="${esc(lead?lead.address:"")}"></div>
-          <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="l-city" value="${esc(lead?lead.city:"Park City")}"></div>
+          <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="l-city" value="${esc(lead?lead.city:"Edmonton")}"></div>
         </div>
       </div>
 
@@ -3031,7 +3033,7 @@ function saveEstimateFromForm(id){
     if (!name){ $("#l-name").classList.add("invalid"); $("#e-who").style.display = "block"; ok = false; }
     else lead = {
       name, phone: $("#l-phone").value.trim(), email: $("#l-email").value.trim(),
-      address: $("#l-address").value.trim(), city: $("#l-city").value.trim() || "Park City"
+      address: $("#l-address").value.trim(), city: $("#l-city").value.trim() || "Edmonton"
     };
   }
   if (!desc){ $("#e-edesc").style.display = "block"; ok = false; }
@@ -3110,7 +3112,7 @@ function openConvert(id){
           <div class="field"><label>Email</label><input class="input" id="cv-email" value="${esc(c.email||"")}"></div>
           <div class="row2">
             <div class="field" style="margin-bottom:0"><label>Service address</label><input class="input" id="cv-address" value="${esc(c.address||"")}"></div>
-            <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="cv-city" value="${esc(c.city||"Park City")}"></div>
+            <div class="field" style="margin-bottom:0"><label>City</label><input class="input" id="cv-city" value="${esc(c.city||"Edmonton")}"></div>
           </div>
         </div>
 
@@ -3172,7 +3174,7 @@ function doConvert(id){
     const c = {
       id: uid("cus"), name,
       phone: $("#cv-phone").value.trim(), email: $("#cv-email").value.trim(),
-      address: $("#cv-address").value.trim(), city: $("#cv-city").value.trim() || "Park City",
+      address: $("#cv-address").value.trim(), city: $("#cv-city").value.trim() || "Edmonton",
       notes: "", createdAt: Date.now()
     };
     Store.data.customers.push(c);
@@ -3701,7 +3703,7 @@ function openCustomerForm(id){
       <div class="field"><label>Email</label><input class="input" id="c-email" value="${esc(c?c.email:"")}"></div>
       <div class="row2">
         <div class="field"><label>Service address</label><input class="input" id="c-address" value="${esc(c?c.address:"")}"></div>
-        <div class="field"><label>City</label><input class="input" id="c-city" value="${esc(c?c.city:"Park City")}"></div>
+        <div class="field"><label>City</label><input class="input" id="c-city" value="${esc(c?c.city:"Edmonton")}"></div>
       </div>
       <div class="field"><label>Site notes</label>
         <textarea class="input" id="c-notes" placeholder="Gate codes, dogs, parking, billing quirks — anything the tech should know.">${esc(c?c.notes:"")}</textarea></div>
@@ -3999,7 +4001,7 @@ function importJson(file){
       Store.data = parsed;
       Store.data.techs     = Store.data.techs     || [];
       Store.data.customers = Store.data.customers || [];
-      Store.data.settings  = Store.data.settings  || { company:"Poseidon Plumbing and Heating Ltd.", laborRate:145, phone:"" };
+      Store.data.settings  = Store.data.settings  || { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"" };
       Store.save(); render();
       toast("Backup restored", "ok");
     } catch(e){
@@ -4321,7 +4323,7 @@ document.addEventListener("click", e => {
     case "import":     $("#import-file").click(); break;
     case "save-settings": {
       const s = Store.data.settings;
-      s.company = $("#set-company").value.trim() || "Poseidon Plumbing and Heating Ltd.";
+      s.company = $("#set-company").value.trim() || "Poseidon Plumbing & Gasfitting Ltd.";
       s.phone   = $("#set-phone").value.trim();
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");

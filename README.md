@@ -1,9 +1,12 @@
-# Poseidon Plumbing and Heating Ltd. — Service Dispatch
+# Poseidon Plumbing & Gasfitting Ltd. — Service Dispatch
 
 A dispatch board for the office: take service calls, put jobs on the schedule,
 assign technicians, and track each job from the phone call to a signed ticket.
 
 ## Brand colours
+
+Service area is Edmonton, Alberta — the sample customers, phone numbers and
+the one-call reference in the excavation waiver are all local.
 
 Deep-sea navy and marine blue carry the identity, with brass as the single
 accent — Poseidon's trident is the mark. Those three are the brand.
@@ -145,13 +148,13 @@ declined estimate can be reopened if the customer comes back.
 
 ## About the waiver templates
 
-**These are drafts, not legal advice, and nobody has reviewed them for Utah.**
+**These are drafts, not legal advice, and nobody has reviewed them for Alberta.**
 They're modelled on language that is common in service plumbing, gas fitting,
 drain cleaning and boiler work — the conditions that actually come up, in the
-order they come up. What a waiver can disclaim varies by state, and no waiver
+order they come up. What a waiver can disclaim varies by province, and no waiver
 anywhere covers gross negligence or willful misconduct.
 
-Have your attorney and your insurance carrier read them before a customer signs
+Have your lawyer and your insurance carrier read them before a customer signs
 one. Carriers in particular often have their own preferred wording, and using
 theirs can matter at claim time. Every template is editable in the app, so
 replacing the language with what they approve is a copy-and-paste job. That
