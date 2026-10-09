@@ -1,7 +1,19 @@
-# Park City Plumbing Inc. — Service Dispatch
+# Poseidon Plumbing and Heating Ltd. — Service Dispatch
 
 A dispatch board for the office: take service calls, put jobs on the schedule,
 assign technicians, and track each job from the phone call to a signed ticket.
+
+## Brand colours
+
+Deep-sea navy and marine blue carry the identity, with brass as the single
+accent — Poseidon's trident is the mark. Those three are the brand.
+
+**Red, green and amber are reserved for meaning**, never for branding: red is
+an emergency, green is complete or paid, amber is something needing attention.
+That separation is why a red badge always means the same thing wherever you see
+it. All of it is defined as CSS variables at the top of `index.html`
+(`--navy`, `--blue`, `--gold`, `--amber`, `--green`, `--red`) — change a value
+there and it flows through the whole app.
 
 **Open `index.html` in a browser.** That's the whole install. It is one
 self-contained file — no server, no build step, no accounts, no internet

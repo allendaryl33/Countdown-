@@ -3,12 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Park City Plumbing Inc. — Service Dispatch</title>
+<title>Poseidon Plumbing and Heating Ltd. — Service Dispatch</title>
 <style>
 :root{
-  --navy:#0f2740; --navy-2:#16354f;
-  --blue:#1d6fa5; --blue-soft:#e8f1f8;
-  --orange:#e2701f; --orange-soft:#fdf0e5;
+  /* Poseidon — deep sea navy, marine blue, and brass for the accent.
+     Brand colours are --navy / --blue / --gold. Red, green and amber are
+     reserved for meaning (emergency, complete, needs attention) and are
+     never used for branding, so a red badge always means the same thing. */
+  --navy:#0a2a42; --navy-2:#10405f;
+  --blue:#1668ab; --blue-soft:#e7f0f8;
+  --gold:#e8b931; --gold-deep:#8d6a10; --gold-soft:#fdf4dc;
+  --amber:#c4701a; --amber-soft:#fcefe2;
   --bg:#f3f6f9; --card:#fff; --line:#e1e7ed;
   --text:#16222e; --muted:#6b7c8c; --muted-2:#93a2b0;
   --green:#1f8a4c; --green-soft:#e6f4ec;
@@ -37,13 +42,15 @@ a{color:var(--blue)}
 .brand{padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.09)}
 .brand .mark{display:flex;align-items:center;gap:9px}
 .brand .logo{
-  width:30px;height:30px;border-radius:7px;background:var(--orange);
-  display:grid;place-items:center;font-size:16px;flex:0 0 30px;
+  width:30px;height:30px;border-radius:7px;background:var(--gold);
+  display:grid;place-items:center;flex:0 0 30px;
+  color:var(--navy);font-family:Georgia,"Times New Roman",serif;
+  font-size:21px;font-weight:700;line-height:1;padding-bottom:2px;
 }
 .brand .name{color:#fff;font-weight:700;font-size:14px;line-height:1.2;letter-spacing:-.01em;text-wrap:balance}
-.brand .sub{font-size:11px;color:#8ba2b9;letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
+.brand .sub{font-size:11px;color:#8aa6bd;letter-spacing:.06em;text-transform:uppercase;margin-top:3px}
 nav{padding:10px 10px;flex:1;overflow:auto}
-nav .nav-label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#6f88a1;padding:12px 8px 6px}
+nav .nav-label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:#6e8aa3;padding:12px 8px 6px}
 nav button{
   display:flex;align-items:center;gap:10px;width:100%;text-align:left;
   background:none;border:0;color:#cfdcea;padding:8px 10px;border-radius:6px;
@@ -57,8 +64,8 @@ nav button .count{
   padding:1px 6px;border-radius:9px;font-weight:600;
 }
 nav button.active .count{background:rgba(255,255,255,.25)}
-nav button .count.alert{background:var(--orange);color:#fff}
-.sidebar-foot{padding:12px 16px;border-top:1px solid rgba(255,255,255,.09);font-size:11px;color:#728ca6}
+nav button .count.alert{background:var(--amber);color:#fff}
+.sidebar-foot{padding:12px 16px;border-top:1px solid rgba(255,255,255,.09);font-size:11px;color:#6f8ca6}
 
 #main{flex:1;min-width:0;display:flex;flex-direction:column}
 header.topbar{
@@ -85,9 +92,10 @@ main.content{padding:22px 24px 60px;flex:1}
 }
 .btn:hover{background:#f7f9fb;border-color:#cfd8e1}
 .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-.btn.primary:hover{background:#1a6193;border-color:#1a6193}
-.btn.accent{background:var(--orange);border-color:var(--orange);color:#fff}
-.btn.accent:hover{background:#cc6317;border-color:#cc6317}
+.btn.primary:hover{background:#12558f;border-color:#12558f}
+/* Brass on navy text — gold is too light to carry white legibly. */
+.btn.accent{background:var(--gold);border-color:var(--gold);color:var(--navy);font-weight:650}
+.btn.accent:hover{background:#d9a81f;border-color:#d9a81f}
 .btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
 .btn.ghost:hover{background:#eef2f6;color:var(--text)}
 .btn.danger{color:var(--red);border-color:#f0d4d0}
@@ -110,7 +118,7 @@ main.content{padding:22px 24px 60px;flex:1}
 .stat .value{font-size:27px;font-weight:700;margin-top:5px;letter-spacing:-.02em}
 .stat .foot{font-size:12px;color:var(--muted);margin-top:2px}
 .stat.alert{border-color:#f3c9a8;background:linear-gradient(180deg,#fff9f3,#fff)}
-.stat.alert .value{color:var(--orange)}
+.stat.alert .value{color:var(--amber)}
 .section-title{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650;margin:26px 0 10px}
 .two-col{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
 @media(max-width:1080px){.two-col{grid-template-columns:1fr}}
@@ -138,17 +146,17 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 }
 .badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
 .s-new{background:#eef2f6;color:#54687a}
-.s-scheduled{background:var(--blue-soft);color:#175f8e}
+.s-scheduled{background:var(--blue-soft);color:#105585}
 .s-dispatched{background:var(--purple-soft);color:var(--purple)}
-.s-in_progress{background:var(--orange-soft);color:#b95b12}
+.s-in_progress{background:var(--amber-soft);color:#9c5712}
 .s-complete{background:var(--green-soft);color:var(--green)}
 .s-cancelled{background:#f0f2f4;color:#8b98a4;text-decoration:line-through}
 .p-Emergency{background:var(--red-soft);color:var(--red)}
-.p-High{background:var(--orange-soft);color:#b95b12}
+.p-High{background:var(--amber-soft);color:#9c5712}
 .p-Normal{background:#eef2f6;color:#54687a}
 .p-Low{background:#eef2f6;color:#8b98a4}
 .e-draft{background:#eef2f6;color:#54687a}
-.e-sent{background:var(--orange-soft);color:#b95b12}
+.e-sent{background:var(--amber-soft);color:#9c5712}
 .e-approved{background:var(--green-soft);color:var(--green)}
 .e-declined{background:var(--red-soft);color:var(--red)}
 .money-lg{font-size:19px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
@@ -172,9 +180,9 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 }
 .legal-note strong{color:#5e441a}
 .pay-unbilled{background:#eef2f6;color:#54687a}
-.pay-invoiced{background:var(--orange-soft);color:#b95b12}
+.pay-invoiced{background:var(--amber-soft);color:#9c5712}
 .pay-paid{background:var(--green-soft);color:var(--green)}
-.pay-partial{background:var(--orange-soft);color:#b95b12}
+.pay-partial{background:var(--amber-soft);color:#9c5712}
 .money-row{display:flex;align-items:baseline;gap:10px;padding:9px 16px;border-bottom:1px solid #f2f5f8}
 .money-row .mr-label{font-size:12.5px;color:var(--muted)}
 .money-row .mr-val{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:650}
@@ -251,11 +259,11 @@ textarea.input{resize:vertical;min-height:76px}
 
 /* unscheduled tray */
 .tray{
-  background:var(--orange-soft);border:1px solid #f2d7bd;border-radius:8px;
+  background:var(--amber-soft);border:1px solid #f0d6bb;border-radius:8px;
   padding:10px 12px;margin-bottom:14px;
 }
 .tray-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.tray-head .nm{font-weight:650;font-size:13px;color:#b95b12}
+.tray-head .nm{font-weight:650;font-size:13px;color:#9c5712}
 .tray-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
 .tray-strip .minicard{flex:0 0 190px}
 
@@ -270,8 +278,8 @@ textarea.input{resize:vertical;min-height:76px}
 .wk-day:last-child{border-right:0}
 .wk-day .dn{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650}
 .wk-day .dd{font-size:17px;font-weight:700;letter-spacing:-.01em;margin-top:1px;font-variant-numeric:tabular-nums}
-.wk-day.today .dd{color:var(--orange)}
-.wk-day.today{background:var(--orange-soft)}
+.wk-day.today .dd{color:var(--gold-deep)}
+.wk-day.today{background:var(--gold-soft)}
 .wk-techcell{
   border-bottom:1px solid #eef2f6;border-right:1px solid var(--line);padding:10px 12px;
   display:flex;gap:8px;align-items:flex-start;background:#fafcfd;
@@ -282,7 +290,7 @@ textarea.input{resize:vertical;min-height:76px}
   min-height:74px;display:flex;flex-direction:column;gap:5px;
 }
 .wk-cell:nth-child(8n+1){border-right:1px solid var(--line)}
-.wk-cell.today{background:#fffaf5}
+.wk-cell.today{background:#fffdf5}
 .wk-cell.dragover{background:#e2eef7;outline:2px dashed var(--blue);outline-offset:-3px}
 .wk-row-unassigned .wk-cell{background:#fdf6ef}
 .wk-row-unassigned .wk-cell.dragover{background:#e2eef7}
@@ -300,11 +308,11 @@ textarea.input{resize:vertical;min-height:76px}
 .mo-cell:nth-child(7n){border-right:0}
 .mo-cell.out{background:#fafbfc}
 .mo-cell.out .dnum{color:var(--muted-2)}
-.mo-cell.today{background:#fffaf5}
+.mo-cell.today{background:var(--gold-soft)}
 .mo-cell.dragover{background:#e2eef7;outline:2px dashed var(--blue);outline-offset:-3px}
 .mo-cell .dtop{display:flex;align-items:center;gap:5px}
 .mo-cell .dnum{font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text)}
-.mo-cell.today .dnum{color:var(--orange)}
+.mo-cell.today .dnum{color:var(--gold-deep)}
 .mo-cell .dcount{margin-left:auto;font-size:10.5px;color:var(--muted);font-weight:600}
 .mo-more{font-size:11px;color:var(--blue);font-weight:600;cursor:pointer;padding-left:2px}
 .mo-more:hover{text-decoration:underline}
@@ -320,7 +328,7 @@ textarea.input{resize:vertical;min-height:76px}
 .minicard:hover{border-color:#c6d2de;box-shadow:0 1px 4px rgba(16,36,56,.1)}
 .minicard.dragging{opacity:.4}
 .minicard.pri-Emergency{border-left-color:var(--red)}
-.minicard.pri-High{border-left-color:var(--orange)}
+.minicard.pri-High{border-left-color:var(--amber)}
 .minicard.pri-Low{border-left-color:#c3ccd6}
 .minicard.st-complete{border-left-color:var(--green);background:#fbfdfc}
 .minicard.st-cancelled{opacity:.5}
@@ -335,7 +343,7 @@ textarea.input{resize:vertical;min-height:76px}
   flex:1 1 238px;min-width:238px;max-width:340px;background:#eaeff4;border-radius:8px;padding:8px;min-height:180px;
   border:1px solid #dfe6ed;
 }
-.col.unassigned{background:var(--orange-soft);border-color:#f2d7bd}
+.col.unassigned{background:var(--amber-soft);border-color:#f0d6bb}
 .col.dragover{outline:2px dashed var(--blue);outline-offset:-3px;background:#e2eef7}
 .col-head{display:flex;align-items:center;gap:8px;padding:4px 4px 10px}
 .col-head .nm{font-weight:650;font-size:13px}
@@ -348,7 +356,7 @@ textarea.input{resize:vertical;min-height:76px}
 .jobcard:active{cursor:grabbing}
 .jobcard.dragging{opacity:.4}
 .jobcard.pri-Emergency{border-left-color:var(--red)}
-.jobcard.pri-High{border-left-color:var(--orange)}
+.jobcard.pri-High{border-left-color:var(--amber)}
 .jobcard.pri-Low{border-left-color:#c3ccd6}
 .jobcard.st-complete{border-left-color:var(--green);background:#fbfdfc}
 .jobcard.st-cancelled{opacity:.55}
@@ -424,9 +432,9 @@ textarea.input{resize:vertical;min-height:76px}
   <aside id="sidebar">
     <div class="brand">
       <div class="mark">
-        <div class="logo">🔧</div>
+        <div class="logo" aria-hidden="true">Ψ</div>
         <div>
-          <div class="name" id="brand-name">Park City Plumbing Inc.</div>
+          <div class="name" id="brand-name">Poseidon Plumbing and Heating Ltd.</div>
         </div>
       </div>
       <div class="sub">Service Dispatch</div>
@@ -462,7 +470,7 @@ textarea.input{resize:vertical;min-height:76px}
 <script>
 "use strict";
 /* ============================================================
-   Park City Plumbing Inc. — Service Dispatch
+   Poseidon Plumbing and Heating Ltd. — Service Dispatch
    Single-file prototype. All data persists to localStorage.
    ============================================================ */
 
@@ -550,7 +558,7 @@ const MERGE_FIELDS = [
   ["{{date}}",           "Today"]
 ];
 
-const TECH_COLORS = ["#1d6fa5","#e2701f","#1f8a4c","#5b4bb5","#c0392b","#0d7c8f","#8a6d1f","#b8407e"];
+const TECH_COLORS = ["#1668ab","#0d7c8f","#1f8a4c","#5b4bb5","#a8761a","#c0392b","#2f5f9e","#b8407e"];
 
 /* ---------- Tiny helpers ---------- */
 const $  = (sel, root=document) => root.querySelector(sel);
@@ -701,10 +709,11 @@ const Store = {
           this.data.counterWaiver   = this.data.counterWaiver   || 5000;
           // Added with payment tracking — older jobs have no payment block.
           this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
-          // Incorporated: bring the stored name up to date, but never overwrite
-          // a name the office set themselves.
-          if (this.data.settings && this.data.settings.company === "Park City Plumbing"){
-            this.data.settings.company = "Park City Plumbing Inc.";
+          // Renamed on rebrand. Only a name this app shipped as a default is
+          // carried forward — anything the office typed is left alone.
+          const SHIPPED_DEFAULTS = ["Park City Plumbing", "Park City Plumbing Inc."];
+          if (this.data.settings && SHIPPED_DEFAULTS.includes(this.data.settings.company)){
+            this.data.settings.company = "Poseidon Plumbing and Heating Ltd.";
           }
           return;
         }
@@ -1146,7 +1155,7 @@ function seedData(){
     version: 2,
     counter: n,
     counterEst: en,
-    settings: { company:"Park City Plumbing Inc.", laborRate:145, phone:"(435) 555-0100" },
+    settings: { company:"Poseidon Plumbing and Heating Ltd.", laborRate:145, phone:"(435) 555-0100" },
     counterWaiver: 5000,
     techs, customers, jobs, estimates,
     priceBook: seedPriceBook(),
@@ -1480,7 +1489,7 @@ function render(){
 
 function renderBrand(){
   const el = $("#brand-name");
-  if (el) el.textContent = Store.data.settings.company || "Park City Plumbing Inc.";
+  if (el) el.textContent = Store.data.settings.company || "Poseidon Plumbing and Heating Ltd.";
 }
 
 function renderNav(){
@@ -1703,7 +1712,7 @@ function viewDashboard(){
             </div>
             <div class="money-row clickable" data-money="unpaid" style="cursor:pointer;border-bottom:0">
               <span class="mr-label">Awaiting payment</span>
-              <span class="mr-val" style="color:${owedSum>0.005?"var(--orange)":"inherit"}">${esc(money(owedSum))}<span class="t-sub" style="font-weight:400"> · ${owed.length}</span></span>
+              <span class="mr-val" style="color:${owedSum>0.005?"var(--amber)":"inherit"}">${esc(money(owedSum))}<span class="t-sub" style="font-weight:400"> · ${owed.length}</span></span>
             </div>
           </div>
         </div>`;
@@ -2245,7 +2254,7 @@ function viewCustomers(){
           <td><div>${esc(fmtPhone(r.c.phone))}</div>${r.c.email?`<div class="t-sub">${esc(r.c.email)}</div>`:""}</td>
           <td><div>${esc(r.c.address)}</div><div class="t-sub">${esc(r.c.city)}</div></td>
           <td class="num">${r.count}</td>
-          <td class="num">${r.open?`<span class="chip" style="background:var(--blue-soft);color:#175f8e">${r.open}</span>`:"—"}</td>
+          <td class="num">${r.open?`<span class="chip" style="background:var(--blue-soft);color:#105585">${r.open}</span>`:"—"}</td>
           <td class="t-sub">${r.last?esc(fmtDate(r.last.scheduledDate)):"—"}</td>
           <td class="num">${r.spend?esc(money(r.spend)):"—"}</td>
         </tr>`).join("")
@@ -2593,7 +2602,7 @@ function openJob(id){
             <span class="mr-val">${esc(money(pay.amountPaid||0))}</span></div>
           <div class="money-row" style="border-bottom:0">
             <span class="mr-label">Balance</span>
-            <span class="mr-val" style="color:${bal>0.005?"var(--orange)":"var(--green)"}">${esc(money(bal))}</span></div>
+            <span class="mr-val" style="color:${bal>0.005?"var(--amber)":"var(--green)"}">${esc(money(bal))}</span></div>
         </div>
         <div class="row3">
           <div class="field"><label>Status</label>
@@ -3990,7 +3999,7 @@ function importJson(file){
       Store.data = parsed;
       Store.data.techs     = Store.data.techs     || [];
       Store.data.customers = Store.data.customers || [];
-      Store.data.settings  = Store.data.settings  || { company:"Park City Plumbing Inc.", laborRate:145, phone:"" };
+      Store.data.settings  = Store.data.settings  || { company:"Poseidon Plumbing and Heating Ltd.", laborRate:145, phone:"" };
       Store.save(); render();
       toast("Backup restored", "ok");
     } catch(e){
@@ -4312,7 +4321,7 @@ document.addEventListener("click", e => {
     case "import":     $("#import-file").click(); break;
     case "save-settings": {
       const s = Store.data.settings;
-      s.company = $("#set-company").value.trim() || "Park City Plumbing Inc.";
+      s.company = $("#set-company").value.trim() || "Poseidon Plumbing and Heating Ltd.";
       s.phone   = $("#set-phone").value.trim();
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");
