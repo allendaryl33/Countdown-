@@ -177,6 +177,41 @@ nav button .count.alert{background:var(--amber);color:#fff}
   font-size:12.5px;padding:7px 14px;background:var(--amber-soft);color:#9c5712;
   border-top:1px solid #f0d6bb;font-weight:550;
 }
+.msg-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.msg-tabs button{
+  border:1px solid var(--line);background:#fff;border-radius:18px;padding:7px 14px;
+  font-size:13px;font-weight:600;color:var(--muted);
+}
+.msg-tabs button:hover{border-color:#c6d2de;color:var(--text)}
+.msg-tabs button.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.msg-prev{
+  width:100%;border:1px solid #d5dde5;border-radius:9px;padding:13px 14px;
+  font:15px/1.55 inherit;background:#fff;resize:vertical;min-height:112px;color:var(--text);
+}
+.msg-prev:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(22,104,171,.12);outline:none}
+.msg-meta{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted-2);margin-top:5px}
+.msg-eta{
+  display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:14px 0;
+  padding:12px 13px;background:var(--sunk,#f3f6f9);border:1px solid var(--line);border-radius:9px;
+}
+.msg-eta .lab{font-size:12.5px;font-weight:600;color:#455565;margin-right:2px}
+@media (max-width:560px){
+  .msg-eta{gap:6px}
+  .msg-eta .lab{flex-basis:100%;margin:0}
+  .msg-eta button{flex:1;min-width:0}
+  .msg-eta .zone-chip{flex-basis:100%}
+}
+.msg-eta button{
+  border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 12px;
+  font-size:13px;font-weight:600;color:var(--muted);
+}
+.msg-eta button.on{background:var(--amber);border-color:var(--amber);color:#fff}
+.msg-send{display:flex;gap:9px;flex-wrap:wrap}
+.msg-send .btn{flex:1;min-width:120px;justify-content:center;padding:12px 10px;text-decoration:none}
+.zone-chip{
+  display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;
+  background:var(--blue-soft);color:#105585;
+}
 .today-empty{
   background:var(--card);border:1px dashed var(--line);border-radius:11px;
   padding:34px 20px;text-align:center;color:var(--muted);
@@ -651,6 +686,42 @@ const PAY_STATUSES = [
 const PAY_LABEL = Object.fromEntries(PAY_STATUSES.map(p => [p.id, p.label]));
 const PAY_METHODS = ["", "Card", "ACH / bank transfer", "Check", "Cash", "Other"];
 
+/* Travel zones. The label is what you call the area; the ETA is the phrase
+   that lands in the customer's text. Both are editable under Data & Setup. */
+function defaultZones(){
+  return [
+    { id:"city",    label:"Edmonton",         eta:"about 30 minutes" },
+    { id:"greater", label:"Greater Edmonton", eta:"about 45 minutes" },
+    { id:"out",     label:"Out of area",      eta:"about an hour" }
+  ];
+}
+
+/* Short, plain messages. Long ones don't get read standing in a doorway. */
+function defaultMessages(){
+  return [
+    { id:"confirm", label:"Booked",
+      body:"Hi {{first_name}} — {{tech}} from {{company}}. You're booked in for {{day}}, {{window}}, for {{work}}. Any questions, call {{phone}}." },
+    { id:"onway", label:"On my way",
+      body:"Hi {{first_name}} — {{tech}} from {{company}}. Heading your way now, {{eta}} out. See you shortly." },
+    { id:"late", label:"Running late",
+      body:"Hi {{first_name}} — {{tech}} from {{company}}. Running behind, sorry about that. Looking like {{eta}} now. I'll let you know if it shifts again." },
+    { id:"done", label:"Finished",
+      body:"Hi {{first_name}} — all finished at your place. Thanks for the business.{{pay_link}}" }
+  ];
+}
+
+const MSG_FIELDS = [
+  ["{{first_name}}", "Customer's first name"],
+  ["{{tech}}",       "Technician on the job"],
+  ["{{company}}",    "Your company name"],
+  ["{{phone}}",      "Your office phone"],
+  ["{{eta}}",        "Travel time for their zone, plus any bump"],
+  ["{{day}}",        "today / tomorrow / the weekday"],
+  ["{{window}}",     "Arrival window, e.g. 10–12"],
+  ["{{work}}",       "Type of work"],
+  ["{{pay_link}}",   "Payment link, if the job has one"]
+];
+
 const WAIVER_CATEGORIES = ["Drain & Sewer","Gas","Boiler & Hydronic","Plumbing","All trades"];
 
 /* Job types that normally want a signed acknowledgment before the tech starts.
@@ -829,6 +900,10 @@ const Store = {
           this.data.waiverTemplates = this.data.waiverTemplates || seedWaiverTemplates();
           this.data.signedWaivers   = this.data.signedWaivers   || [];
           this.data.counterWaiver   = this.data.counterWaiver   || 5000;
+          // Added with customer messaging.
+          this.data.settings.zones    = this.data.settings.zones    || defaultZones();
+          this.data.settings.messages = this.data.settings.messages || defaultMessages();
+          this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
           // Added with payment tracking — older jobs have no payment block.
           this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
           // Renamed on rebrand. Only a name this app shipped as a default is
@@ -873,7 +948,9 @@ const Store = {
       settings: {
         company: opts.company,
         phone: opts.phone,
-        laborRate: Number(opts.laborRate) || 0
+        laborRate: Number(opts.laborRate) || 0,
+        zones: this.data.settings.zones || defaultZones(),
+        messages: this.data.settings.messages || defaultMessages()
       },
       techs: opts.techName
         ? [{ id: uid("tech"), name: opts.techName, phone: opts.techPhone || opts.phone,
@@ -975,6 +1052,80 @@ const Store = {
   deleteEstimate(id){
     this.data.estimates = this.data.estimates.filter(e => e.id !== id);
     this.save();
+  },
+
+  /* Customer messaging. The app writes the message; the phone sends it, from
+     your own number, so a reply comes back to you. */
+  /* Texts should sound like a person, not a registry entry. Waivers, tickets
+     and estimates keep the full legal name; messages use the trading name. */
+  tradeName(){
+    const st = this.data.settings;
+    if (st.shortName && st.shortName.trim()) return st.shortName.trim();
+    return String(st.company || "").replace(/[,\s]+(Ltd|Inc|Corp|Co|LLC|ULC)\.?$/i, "").trim()
+        || st.company || "";
+  },
+
+  zones(){ return this.data.settings.zones || defaultZones(); },
+  zone(id){ return this.zones().find(z => z.id === id) || this.zones()[0]; },
+  messages(){ return this.data.settings.messages || defaultMessages(); },
+  message(id){ return this.messages().find(m => m.id === id) || this.messages()[0]; },
+
+  /* "today" and "tomorrow" read better in a text than a date does. */
+  dayWord(dateStr){
+    if (!dateStr) return "your appointment";
+    const t = todayStr();
+    if (dateStr === t) return "today";
+    if (dateStr === addDays(t, 1)) return "tomorrow";
+    const d = parseYmd(dateStr);
+    return d.toLocaleDateString(undefined, { weekday:"long", month:"short", day:"numeric" });
+  },
+
+  /* "about 30 minutes" + 30 => "about an hour". The result has to read as a
+     time, because the template drops it mid-sentence: "... {{eta}} out." */
+  bumpEta(phrase, mins){
+    if (!mins) return phrase;
+    if (!/\d/.test(phrase)) return `${phrase}, plus about ${mins} minutes`;
+    // A range ("20-25 min") needs both ends moved, not just the first.
+    const nums = phrase.match(/\d+/g);
+    if (nums.length > 1) return phrase.replace(/\d+/g, n => String(Number(n) + mins));
+    const total = Number(nums[0]) + mins;
+    const friendly = { 60:"an hour", 90:"an hour and a half", 120:"two hours" }[total];
+    if (!friendly) return phrase.replace(/\d+/, String(total));
+    // Swap the whole "30 minutes" chunk, or just the number if there's no unit.
+    const withUnit = /\d+\s*(?:minutes?|mins?)/i;
+    return withUnit.test(phrase) ? phrase.replace(withUnit, friendly)
+                                 : phrase.replace(/\d+/, friendly);
+  },
+
+  messageContext(job, bumpMins){
+    const st = this.data.settings;
+    const c = job ? this.customer(job.customerId) : null;
+    const z = this.zone(c ? c.zone : "city");
+    const tech = job && job.techId ? (this.tech(job.techId) || {}).name
+               : (this.activeTechs()[0] || {}).name || "";
+    const pay = (job && job.payment) || {};
+    return {
+      first_name: c ? String(c.name).trim().split(/\s+/)[0] : "there",
+      tech: tech || st.company,
+      company: this.tradeName(),
+      phone: st.phone,
+      eta: this.bumpEta(z.eta, bumpMins),
+      day: this.dayWord(job && job.scheduledDate),
+      window: job ? fieldWindow(job.window) : "",
+      work: job ? String(job.type).toLowerCase() : "the work",
+      pay_link: pay.url ? ` Pay here: ${pay.url}` : ""
+    };
+  },
+
+  renderMessage(tplId, job, bumpMins){
+    const tpl = this.message(tplId);
+    const ctx = this.messageContext(job, bumpMins);
+    return String(tpl.body)
+      .replace(/\{\{(\w+)\}\}/g, (m, k) => (k in ctx ? ctx[k] : m))
+      // A value ending in a full stop, butted against the template's own.
+      .replace(/([A-Za-z])\.\.(\s|$)/g, "$1.$2")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
   },
 
   /* Payment tracking. Deliberately manual: Stripe (or whoever) stays the system
@@ -1169,12 +1320,12 @@ function seedData(){
   ];
 
   const customers = [
-    { id:"cus_1", name:"Holly Bennett",            phone:"7805550231", email:"holly.bennett@example.com",   address:"10832 Saskatchewan Dr NW", city:"Edmonton", notes:"Gate code 4417. Dog is friendly." },
-    { id:"cus_2", name:"Glenora Gates Condo Corp", phone:"7805550288", email:"manager@glenoragates.example", address:"11240 Jasper Ave NW",     city:"Edmonton", notes:"Bill to the property manager. Unit access via the front desk." },
-    { id:"cus_3", name:"Tomás Delgado",            phone:"5875550304", email:"tdelgado@example.com",        address:"9617 76 Ave NW",           city:"Edmonton", notes:"" },
-    { id:"cus_4", name:"Ironwood Brewing Co.",     phone:"7805550377", email:"ops@ironwoodbrewing.example",  address:"10345 104 St NW",          city:"Edmonton", notes:"Commercial. Prefers before 10am — kitchen opens at 11." },
-    { id:"cus_5", name:"Priya Raghunathan",        phone:"7805550412", email:"priya.r@example.com",         address:"14820 Riverbend Rd NW",    city:"Edmonton", notes:"Snowbird — away November to April. Call the caretaker before rolling." },
-    { id:"cus_6", name:"Grant Halvorsen",          phone:"5875550455", email:"",                            address:"8715 149 St NW",           city:"Edmonton", notes:"" }
+    { id:"cus_1", name:"Holly Bennett",            phone:"7805550231", email:"holly.bennett@example.com",   address:"10832 Saskatchewan Dr NW", city:"Edmonton", zone:"city", notes:"Gate code 4417. Dog is friendly." },
+    { id:"cus_2", name:"Glenora Gates Condo Corp", phone:"7805550288", email:"manager@glenoragates.example", address:"11240 Jasper Ave NW",     city:"Edmonton", zone:"city", notes:"Bill to the property manager. Unit access via the front desk." },
+    { id:"cus_3", name:"Tomás Delgado",            phone:"5875550304", email:"tdelgado@example.com",        address:"9617 76 Ave NW",           city:"Edmonton", zone:"city", notes:"" },
+    { id:"cus_4", name:"Ironwood Brewing Co.",     phone:"7805550377", email:"ops@ironwoodbrewing.example",  address:"10345 104 St NW",          city:"Edmonton", zone:"city", notes:"Commercial. Prefers before 10am — kitchen opens at 11." },
+    { id:"cus_5", name:"Priya Raghunathan",        phone:"7805550412", email:"priya.r@example.com",         address:"14820 Riverbend Rd NW",    city:"Edmonton", zone:"greater", notes:"Snowbird — away November to April. Call the caretaker before rolling." },
+    { id:"cus_6", name:"Grant Halvorsen",          phone:"5875550455", email:"",                            address:"8715 149 St NW",           city:"Edmonton", zone:"city", notes:"" }
   ];
 
   let n = 1000;
@@ -1306,7 +1457,8 @@ function seedData(){
     version: 2,
     counter: n,
     counterEst: en,
-    settings: { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"(780) 555-0100" },
+    settings: { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"(780) 555-0100",
+                zones: defaultZones(), messages: defaultMessages() },
     counterWaiver: 5000,
     techs, customers, jobs, estimates,
     priceBook: seedPriceBook(),
@@ -1876,6 +2028,7 @@ function stopCard(j){
 
     <div class="stop-acts">
       ${tel ? `<a class="btn" href="tel:${esc(tel)}">📞 Call</a>` : ""}
+      ${c ? `<button class="btn" data-message="${j.id}:${j.status==="scheduled"?"onway":j.status==="complete"?"done":"onway"}">💬 Text</button>` : ""}
       ${addr ? `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${mapQ}" target="_blank" rel="noopener noreferrer">🧭 Directions</a>` : ""}
       ${missing.length ? `<button class="btn" data-add-waiver="${j.id}">✍ Waiver</button>` : ""}
       ${stepWord && next ? `<button class="btn accent" data-advance="${j.id}">${esc(stepWord)}</button>` : ""}
@@ -2677,6 +2830,16 @@ function viewData(){
       </div>
 
       <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Customer messages</h3></div>
+        <div class="card-body">
+          <p class="t-sub" style="margin-top:0">Four short messages — booked, on my way, running
+            late, finished — and the travel time for each zone. Your phone sends them, from your
+            own number.</p>
+          <button class="btn" data-action="edit-messages">Edit templates &amp; zones</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Going live</h3></div>
         <div class="card-body">
           ${d.liveSince
@@ -2861,6 +3024,7 @@ function openJob(id){
           <option value="">— Unassigned —</option>
           ${Store.activeTechs().map(t => `<option value="${t.id}"${t.id===j.techId?" selected":""}>${esc(t.name)}</option>`).join("")}
         </select>
+        ${c ? `<button class="btn sm" data-message="${j.id}">💬 Message customer</button>` : ""}
         <button class="btn sm" data-edit-job="${j.id}">Edit details</button>
         <button class="btn sm" data-print-job="${j.id}">🖨 Ticket</button>
       </div>
@@ -3102,7 +3266,7 @@ function saveJobFromForm(id){
         phone: $("#nc-phone").value.trim(),
         email: "",
         address: $("#nc-address").value.trim(),
-        city: $("#nc-city").value.trim() || "Edmonton",
+        city: $("#nc-city").value.trim() || "Edmonton", zone: "city",
         notes: "", createdAt: Date.now()
       };
       Store.data.customers.push(c);
@@ -3513,7 +3677,7 @@ function doConvert(id){
     const c = {
       id: uid("cus"), name,
       phone: $("#cv-phone").value.trim(), email: $("#cv-email").value.trim(),
-      address: $("#cv-address").value.trim(), city: $("#cv-city").value.trim() || "Edmonton",
+      address: $("#cv-address").value.trim(), city: $("#cv-city").value.trim() || "Edmonton", zone: "city",
       notes: "", createdAt: Date.now()
     };
     Store.data.customers.push(c);
@@ -3929,6 +4093,163 @@ function saveTemplateFromForm(id){
   render();
 }
 
+/* ---------- Message the customer ---------- */
+let MsgState = { tplId:"onway", bump:0, jobId:null };
+
+function openMessage(jobId, tplId){
+  const job = Store.job(jobId);
+  if (!job) return;
+  const c = Store.customer(job.customerId);
+  if (!c){ toast("No customer on this job.", "err"); return; }
+  MsgState = { tplId: tplId || "onway", bump: 0, jobId };
+  renderMessageSheet();
+}
+
+function renderMessageSheet(){
+  const job = Store.job(MsgState.jobId);
+  const c = Store.customer(job.customerId);
+  const z = Store.zone(c.zone);
+  const body = Store.renderMessage(MsgState.tplId, job, MsgState.bump);
+  const tel = String(c.phone || "").replace(/\D/g, "");
+  const needsEta = MsgState.tplId === "onway" || MsgState.tplId === "late";
+  const bumpBtn = (m, label) =>
+    `<button class="${MsgState.bump===m?"on":""}" data-msg-bump="${m}">${esc(label)}</button>`;
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">${esc(c.name)} · job #${job.no}</div>
+        <h2>Message the customer</h2></div>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="msg-tabs">
+        ${Store.messages().map(m =>
+          `<button class="${MsgState.tplId===m.id?"on":""}" data-msg-tpl="${esc(m.id)}">${esc(m.label)}</button>`).join("")}
+      </div>
+
+      ${needsEta ? `
+        <div class="msg-eta">
+          <span class="lab">Travel</span>
+          <span class="zone-chip">${esc(z.label)} · ${esc(z.eta)}</span>
+          <div style="flex:1"></div>
+          <span class="lab">Running behind?</span>
+          ${bumpBtn(0,"On time")}${bumpBtn(15,"+15")}${bumpBtn(30,"+30")}
+        </div>` : ""}
+
+      <textarea class="msg-prev" id="msg-body">${esc(body)}</textarea>
+      <div class="msg-meta">
+        <span>Edit it before you send — this is just a starting point.</span>
+        <span id="msg-count">${body.length} characters</span>
+      </div>
+
+      <div class="section-title" style="margin-top:18px">Send it</div>
+      <div class="msg-send">
+        ${tel ? `<a class="btn accent" id="msg-sms" href="#" data-msg-send="text">💬 Text ${esc(fmtPhone(c.phone))}</a>`
+              : `<span class="t-sub">No mobile number on file for ${esc(c.name)}.</span>`}
+        ${c.email ? `<a class="btn" id="msg-mail" href="#" data-msg-send="email">✉ Email</a>` : ""}
+        <button class="btn" data-msg-send="copy">⧉ Copy</button>
+      </div>
+      <p class="t-sub" style="margin:12px 0 0">
+        Your phone sends it, from your own number — so if they reply, it comes to you.
+        On a computer, use Copy.
+      </p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn sm ghost" data-action="edit-messages">Edit templates &amp; zones</button>
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+    </div>`, { wide:true, noFocus:true });
+
+  // Keep the href live as the text is edited, so the phone gets what's on screen.
+  const ta = $("#msg-body");
+  const sync = () => {
+    const txt = ta.value;
+    $("#msg-count").textContent = txt.length + " characters";
+    const sms = $("#msg-sms"), mail = $("#msg-mail");
+    // "?&body=" keeps both iOS and Android happy.
+    if (sms) sms.href = `sms:${tel}?&body=${encodeURIComponent(txt)}`;
+    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
+      `?subject=${encodeURIComponent(Store.data.settings.company + " — job #" + job.no)}` +
+      `&body=${encodeURIComponent(txt)}`;
+  };
+  ta.addEventListener("input", sync);
+  sync();
+}
+
+function logMessageSent(how){
+  const job = Store.job(MsgState.jobId);
+  if (!job) return;
+  const label = Store.message(MsgState.tplId).label;
+  Store.addLog(job, `${how} customer: ${label}${MsgState.bump ? ` (+${MsgState.bump} min)` : ""}`);
+  Store.save();
+}
+
+/* ---------- Edit the templates and the zones ---------- */
+function openMessageSetup(){
+  const st = Store.data.settings;
+  openModal(`
+    <div class="modal-head"><h2>Customer messages</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="field" style="max-width:420px">
+        <label>Name to use in messages</label>
+        <input class="input" id="msg-shortname" value="${esc(st.shortName || Store.tradeName())}"
+               placeholder="Poseidon Plumbing">
+        <div class="hint">What you'd say on the phone. Waivers, estimates and tickets keep the
+          full legal name.</div>
+      </div>
+
+      <div class="section-title">Travel zones</div>
+      <p class="t-sub" style="margin:0 0 12px">Set a zone on each customer; the message uses
+        that zone's travel time. Your real numbers will beat my guesses.</p>
+      ${Store.zones().map((z,i) => `
+        <div class="row2" style="margin-bottom:10px">
+          <div class="field" style="margin-bottom:0"><label>Zone ${i+1} name</label>
+            <input class="input" data-zone-label="${esc(z.id)}" value="${esc(z.label)}"></div>
+          <div class="field" style="margin-bottom:0"><label>Travel time, in words</label>
+            <input class="input" data-zone-eta="${esc(z.id)}" value="${esc(z.eta)}"></div>
+        </div>`).join("")}
+
+      <div class="section-title">Messages</div>
+      ${Store.messages().map(m => `
+        <div class="field">
+          <label>${esc(m.label)}</label>
+          <textarea class="input" data-msg-body="${esc(m.id)}" style="min-height:76px">${esc(m.body)}</textarea>
+        </div>`).join("")}
+
+      <div class="field">
+        <label>Fields you can drop in</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${MSG_FIELDS.map(([f,d]) => `<span class="chip" title="${esc(d)}">${esc(f)}</span>`).join("")}
+        </div>
+      </div>
+      <div class="callout" style="border-left:4px solid var(--amber);background:var(--amber-soft);padding:14px 16px;border-radius:0 6px 6px 0;font-size:13.5px;color:#9c5712">
+        <strong>Keep these to job messages.</strong> Texting a customer about work they booked is
+        fine under CASL. Promotions are a different consent regime — don't reuse this button for them.
+      </div>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-messages>Save</button>
+    </div>`, { wide:true });
+}
+
+function saveMessageSetup(){
+  const st = Store.data.settings;
+  st.shortName = ($("#msg-shortname").value || "").trim();
+  st.zones = Store.zones().map(z => ({
+    id: z.id,
+    label: ($(`[data-zone-label="${z.id}"]`).value || "").trim() || z.label,
+    eta:   ($(`[data-zone-eta="${z.id}"]`).value || "").trim() || z.eta
+  }));
+  st.messages = Store.messages().map(m => ({
+    id: m.id, label: m.label,
+    body: ($(`[data-msg-body="${m.id}"]`).value || "").trim() || m.body
+  }));
+  Store.save(); closeModal(); render();
+  toast("Messages saved", "ok");
+}
+
 /* ---------- Go live: clear the demo and set the shop up ---------- */
 function openGoLive(){
   const st = Store.data.settings;
@@ -4064,7 +4385,9 @@ function openCustomer(id){
           <div class="dl"><dt>Email</dt><dd>${esc(c.email)||"—"}</dd></div>
         </div>
         <div>
-          <div class="dl"><dt>Service address</dt><dd>${esc(c.address)||"—"}<br><span class="t-sub">${esc(c.city)}</span></dd></div>
+          <div class="dl"><dt>Service address</dt><dd>${esc(c.address)||"—"}<br>
+            <span class="t-sub">${esc(c.city)}</span>
+            <span class="zone-chip" style="margin-left:6px">${esc(Store.zone(c.zone).label)} · ${esc(Store.zone(c.zone).eta)}</span></dd></div>
           <div class="dl"><dt>Lifetime billed</dt><dd>${esc(money(billed))} · ${js.length} job${js.length===1?"":"s"}</dd></div>
         </div>
       </div>
@@ -4125,6 +4448,12 @@ function openCustomerForm(id){
         <div class="field"><label>Service address</label><input class="input" id="c-address" value="${esc(c?c.address:"")}"></div>
         <div class="field"><label>City</label><input class="input" id="c-city" value="${esc(c?c.city:"Edmonton")}"></div>
       </div>
+      <div class="field" style="max-width:320px"><label>Travel zone</label>
+        <select class="input" id="c-zone">
+          ${Store.zones().map(z => `<option value="${esc(z.id)}"${(c?c.zone:"city")===z.id?" selected":""}>${esc(z.label)} — ${esc(z.eta)}</option>`).join("")}
+        </select>
+        <div class="hint">Sets the travel time in their "on my way" text.</div>
+      </div>
       <div class="field"><label>Site notes</label>
         <textarea class="input" id="c-notes" placeholder="Gate codes, dogs, parking, billing quirks — anything the tech should know.">${esc(c?c.notes:"")}</textarea></div>
     </div>
@@ -4139,7 +4468,8 @@ function saveCustomerFromForm(id){
   if (!name){ $("#c-name").classList.add("invalid"); $("#c-name").focus(); return; }
   const fields = {
     name, phone:$("#c-phone").value.trim(), email:$("#c-email").value.trim(),
-    address:$("#c-address").value.trim(), city:$("#c-city").value.trim(), notes:$("#c-notes").value.trim()
+    address:$("#c-address").value.trim(), city:$("#c-city").value.trim(),
+    zone:$("#c-zone").value, notes:$("#c-notes").value.trim()
   };
   if (id){ Object.assign(Store.customer(id), fields); toast("Customer updated","ok"); }
   else { Store.data.customers.push(Object.assign({id:uid("cus"),createdAt:Date.now()}, fields)); toast("Customer added","ok"); }
@@ -4506,6 +4836,41 @@ document.addEventListener("click", e => {
     Store.save(); openJob(jid);
     return;
   }
+  /* --- customer messages --- */
+  const mTpl = hit("[data-msg-tpl]");
+  if (mTpl){ MsgState.tplId = mTpl.dataset.msgTpl; MsgState.bump = 0; return renderMessageSheet(); }
+
+  const mBump = hit("[data-msg-bump]");
+  if (mBump){ MsgState.bump = Number(mBump.dataset.msgBump) || 0; return renderMessageSheet(); }
+
+  const mSend = hit("[data-msg-send]");
+  if (mSend){
+    const how = mSend.dataset.msgSend;
+    if (how === "copy"){
+      const ta = $("#msg-body");
+      ta.select();
+      const done = () => { logMessageSent("Copied message for"); toast("Copied — paste it wherever", "ok"); };
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(ta.value).then(done, () => {
+          try { document.execCommand("copy"); done(); } catch(_){ toast("Press Ctrl/Cmd+C to copy", "err"); }
+        });
+      } else {
+        try { document.execCommand("copy"); done(); } catch(_){ toast("Press Ctrl/Cmd+C to copy", "err"); }
+      }
+      return;
+    }
+    // The anchor's own href does the opening; just record that it happened.
+    logMessageSent(how === "text" ? "Texted" : "Emailed");
+    return;
+  }
+
+  const msgBtn = hit("[data-message]");
+  if (msgBtn){
+    const [jid, tpl] = msgBtn.dataset.message.split(":");
+    return openMessage(jid, tpl || null);
+  }
+  if (hit("[data-save-messages]")) return saveMessageSetup();
+
   const savePay = hit("[data-save-pay]");
   if (savePay){
     const j = Store.job(savePay.dataset.savePay);
@@ -4742,6 +5107,7 @@ document.addEventListener("click", e => {
     case "export-est-csv": exportEstimatesCsv(); break;
     case "new-template":  openTemplateForm(null); break;
     case "golive":        openGoLive(); break;
+    case "edit-messages": openMessageSetup(); break;
     case "export-waivers": exportWaiversCsv(); break;
     case "new-customer": openCustomerForm(null); break;
     case "new-tech":     openTechForm(null); break;

@@ -44,6 +44,21 @@ next — *On my way*, *I'm here*, *Mark done*. Anything still owed from earlier
 in the week sits at the bottom. On a phone the sidebar becomes a bottom bar and
 everything else lives behind **More**.
 
+**Customer messages** — four short texts: *Booked*, *On my way*, *Running late*,
+*Finished*. The app writes the message and hands it to your phone, so it sends
+from **your own number** and a reply comes back to you. No texting service, no
+monthly fee, nothing to break.
+
+Travel time comes from a **zone** on the customer record — Edmonton, Greater
+Edmonton, Out of area — so the message states one clean time instead of hedging.
+Running behind? Tap **+15** or **+30** before you send and the wording follows
+("about 30 minutes" becomes "about an hour"). Every message is editable before
+it goes, and there's a Copy button for desktop or for pasting elsewhere.
+
+Messages use a short trading name; waivers, estimates and tickets keep the full
+legal name. Templates, zone names and travel times are all editable under
+**Data & Setup → Customer messages**.
+
 **Schedule** — three views of the same work, switched from the toolbar:
 
 - **Day** — a column per technician plus an Unassigned column. Drag a job card
