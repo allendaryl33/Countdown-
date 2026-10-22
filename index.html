@@ -534,6 +534,7 @@ textarea.input{resize:vertical;min-height:76px}
 }
 .timeline li .ts{font-size:11.5px;color:var(--muted-2);display:block;margin-top:1px}
 .status-steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.status-steps a.btn,.modal-head a.btn{text-decoration:none}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .toolbar select,.toolbar input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
 .filter-note{font-size:12.5px;color:var(--muted)}
@@ -3106,6 +3107,8 @@ function openJob(id){
           <option value="">— Unassigned —</option>
           ${Store.activeTechs().map(t => `<option value="${t.id}"${t.id===j.techId?" selected":""}>${esc(t.name)}</option>`).join("")}
         </select>
+        ${c && String(c.phone||"").replace(/\D/g,"")
+          ? `<a class="btn sm" href="tel:${esc(String(c.phone).replace(/\D/g,""))}">📞 Call ${esc(c.name.split(" ")[0])}</a>` : ""}
         ${c ? `<button class="btn sm" data-message="${j.id}">💬 Message customer</button>` : ""}
         <button class="btn sm" data-edit-job="${j.id}">Edit details</button>
         <button class="btn sm" data-print-job="${j.id}">🖨 Ticket</button>
@@ -4457,6 +4460,8 @@ function openCustomer(id){
     <div class="modal-head">
       <div><div class="t-sub">Customer</div><h2>${esc(c.name)}</h2></div>
       <div class="spacer"></div>
+      ${String(c.phone||"").replace(/\D/g,"")
+        ? `<a class="btn sm" href="tel:${esc(String(c.phone).replace(/\D/g,""))}">📞 Call</a>` : ""}
       <button class="btn sm" data-edit-customer="${c.id}">Edit</button>
       <button class="x" data-close>×</button>
     </div>
