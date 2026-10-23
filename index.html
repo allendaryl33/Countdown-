@@ -70,6 +70,20 @@ nav button .count{
 nav button.active .count{background:rgba(255,255,255,.25)}
 nav button .count.alert{background:var(--amber);color:#fff}
 .sidebar-foot{padding:12px 16px;border-top:1px solid rgba(255,255,255,.09);font-size:11px;color:#6f8ca6}
+.sync{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px}
+.sync .d{width:7px;height:7px;border-radius:50%;background:#6f8ca6;flex:0 0 7px}
+.sync.synced .d{background:var(--green)}
+.sync.syncing .d{background:var(--gold);animation:blip 1.1s ease-in-out infinite}
+.sync.error .d,.sync.conflict .d{background:var(--amber)}
+.sync.signed-out .d{background:var(--muted-2)}
+.sync.conflict{color:var(--gold)}
+@keyframes blip{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.sync.syncing .d{animation:none}}
+.cloud-state{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:12px}
+.cloud-state .d{width:9px;height:9px;border-radius:50%;flex:0 0 9px;background:var(--muted-2)}
+.cloud-state.synced .d{background:var(--green)} .cloud-state.synced{color:var(--green)}
+.cloud-state.error .d,.cloud-state.conflict .d{background:var(--amber)}
+.cloud-state.error,.cloud-state.conflict{color:#9c5712}
 
 #main{flex:1;min-width:0;display:flex;flex-direction:column}
 
@@ -658,6 +672,7 @@ textarea.input{resize:vertical;min-height:76px}
     </div>
     <nav id="nav"></nav>
     <div class="sidebar-foot">
+      <div class="sync" id="sync-pill" hidden><span class="d"></span><span id="sync-text"></span></div>
       <div id="storage-note">Local prototype · data on this device</div>
     </div>
   </aside>
@@ -969,6 +984,245 @@ function toast(msg, kind){
 }
 
 /* ============================================================
+   Cloud — optional Supabase sync
+
+   Talks to Supabase's plain REST endpoints with fetch. No SDK, so the app
+   keeps its "no dependencies, nothing to rot" property. The whole shop is
+   one JSON row: at ~50 KB it isn't worth shredding into tables, and a blob
+   means adding a feature never needs a migration.
+
+   Two devices editing at once is the one way a blob can bite you, so every
+   write is guarded by the revision it claims to replace. A stale write is
+   refused by the server rather than silently winning, and the copy that
+   loses a conflict is always written to a file before anything is replaced.
+   ============================================================ */
+const CLOUD_KEY = "pcp.cloud.v1";
+
+const Cloud = {
+  cfg: null,         // { url, key, email, deviceId, refreshToken }
+  token: null,       // short-lived access token, memory only
+  tokenExp: 0,
+  uid: null,
+  baseRev: 0,        // the rev we last agreed with the server on
+  state: "off",      // off | signed-out | syncing | synced | conflict | error
+  detail: "",
+  dirty: false,
+  pushTimer: null,
+  _listeners: [],
+
+  onChange(fn){ this._listeners.push(fn); },
+  emit(){ this._listeners.forEach(fn => { try { fn(); } catch(e){} }); },
+  set(state, detail){ this.state = state; this.detail = detail || ""; this.emit(); },
+
+  loadCfg(){
+    try { this.cfg = JSON.parse(localStorage.getItem(CLOUD_KEY) || "null"); }
+    catch(e){ this.cfg = null; }
+    if (this.cfg && !this.cfg.deviceId) this.cfg.deviceId = this.newDeviceId();
+    this.state = this.cfg ? "signed-out" : "off";
+  },
+  saveCfg(){
+    try { localStorage.setItem(CLOUD_KEY, JSON.stringify(this.cfg)); } catch(e){}
+  },
+  newDeviceId(){
+    const n = (navigator.userAgent.match(/iPhone|iPad|Android|Macintosh|Windows/) || ["device"])[0];
+    return n + "-" + Math.random().toString(36).slice(2,7);
+  },
+  configured(){ return !!(this.cfg && this.cfg.url && this.cfg.key); },
+
+  /* --- plumbing --- */
+  base(){ return String(this.cfg.url).replace(/\/+$/, ""); },
+
+  async call(path, opts){
+    const o = opts || {};
+    const headers = Object.assign({
+      "apikey": this.cfg.key,                 // key goes here and nowhere else
+      "Content-Type": "application/json"
+    }, o.headers || {});
+    if (o.auth !== false && this.token) headers["Authorization"] = "Bearer " + this.token;
+
+    let res;
+    try {
+      res = await fetch(this.base() + path, {
+        method: o.method || "GET", headers,
+        body: o.body === undefined ? undefined : JSON.stringify(o.body)
+      });
+    } catch(err){
+      const e = new Error("offline"); e.offline = true; throw e;
+    }
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch(e){}
+    if (!res.ok){
+      const msg = (json && (json.error_description || json.msg || json.message || json.error))
+        || ("HTTP " + res.status);
+      const e = new Error(msg); e.status = res.status; e.body = json; throw e;
+    }
+    return json;
+  },
+
+  /* --- auth --- */
+  async signIn(email, password){
+    const r = await this.call("/auth/v1/token?grant_type=password", {
+      method:"POST", auth:false, body:{ email, password }
+    });
+    this.applySession(r);
+    this.cfg.email = email;
+    this.saveCfg();
+    return r;
+  },
+
+  applySession(r){
+    this.token = r.access_token;
+    this.tokenExp = Date.now() + ((Number(r.expires_in) || 3600) - 60) * 1000;
+    this.uid = r.user && r.user.id;
+    if (r.refresh_token){ this.cfg.refreshToken = r.refresh_token; this.saveCfg(); }
+  },
+
+  async refresh(){
+    if (!this.cfg.refreshToken) throw new Error("signed out");
+    const r = await this.call("/auth/v1/token?grant_type=refresh_token", {
+      method:"POST", auth:false, body:{ refresh_token: this.cfg.refreshToken }
+    });
+    this.applySession(r);
+    return r;
+  },
+
+  async ensureToken(){
+    if (this.token && Date.now() < this.tokenExp) return;
+    await this.refresh();
+  },
+
+  signOut(){
+    this.token = null; this.tokenExp = 0; this.uid = null; this.baseRev = 0;
+    if (this.cfg){ delete this.cfg.refreshToken; this.saveCfg(); }
+    this.set("signed-out");
+  },
+
+  disconnect(){
+    this.cfg = null; this.token = null; this.uid = null; this.baseRev = 0;
+    try { localStorage.removeItem(CLOUD_KEY); } catch(e){}
+    this.set("off");
+  },
+
+  /* --- the row --- */
+  async fetchRow(){
+    const rows = await this.call("/rest/v1/shops?select=data,rev,device,updated_at&limit=1");
+    return (rows && rows[0]) || null;
+  },
+
+  /* First write for a brand-new account. */
+  async createRow(){
+    const row = { owner: this.uid, data: Store.data, rev: 1, device: this.cfg.deviceId };
+    const r = await this.call("/rest/v1/shops", {
+      method:"POST", headers:{ "Prefer":"return=representation" }, body: row
+    });
+    this.baseRev = (r && r[0] && r[0].rev) || 1;
+    return this.baseRev;
+  },
+
+  /* Guarded by rev: the server only accepts the write if nobody moved since
+     we last pulled. An empty result means somebody did. */
+  async pushGuarded(){
+    const next = this.baseRev + 1;
+    const r = await this.call(
+      `/rest/v1/shops?owner=eq.${encodeURIComponent(this.uid)}&rev=eq.${this.baseRev}`, {
+        method:"PATCH", headers:{ "Prefer":"return=representation" },
+        body:{ data: Store.data, rev: next, device: this.cfg.deviceId,
+               updated_at: new Date().toISOString() }
+      });
+    if (!r || !r.length) return false;      // somebody else got there first
+    this.baseRev = r[0].rev;
+    return true;
+  },
+
+  /* --- the operations the UI calls --- */
+  async pull(opts){
+    const force = opts && opts.force;
+    await this.ensureToken();
+    const row = await this.fetchRow();
+    if (!row){ await this.createRow(); return { created:true }; }
+
+    if (this.dirty && !force && row.rev !== this.baseRev)
+      return { conflict:true, remote:row };
+
+    Store.adopt(row.data);
+    this.baseRev = row.rev;
+    this.dirty = false;
+    return { pulled:true, rev: row.rev };
+  },
+
+  async push(opts){
+    const force = opts && opts.force;
+    await this.ensureToken();
+
+    if (!this.baseRev){
+      const row = await this.fetchRow();
+      if (!row){ await this.createRow(); this.dirty = false; return { created:true }; }
+      this.baseRev = row.rev;
+    }
+    if (force){
+      const row = await this.fetchRow();
+      if (row) this.baseRev = row.rev;
+    }
+
+    const ok = await this.pushGuarded();
+    if (!ok){
+      const row = await this.fetchRow();
+      return { conflict:true, remote:row };
+    }
+    this.dirty = false;
+    return { pushed:true, rev: this.baseRev };
+  },
+
+  /* Called from Store.save(). Batches a burst of edits into one write. */
+  markDirty(){
+    if (!this.configured() || !this.cfg.refreshToken) return;
+    this.dirty = true;
+    clearTimeout(this.pushTimer);
+    this.pushTimer = setTimeout(() => this.syncNow({ quiet:true }), 2500);
+    if (this.state === "synced") this.set("syncing", "saving…");
+  },
+
+  async syncNow(opts){
+    const quiet = opts && opts.quiet;
+    if (!this.configured()) return;
+    if (!this.cfg.refreshToken){ this.set("signed-out"); return; }
+    if (this.state === "conflict") return;      // wait for the person to choose
+
+    this.set("syncing", quiet ? "saving…" : "syncing…");
+    try {
+      const r = this.dirty ? await this.push() : await this.pull();
+      if (r.conflict){
+        this.set("conflict", "changed on another device");
+        onCloudConflict(r.remote);
+        return;
+      }
+      this.set("synced", "just now");
+    } catch(err){
+      if (err.offline){ this.set("error", "no connection — saved on this device"); return; }
+      if (err.status === 401 || /refresh|jwt|token/i.test(err.message || "")){
+        this.signOut(); this.set("signed-out", "sign in again"); return;
+      }
+      this.set("error", err.message || "sync failed");
+    }
+  },
+
+  /* Resume a session on open, then catch up. */
+  async boot(){
+    this.loadCfg();
+    if (!this.configured() || !this.cfg.refreshToken) return;
+    this.set("syncing", "connecting…");
+    try {
+      await this.refresh();
+      await this.syncNow();
+    } catch(err){
+      if (err.offline) this.set("error", "no connection — saved on this device");
+      else { this.signOut(); this.set("signed-out", "sign in again"); }
+    }
+  }
+};
+
+/* ============================================================
    Store — everything lives in one object, saved to localStorage
    ============================================================ */
 const Store = {
@@ -984,39 +1238,7 @@ const Store = {
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.jobs)){
           this.data = parsed;
-          this.data.techs     = this.data.techs     || [];
-          this.data.customers = this.data.customers || [];
-          this.data.counter   = this.data.counter   || 1000;
-          // Added with estimates — older saved data won't have these.
-          this.data.estimates  = this.data.estimates  || [];
-          this.data.priceBook  = this.data.priceBook  || seedPriceBook();
-          this.data.counterEst = this.data.counterEst || 2000;
-          // Added with waivers.
-          this.data.waiverTemplates = this.data.waiverTemplates || seedWaiverTemplates();
-          this.data.signedWaivers   = this.data.signedWaivers   || [];
-          this.data.counterWaiver   = this.data.counterWaiver   || 5000;
-          // Added with customer messaging.
-          this.data.settings.zones    = this.data.settings.zones    || defaultZones();
-          this.data.settings.messages = this.data.settings.messages || defaultMessages();
-          this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
-          // Added with time tracking.
-          this.data.jobs.forEach(j => { if (!j.timeEntries) j.timeEntries = []; });
-    this.data.jobs.forEach(j => { if (j.materialCost == null) j.materialCost = 0; });
-          this.data.estimates.forEach(e => { if (!e.timeEntries) e.timeEntries = []; });
-          // A demo should always demo. Real work is never moved.
-          if (this.data.demo && !this.data.liveSince && this.data.seededOn
-              && this.data.seededOn !== todayStr()){
-            this.shiftDemoDates(daysBetween(this.data.seededOn, todayStr()));
-          }
-          // Added with payment tracking — older jobs have no payment block.
-          this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
-          // Renamed on rebrand. Only a name this app shipped as a default is
-          // carried forward — anything the office typed is left alone.
-          const SHIPPED_DEFAULTS = ["Park City Plumbing", "Park City Plumbing Inc.",
-                                    "Poseidon Plumbing and Heating Ltd."];
-          if (this.data.settings && SHIPPED_DEFAULTS.includes(this.data.settings.company)){
-            this.data.settings.company = "Poseidon Plumbing & Gasfitting Ltd.";
-          }
+          this.backfill();
           return;
         }
       } catch(e){ console.warn("Saved data was unreadable; starting fresh.", e); }
@@ -1025,12 +1247,65 @@ const Store = {
     this.save();
   },
 
-  save(){
+  /* Everything a shop needs to have, whatever version it was written by and
+     wherever it came from — this device, a backup file, or another device. */
+  backfill(){
+    this.data.techs     = this.data.techs     || [];
+    this.data.customers = this.data.customers || [];
+    this.data.counter   = this.data.counter   || 1000;
+    // Added with estimates — older saved data won't have these.
+    this.data.estimates  = this.data.estimates  || [];
+    this.data.priceBook  = this.data.priceBook  || seedPriceBook();
+    this.data.counterEst = this.data.counterEst || 2000;
+    // Added with waivers.
+    this.data.waiverTemplates = this.data.waiverTemplates || seedWaiverTemplates();
+    this.data.signedWaivers   = this.data.signedWaivers   || [];
+    this.data.counterWaiver   = this.data.counterWaiver   || 5000;
+    // Added with customer messaging.
+    this.data.settings.zones    = this.data.settings.zones    || defaultZones();
+    this.data.settings.messages = this.data.settings.messages || defaultMessages();
+    this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
+    // Added with time tracking.
+    this.data.jobs.forEach(j => { if (!j.timeEntries) j.timeEntries = []; });
+    this.data.jobs.forEach(j => { if (j.materialCost == null) j.materialCost = 0; });
+    this.data.estimates.forEach(e => { if (!e.timeEntries) e.timeEntries = []; });
+    // A demo should always demo. Real work is never moved.
+    if (this.data.demo && !this.data.liveSince && this.data.seededOn
+        && this.data.seededOn !== todayStr()){
+      this.shiftDemoDates(daysBetween(this.data.seededOn, todayStr()));
+    }
+    // Added with payment tracking — older jobs have no payment block.
+    this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
+    // Renamed on rebrand. Only a name this app shipped as a default is
+    // carried forward — anything the office typed is left alone.
+    const SHIPPED_DEFAULTS = ["Park City Plumbing", "Park City Plumbing Inc.",
+                              "Poseidon Plumbing and Heating Ltd."];
+    if (this.data.settings && SHIPPED_DEFAULTS.includes(this.data.settings.company)){
+      this.data.settings.company = "Poseidon Plumbing & Gasfitting Ltd.";
+    }
+  },
+
+  /* Take a shop handed to us by the cloud. Writes straight through to disk
+     without marking the result dirty — it already matches the server. */
+  adopt(data){
+    if (!data || !Array.isArray(data.jobs)) throw new Error("that doesn't look like a shop");
+    this.data = data;
+    this.backfill();
+    this.saveLocal();
+    if (typeof render === "function") render();
+  },
+
+  saveLocal(){
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data)); }
     catch(e){
       // Quota or private-mode failure: keep working in memory, but say so once.
       if (!this._warned){ this._warned = true; toast("Couldn't save to this browser — changes are in memory only.", "err"); }
     }
+  },
+
+  save(){
+    this.saveLocal();
+    if (typeof Cloud !== "undefined") Cloud.markDirty();
   },
 
   reset(){
@@ -2086,6 +2361,8 @@ function render(){
   if (App.view === "schedule" && !App.search.trim()) wireBoard();
 }
 
+Cloud.onChange(renderSync);
+
 function renderClockBar(){
   const bar = $("#clockbar");
   if (!bar) return;
@@ -2114,6 +2391,82 @@ setInterval(() => {
   const r = Store.running();
   if (r) el.textContent = fmtClock(Date.now() - r.entry.startedAt);
 }, 1000);
+
+const SYNC_WORDS = {
+  "off":        () => "",
+  "signed-out": d => "Not signed in" + (d ? " · " + d : ""),
+  "syncing":    d => d || "Syncing…",
+  "synced":     d => "Synced" + (d ? " · " + d : ""),
+  "conflict":   () => "Changed elsewhere — needs you",
+  "error":      d => d || "Sync problem"
+};
+
+function renderSync(){
+  const pill = $("#sync-pill"), txt = $("#sync-text");
+  if (!pill) return;
+  if (Cloud.state === "off"){ pill.hidden = true; return; }
+  pill.hidden = false;
+  pill.className = "sync " + Cloud.state;
+  txt.textContent = SYNC_WORDS[Cloud.state](Cloud.detail);
+  if (App.view === "data") render();
+}
+
+/* Two devices changed the same shop. Never pick for him, and never throw
+   either copy away — the losing side goes to a file before anything moves. */
+function onCloudConflict(remote){
+  const mine = Store.data, theirs = remote && remote.data;
+  const count = d => d ? `${(d.jobs||[]).length} jobs · ${(d.customers||[]).length} customers` : "—";
+  openModal(`
+    <div class="modal-head"><h2>This shop changed somewhere else</h2></div>
+    <div class="modal-body">
+      <p style="margin-top:0">Another device saved changes while this one had its own.
+        Nothing has been overwritten. Pick which one is right — whichever you don't
+        keep gets downloaded first, so you can always get it back.</p>
+      <div class="opt-card" style="cursor:default">
+        <div class="oc-t">📱 This device</div>
+        <div class="oc-s">${esc(count(mine))}</div>
+      </div>
+      <div class="opt-card" style="cursor:default">
+        <div class="oc-t">☁️ The other device${remote && remote.device ? " · " + esc(remote.device) : ""}</div>
+        <div class="oc-s">${esc(count(theirs))}${remote && remote.updated_at
+          ? " · saved " + esc(fmtStamp(Date.parse(remote.updated_at))) : ""}</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-conflict="theirs">Take the other one</button>
+      <button class="btn primary" data-conflict="mine">Keep this device</button>
+    </div>`, { wide:true });
+  Cloud._conflictRemote = remote;
+}
+
+async function resolveConflict(which){
+  const remote = Cloud._conflictRemote;
+  const stamp = todayStr();
+  try {
+    if (which === "mine"){
+      if (remote) download(`poseidon-other-device-${stamp}.json`,
+        JSON.stringify(remote.data, null, 2));
+      closeModal();
+      Cloud.set("syncing", "replacing the other copy…");
+      Cloud.dirty = true;
+      const r = await Cloud.push({ force:true });
+      Cloud.set(r.pushed || r.created ? "synced" : "error",
+                r.pushed || r.created ? "just now" : "couldn't write");
+    } else {
+      download(`poseidon-this-device-${stamp}.json`, JSON.stringify(Store.data, null, 2));
+      closeModal();
+      Cloud.set("syncing", "taking the other copy…");
+      Cloud.dirty = false;
+      await Cloud.pull({ force:true });
+      Cloud.set("synced", "just now");
+      toast("Took the other device's copy", "ok");
+    }
+  } catch(err){
+    Cloud.set("error", err.message || "couldn't resolve");
+  }
+  Cloud._conflictRemote = null;
+}
 
 function renderBrand(){
   const el = $("#brand-name");
@@ -3093,6 +3446,74 @@ function viewSignedWaivers(){
 /* ============================================================
    View: Price book
    ============================================================ */
+/* The connection panel. Keys are typed here and kept on the device — they
+   are never part of the app's own code, so the published link carries no
+   way into anybody's data. */
+function cloudCard(){
+  const c = Cloud.cfg || {};
+  const signedIn = !!(Cloud.configured() && c.refreshToken);
+
+  if (!Cloud.configured()){
+    return `
+      <p class="t-sub" style="margin-top:0">
+        Right now this shop lives in this browser on this device only. Connect a free
+        Supabase project and every device you sign in on keeps the same shop, backed up
+        off the phone. Setup is in <strong>SUPABASE.md</strong> in the repo — about ten minutes, once.
+      </p>
+      <div class="row2">
+        <div class="field"><label for="cl-url">Project URL</label>
+          <input class="input" id="cl-url" placeholder="https://abcdefgh.supabase.co" autocomplete="off">
+          <div class="hint">Supabase → Project Settings → Data API</div></div>
+        <div class="field"><label for="cl-key">Publishable (anon) key</label>
+          <input class="input" id="cl-key" placeholder="sb_publishable_… or eyJ…" autocomplete="off">
+          <div class="hint">The publishable one. Never the secret one.</div></div>
+      </div>
+      <div id="cl-err" class="err" style="display:none"></div>
+      <button class="btn primary" data-action="cloud-save">Save connection</button>`;
+  }
+
+  const stateLine = `
+    <div class="cloud-state ${esc(Cloud.state)}"><span class="d"></span>
+      ${esc(SYNC_WORDS[Cloud.state](Cloud.detail) || "Not connected")}</div>`;
+
+  if (!signedIn){
+    return `
+      ${stateLine}
+      <p class="t-sub" style="margin-top:0">Connected to <strong>${esc(c.url)}</strong>.
+        Sign in with the user you made in Supabase → Authentication → Users.</p>
+      <div class="row2">
+        <div class="field"><label for="cl-email">Email</label>
+          <input class="input" id="cl-email" type="email" value="${esc(c.email || "")}" autocomplete="username"></div>
+        <div class="field"><label for="cl-pass">Password</label>
+          <input class="input" id="cl-pass" type="password" autocomplete="current-password"></div>
+      </div>
+      <div id="cl-err" class="err" style="display:none"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" data-action="cloud-signin">Sign in</button>
+        <button class="btn ghost" data-action="cloud-forget">Use a different project</button>
+      </div>`;
+  }
+
+  return `
+    ${stateLine}
+    <div class="money-row"><span class="mr-label">Project</span>
+      <span class="mr-val" style="font-weight:500;font-size:12.5px">${esc(c.url)}</span></div>
+    <div class="money-row"><span class="mr-label">Signed in as</span>
+      <span class="mr-val" style="font-weight:500;font-size:12.5px">${esc(c.email || "—")}</span></div>
+    <div class="money-row"><span class="mr-label">This device</span>
+      <span class="mr-val" style="font-weight:500;font-size:12.5px">${esc(c.deviceId || "—")}</span></div>
+    <div class="money-row" style="border-bottom:0"><span class="mr-label">Version on the server</span>
+      <span class="mr-val">${Cloud.baseRev || "—"}</span></div>
+    <p class="t-sub">Changes go up a couple of seconds after you stop typing, and this
+      device catches up whenever you come back to the app. It keeps working with no
+      signal — anything you do offline goes up next time you have one.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn primary" data-action="cloud-sync">Sync now</button>
+      <button class="btn" data-action="cloud-signout">Sign out of this device</button>
+      <button class="btn ghost danger" data-action="cloud-forget">Disconnect</button>
+    </div>`;
+}
+
 function viewPriceBook(){
   const book = Store.data.priceBook;
   const groups = LINE_KINDS.map(k => ({ k, items: book.filter(i => i.kind === k.id) }));
@@ -3278,11 +3699,22 @@ function viewData(){
       </div>
 
       <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Sync across your devices</h3></div>
+        <div class="card-body">
+          ${cloudCard()}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Backup &amp; restore</h3></div>
         <div class="card-body">
           <p class="t-sub" style="margin-top:0">
-            This prototype stores everything in this browser on this device. Nothing is sent anywhere.
-            Export regularly if you are entering real work, and import the file to move it to another machine.
+            ${Cloud.configured() && Cloud.cfg.refreshToken
+              ? `Your shop syncs to Supabase and keeps its last 30 versions there. A file on your
+                 own disk is still worth having now and then — it's the copy nobody else can reach.`
+              : `This stores everything in this browser on this device. Nothing is sent anywhere.
+                 Export regularly if you are entering real work, and import the file to move it
+                 to another machine.`}
           </p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn primary" data-action="export">⬇ Export JSON backup</button>
@@ -3347,10 +3779,12 @@ function viewData(){
           Runs on one browser, on this device. What's still missing, roughly in the
           order it starts to hurt:
           <ul style="padding-left:18px;margin:8px 0 0">
+            ${Cloud.configured() && Cloud.cfg.refreshToken ? "" : `
             <li><strong>Somewhere real to keep it</strong> — so a dead laptop isn't a dead
-                business, and the phone and the office see the same jobs</li>
+                business, and the phone and the office see the same jobs.
+                <em>Ready to switch on — see Sync across your devices above</em></li>`}
             <li><strong>Photos</strong> — the corroded fitting, the model plate, the
-                before-and-after. Needs the above first</li>
+                before-and-after</li>
             <li>Customer text or email confirmations</li>
             <li>Sending real invoices, rather than recording that you sent one</li>
           </ul>
@@ -5419,6 +5853,9 @@ document.addEventListener("click", e => {
     if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
     return;
   }
+  const conf = hit("[data-conflict]");
+  if (conf) return resolveConflict(conf.dataset.conflict);
+
   const tEdit = hit("[data-edit-time]");
   if (tEdit){ const [k,r,e] = tEdit.dataset.editTime.split(":"); return openTimeEdit(k, r, e); }
   const tAdd = hit("[data-add-time]");
@@ -5737,6 +6174,55 @@ document.addEventListener("click", e => {
       printJobs(Store.data.jobs.filter(j => j.scheduledDate === todayStr() && isOpen(j)), "today"); break;
     case "print-board":
       printJobs(Store.data.jobs.filter(j => j.scheduledDate === App.date && isOpen(j)), "this day"); break;
+    case "cloud-save": {
+      const url = $("#cl-url").value.trim().replace(/\/+$/, "");
+      const key = $("#cl-key").value.trim();
+      const err = $("#cl-err");
+      const fail = m => { err.textContent = m; err.style.display = "block"; };
+      if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(url)) return fail("That doesn't look like a project URL. It should start https:// and end .supabase.co");
+      if (!key) return fail("Paste the publishable key too.");
+      if (/^sb_secret_/.test(key) || /service_role/.test(key))
+        return fail("That's the secret key — it must never go in a browser. Use the publishable one.");
+      Cloud.cfg = { url, key, email:"", deviceId: Cloud.newDeviceId() };
+      Cloud.saveCfg();
+      Cloud.set("signed-out", "now sign in");
+      render();
+      break;
+    }
+    case "cloud-signin": {
+      const email = $("#cl-email").value.trim();
+      const pass  = $("#cl-pass").value;
+      const err = $("#cl-err");
+      err.style.display = "none";
+      if (!email || !pass){ err.textContent = "Email and password, please."; err.style.display = "block"; break; }
+      Cloud.set("syncing", "signing in…");
+      Cloud.signIn(email, pass)
+        .then(() => Cloud.syncNow())
+        .then(() => { render(); toast("Signed in — this shop is syncing", "ok"); })
+        .catch(e => {
+          Cloud.set("signed-out");
+          render();
+          const el = $("#cl-err");
+          if (el){
+            el.textContent = e.offline ? "Couldn't reach the project — check the URL and your connection."
+              : /invalid/i.test(e.message || "") ? "Email or password not accepted."
+              : (e.message || "Sign in failed.");
+            el.style.display = "block";
+          }
+        });
+      break;
+    }
+    case "cloud-sync": Cloud.syncNow().then(render); break;
+    case "cloud-signout":
+      if (confirm("Sign out on this device? The shop stays here, it just stops syncing.")){
+        Cloud.signOut(); render();
+      }
+      break;
+    case "cloud-forget":
+      if (confirm("Disconnect from this project? Nothing on the server is deleted and this device keeps its copy.")){
+        Cloud.disconnect(); render();
+      }
+      break;
     case "export":     exportJson(); break;
     case "export-csv": exportCsv(); break;
     case "import":     $("#import-file").click(); break;
@@ -5825,8 +6311,24 @@ $("#btn-new-estimate").addEventListener("click", () => openEstimateForm(null));
    ============================================================ */
 Store.load();
 App.date = todayStr();
+Cloud.loadCfg();
 render();
-$("#storage-note").textContent = `${Store.data.jobs.length} jobs · saved on this device`;
+renderSync();
+function renderStorageNote(){
+  const n = Store.data.jobs.length;
+  const synced = Cloud.configured() && Cloud.cfg.refreshToken;
+  $("#storage-note").textContent = `${n} job${n===1?"":"s"} · ${synced ? "synced" : "saved on this device"}`;
+}
+renderStorageNote();
+Cloud.onChange(renderStorageNote);
+
+Cloud.boot();
+
+/* Coming back to the app is the moment another device's work should land. */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") Cloud.syncNow({ quiet:true });
+});
+window.addEventListener("online", () => Cloud.syncNow({ quiet:true }));
 </script>
 </body>
 </html>

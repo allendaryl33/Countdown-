@@ -172,10 +172,40 @@ Two honest limits, both of which the view states on screen:
 email, job number, job type, description, or phone number (digits only work
 fine, so `5550231` matches `(435) 555-0231`).
 
+## Sync across your devices
+
+Off by default. The app works fine without it — this only matters once you're
+entering real work.
+
+Connect a free Supabase project (**Data & Setup → Sync across your devices**)
+and every device you sign in on keeps the same shop, backed up off the phone.
+Full setup is in [SUPABASE.md](SUPABASE.md); it takes about ten minutes once,
+and the SQL to paste in is [supabase-setup.sql](supabase-setup.sql).
+
+How it behaves:
+
+- Changes go up a couple of seconds after you stop typing. Coming back to the
+  app pulls down anything another device did.
+- **It works with no signal.** Edits are kept on the device and go up when
+  you're back in range. Nothing is lost in a basement.
+- **If two devices changed the same shop, it stops and asks.** It never picks
+  for you and never silently overwrites. Whichever copy you don't keep is
+  downloaded first, so it's always recoverable.
+- The server keeps the **last 30 versions** automatically.
+
+Your keys are typed into the app on your own devices and stored there. They are
+not in this repo and not in the published link, so nobody holding that link can
+reach your data. Row-level security ties every row to your login, so even the
+publishable key is useless to anyone without your password.
+
+This is sync, not multi-user — everyone signing in with that one login shares
+one shop. The day you hire someone, this needs revisiting.
+
 ## Where the data lives
 
-In this browser, on this device, in `localStorage` — nothing is uploaded
-anywhere. Two consequences worth knowing:
+In this browser, on this device, in `localStorage`. With sync switched on there
+is also a copy in your own Supabase project; with it off, nothing is uploaded
+anywhere. Two consequences worth knowing when it's off:
 
 - Each computer has its own separate copy. The office machine and a laptop will
   not see the same board.
