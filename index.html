@@ -76,44 +76,6 @@ nav button .count.alert{background:var(--amber);color:#fff}
 /* ---------- Phone layout ---------- */
 #mobile-nav{display:none}
 .nav-sheet{display:none}
-@media (max-width:820px){
-  #sidebar{display:none}
-  #mobile-nav{
-    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
-    background:var(--navy);border-top:1px solid rgba(255,255,255,.1);
-    padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));
-  }
-  #mobile-nav button{
-    flex:1;background:none;border:0;color:#9db4cb;display:flex;flex-direction:column;
-    align-items:center;gap:3px;padding:6px 2px;font-size:10.5px;font-weight:600;border-radius:7px;
-    position:relative;min-height:46px;
-  }
-  #mobile-nav button .ico{font-size:17px;line-height:1}
-  #mobile-nav button.active{color:var(--gold)}
-  #mobile-nav button .dot{
-    position:absolute;top:4px;right:calc(50% - 18px);min-width:15px;height:15px;
-    border-radius:8px;background:var(--amber);color:#fff;font-size:9.5px;line-height:15px;
-    font-weight:700;padding:0 3px;
-  }
-  main.content{padding:14px 13px 86px}
-  header.topbar{padding:10px 13px;gap:9px;flex-wrap:wrap}
-  .topbar h1{font-size:17px}
-  .topbar .crumb{display:none}
-  .search{order:3;flex-basis:100%}
-  .search input{width:100%}
-  #btn-new-estimate{display:none}
-  .stat-row{grid-template-columns:1fr 1fr;gap:10px}
-  .two-col{grid-template-columns:1fr}
-  .modal{max-width:100%}
-  .modal-body{max-height:calc(100vh - 190px);padding:15px}
-  .modal-head,.modal-foot{padding:13px 15px}
-  .overlay{padding:10px 8px}
-  .row2,.row3{grid-template-columns:1fr}
-  .board{flex-direction:column}
-  .col{flex:1 1 auto;max-width:none;width:100%}
-  .toolbar{gap:6px}
-  .tpl-grid{grid-template-columns:1fr}
-}
 .nav-sheet.open{
   display:flex;position:fixed;inset:0;z-index:70;background:rgba(10,42,66,.5);
   align-items:flex-end;
@@ -316,7 +278,7 @@ main.content{padding:22px 24px 60px;flex:1}
 .stat.alert .value{color:var(--amber)}
 .section-title{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650;margin:26px 0 10px}
 .two-col{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
-@media(max-width:1080px){.two-col{grid-template-columns:1fr}}
+@media(max-width:1080px){.two-col{grid-template-columns:minmax(0,1fr)}}
 
 /* ---------- Tables ---------- */
 table{width:100%;border-collapse:collapse}
@@ -590,6 +552,65 @@ textarea.input{resize:vertical;min-height:76px}
 .toast.ok{background:var(--green)}
 .toast.err{background:var(--red)}
 @keyframes slidein{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
+
+/* ---------- Phone layout overrides ----------
+   Last in the sheet on purpose: these and the desktop rules have the
+   same specificity, so whichever comes later wins. Sitting above them
+   it lost every conflict and the phone quietly rendered desktop
+   padding, grids and modal sizing. */
+@media (max-width:820px){
+  #sidebar{display:none}
+  #mobile-nav{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
+    background:var(--navy);border-top:1px solid rgba(255,255,255,.1);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));
+  }
+  #mobile-nav button{
+    flex:1;background:none;border:0;color:#9db4cb;display:flex;flex-direction:column;
+    align-items:center;gap:3px;padding:6px 2px;font-size:10.5px;font-weight:600;border-radius:7px;
+    position:relative;min-height:46px;
+  }
+  #mobile-nav button .ico{font-size:17px;line-height:1}
+  #mobile-nav button.active{color:var(--gold)}
+  #mobile-nav button .dot{
+    position:absolute;top:4px;right:calc(50% - 18px);min-width:15px;height:15px;
+    border-radius:8px;background:var(--amber);color:#fff;font-size:9.5px;line-height:15px;
+    font-weight:700;padding:0 3px;
+  }
+  /* The bottom nav grows by the home-indicator inset, so the space we
+     reserve for it has to grow by the same amount or it covers the last
+     row of a long list. */
+  main.content{padding:14px 13px calc(92px + env(safe-area-inset-bottom,0px))}
+  header.topbar{padding:10px 13px;gap:9px;flex-wrap:wrap}
+  .topbar h1{font-size:17px}
+  .topbar .crumb{display:none}
+  .search{order:3;flex-basis:100%}
+  .search input{width:100%}
+  #btn-new-estimate{display:none}
+  .stat-row{grid-template-columns:1fr 1fr;gap:10px}
+  .two-col{grid-template-columns:minmax(0,1fr)}
+  .card-head{flex-wrap:wrap}
+  /* A record modal is a bottom sheet on a phone. Capping the modal itself
+     and letting only its body scroll keeps Close and Delete on screen — the
+     old fixed body max-height assumed a short header, and a wrapped one
+     pushed the footer 115px below the fold. */
+  .overlay{padding:0;align-items:flex-end}
+  .modal,.modal.wide{
+    max-width:100%;max-height:100vh;max-height:100dvh;
+    border-radius:13px 13px 0 0;display:flex;flex-direction:column;
+  }
+  .modal-head{flex:0 0 auto}
+  .modal-body{flex:1 1 auto;min-height:0;max-height:none;padding:15px}
+  .modal-foot{flex:0 0 auto;border-radius:0}
+  .modal-head,.modal-foot{padding:13px 15px}
+  /* Wide tables scroll inside their card instead of dragging the page sideways. */
+  .card{overflow-x:auto}
+  .row2,.row3{grid-template-columns:1fr}
+  .board{flex-direction:column}
+  .col{flex:1 1 auto;max-width:none;width:100%}
+  .toolbar{gap:6px}
+  .tpl-grid{grid-template-columns:1fr}
+}
 
 /* ---------- Print (dispatch ticket) ---------- */
 #print-area{display:none}
@@ -2837,8 +2858,11 @@ function viewTimeMoney(){
       <div class="foot">${costed ? esc(money(all.billed)) + " billed, " + esc(money(all.mat)) + " of it parts"
         : (untimed ? untimed + " job" + (untimed===1?"":"s") + " had no time logged" : "every job timed")}</div></div>
     <div class="stat"><div class="label">You actually earn</div>
-      <div class="value ${rateClass(all.rate)}">${esc(rateText(all.rate))}</div>
-      <div class="foot">${all.rate == null ? "—" : all.rate >= target
+      <div class="value ${rateClass(all.rate)}"${all.rate == null
+        ? ` style="font-size:19px;color:var(--muted-2)"` : ""}>${all.rate == null
+        ? "Nothing yet" : esc(rateText(all.rate))}</div>
+      <div class="foot">${all.rate == null ? "clock a job and this fills itself in"
+        : all.rate >= target
         ? "ahead of your " + money(target) + " target"
         : "short of your " + money(target) + " target"}</div></div>
     <div class="stat"><div class="label">Hours quoting</div>
@@ -2847,6 +2871,12 @@ function viewTimeMoney(){
   </div>
 
   <div class="section-title">By type of work — worst rate first</div>
+  ${!byType.length ? `
+  <div class="card"><div class="empty">
+    <div class="big">⏱</div>
+    No finished jobs with time logged in this window yet.<br>
+    Clock in when you get to a job and out when you leave — this fills itself in.
+  </div></div>` : `
   <div class="card"><table>
     <thead><tr>
       <th>Work</th><th class="num">Jobs</th><th class="num">Hours</th>
@@ -2855,7 +2885,7 @@ function viewTimeMoney(){
       <th class="num">You earn</th>
     </tr></thead>
     <tbody>
-      ${byType.length ? byType.map(t => `
+      ${byType.map(t => `
         <tr>
           <td class="t-strong">${esc(t.type)}</td>
           <td class="num">${t.n}</td>
@@ -2865,12 +2895,9 @@ function viewTimeMoney(){
           ${costed ? `<td class="num t-sub">${esc(money(t.mat))}</td>` : ""}
           <td class="num">${esc(money(t.billed / t.n))}</td>
           <td class="num t-strong ${rateClass(t.rate)}">${esc(rateText(t.rate))}</td>
-        </tr>`).join("")
-      : `<tr><td colspan="${costed?8:7}"><div class="empty"><div class="big">⏱</div>
-          No finished jobs with time logged in this window yet.<br>
-          Clock in when you get to a job and out when you leave — this fills itself in.</div></td></tr>`}
+        </tr>`).join("")}
     </tbody>
-  </table></div>
+  </table></div>`}
 
   ${byType.length && byType[0].rate != null && byType[0].rate < target ? `
     <div class="callout" style="border-left:4px solid var(--amber);background:var(--amber-soft);padding:14px 16px;border-radius:0 6px 6px 0;margin-top:14px;font-size:14px;color:#9c5712">
