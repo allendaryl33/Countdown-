@@ -212,6 +212,44 @@ nav button .count.alert{background:var(--amber);color:#fff}
   display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;
   background:var(--blue-soft);color:#105585;
 }
+/* Running-clock bar. Sticks to the top of every screen so a forgotten
+   clock-out is impossible to miss. */
+#clockbar{
+  display:none;position:sticky;top:0;z-index:55;
+  background:var(--green);color:#fff;padding:9px 14px;
+  align-items:center;gap:11px;font-size:14px;box-shadow:0 2px 8px rgba(16,36,56,.18);
+}
+#clockbar.on{display:flex}
+#clockbar.stale{background:var(--amber)}
+#clockbar .pulse{
+  width:9px;height:9px;border-radius:50%;background:#fff;flex:0 0 9px;
+  animation:beat 1.6s ease-in-out infinite;
+}
+@keyframes beat{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){#clockbar .pulse{animation:none}}
+#clockbar .who{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#clockbar .el{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:700;font-size:15px}
+#clockbar button{
+  background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45);color:#fff;
+  border-radius:7px;padding:7px 13px;font-weight:650;font-size:13.5px;white-space:nowrap;
+}
+#clockbar button:hover{background:rgba(255,255,255,.3)}
+
+.clock-btn{width:100%;justify-content:center;padding:12px 10px;font-size:15px}
+.clock-on{background:var(--green)!important;border-color:var(--green)!important;color:#fff!important}
+.time-row{
+  display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #eef2f6;font-size:13.5px;
+}
+.time-row:last-child{border-bottom:0}
+.time-row .when{color:var(--muted);min-width:148px}
+.time-row .dur{margin-left:auto;font-weight:650;font-variant-numeric:tabular-nums}
+.time-row.live .dur{color:var(--green)}
+.time-sum{
+  display:flex;align-items:baseline;gap:10px;padding:11px 0 0;margin-top:4px;
+  border-top:2px solid var(--line);font-weight:700;
+}
+.time-sum .n{margin-left:auto;font-variant-numeric:tabular-nums}
+.rate-good{color:var(--green)} .rate-thin{color:var(--amber)} .rate-bad{color:var(--red)}
 .today-empty{
   background:var(--card);border:1px dashed var(--line);border-radius:11px;
   padding:34px 20px;text-align:center;color:var(--muted);
@@ -613,6 +651,7 @@ textarea.input{resize:vertical;min-height:76px}
       <button class="btn" id="btn-new-estimate">＋ Estimate</button>
       <button class="btn accent" id="btn-new-job">＋ New Job</button>
     </header>
+    <div id="clockbar" aria-live="polite"></div>
     <main class="content" id="view"></main>
   </div>
 
@@ -850,6 +889,31 @@ function fmtStamp(ts){
   return d.toLocaleDateString(undefined,{month:"short",day:"numeric"}) + " · " +
          d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
 }
+/* "1h 24m" reads faster than 84 minutes when you're glancing at a phone. */
+function fmtDur(ms){
+  const mins = Math.max(0, Math.round((Number(ms) || 0) / 60000));
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (!h) return m + "m";
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+function fmtClock(ms){
+  const total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+  const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), sec = total % 60;
+  const pad = n => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+function hoursOf(ms){ return (Number(ms) || 0) / 3600000; }
+/* For the datetime-local inputs used to correct a forgotten clock-out. */
+function toLocalInput(ts){
+  if (!ts) return "";
+  const d = new Date(ts), p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fromLocalInput(v){
+  const t = v ? new Date(v).getTime() : NaN;
+  return Number.isFinite(t) ? t : null;
+}
+
 function money(n){
   const v = Number(n) || 0;
   return "$" + v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
@@ -910,6 +974,10 @@ const Store = {
           this.data.settings.zones    = this.data.settings.zones    || defaultZones();
           this.data.settings.messages = this.data.settings.messages || defaultMessages();
           this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
+          // Added with time tracking.
+          this.data.jobs.forEach(j => { if (!j.timeEntries) j.timeEntries = []; });
+    this.data.jobs.forEach(j => { if (j.materialCost == null) j.materialCost = 0; });
+          this.data.estimates.forEach(e => { if (!e.timeEntries) e.timeEntries = []; });
           // A demo should always demo. Real work is never moved.
           if (this.data.demo && !this.data.liveSince && this.data.seededOn
               && this.data.seededOn !== todayStr()){
@@ -1088,7 +1156,7 @@ const Store = {
       window: opts.window || "Anytime",
       techId: null, status: "new", completedAt: null,
       laborHours: 0, laborRate: this.data.settings.laborRate,
-      payment: blankPayment(),
+      payment: blankPayment(), timeEntries: [],
       parts: (e.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
       estimateId: e.id, quotedTotal: total,
       log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no} · quoted ${money(total)}` }]
@@ -1112,6 +1180,112 @@ const Store = {
   deleteEstimate(id){
     this.data.estimates = this.data.estimates.filter(e => e.id !== id);
     this.save();
+  },
+
+  /* ----- Time on the job -------------------------------------------------
+     Each visit is one entry. A job can have several — quote trip, rough-in,
+     come back for the part. An entry with no end is still running. */
+  entriesOf(rec){ return (rec && rec.timeEntries) || []; },
+
+  totalMs(rec, now){
+    const t = now || Date.now();
+    return this.entriesOf(rec).reduce((sum, e) =>
+      sum + Math.max(0, (e.endedAt || t) - e.startedAt), 0);
+  },
+
+  /* Quote time belongs to the job it turned into, for a true cost. */
+  /* What's left after the parts bill — blank means he hasn't told us, so we
+     can't deduct anything and the hourly figure reads high. */
+  jobNet(job){ return this.jobTotal(job) - (Number(job.materialCost) || 0); },
+
+  jobTotalMs(job, now){
+    let ms = this.totalMs(job, now);
+    if (job.estimateId){
+      const e = this.estimate(job.estimateId);
+      if (e) ms += this.totalMs(e, now);
+    }
+    return ms;
+  },
+
+  /* You can only be in one place, so starting one stops the other. */
+  running(){
+    for (const j of this.data.jobs){
+      const e = this.entriesOf(j).find(x => !x.endedAt);
+      if (e) return { kind:"job", rec:j, entry:e };
+    }
+    for (const q of this.data.estimates){
+      const e = this.entriesOf(q).find(x => !x.endedAt);
+      if (e) return { kind:"estimate", rec:q, entry:e };
+    }
+    return null;
+  },
+
+  recordOf(kind, id){ return kind === "estimate" ? this.estimate(id) : this.job(id); },
+
+  clockIn(kind, id){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return null;
+    const open = this.running();
+    if (open){
+      if (open.rec.id === rec.id) return open.entry;      // already running here
+      this.clockOut(open.kind, open.rec.id, "Stopped automatically — clocked in elsewhere");
+    }
+    rec.timeEntries = rec.timeEntries || [];
+    const entry = { id: uid("te"), startedAt: Date.now(), endedAt: null, note: "" };
+    rec.timeEntries.push(entry);
+    this.logOn(kind, rec, "Clocked in on site");
+    this.save();
+    return entry;
+  },
+
+  clockOut(kind, id, why){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    const entry = this.entriesOf(rec).find(e => !e.endedAt);
+    if (!entry) return;
+    entry.endedAt = Date.now();
+    if (why) entry.note = why;
+    this.logOn(kind, rec, `Clocked out — ${fmtDur(entry.endedAt - entry.startedAt)} on site`);
+    this.save();
+  },
+
+  addEntry(kind, id, startedAt, endedAt, note){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    rec.timeEntries = rec.timeEntries || [];
+    rec.timeEntries.push({ id: uid("te"), startedAt, endedAt, note: note || "" });
+    rec.timeEntries.sort((a,b) => a.startedAt - b.startedAt);
+    this.logOn(kind, rec, `Time added by hand — ${fmtDur(endedAt - startedAt)}`);
+    this.save();
+  },
+
+  updateEntry(kind, id, entryId, startedAt, endedAt){
+    const rec = this.recordOf(kind, id);
+    const e = this.entriesOf(rec).find(x => x.id === entryId);
+    if (!e) return;
+    e.startedAt = startedAt;
+    e.endedAt = endedAt;
+    this.logOn(kind, rec, "Time corrected");
+    this.save();
+  },
+
+  removeEntry(kind, id, entryId){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    rec.timeEntries = this.entriesOf(rec).filter(x => x.id !== entryId);
+    this.logOn(kind, rec, "Time entry removed");
+    this.save();
+  },
+
+  logOn(kind, rec, text){
+    if (kind === "estimate") this.addEstLog(rec, text); else this.addLog(rec, text);
+  },
+
+  /* A clock left running overnight is a forgotten clock-out, not a long day. */
+  staleRunning(){
+    const r = this.running();
+    if (!r) return null;
+    return (Date.now() - r.entry.startedAt) > 8 * 3600000 ? r : null;
   },
 
   /* Customer messaging. The app writes the message; the phone sends it, from
@@ -1806,6 +1980,7 @@ const App = {
   search: "",
   filters: { status:"", techId:"", type:"", when:"upcoming" },
   estFilter: "open",
+  moneyRange: 90,
   waiverTab: "templates",
   scheduleMode: "day",
   customerSort: "name"
@@ -1817,6 +1992,7 @@ const VIEWS = [
   { id:"schedule",  label:"Schedule",  icon:"🗓", crumb:"Dispatch" },
   { id:"estimates", label:"Estimates", icon:"📋", crumb:"Work" },
   { id:"jobs",      label:"Jobs",      icon:"🧾", crumb:"Work" },
+  { id:"timemoney", label:"Time & Money", icon:"⏱", crumb:"Work" },
   { id:"customers", label:"Customers", icon:"👤", crumb:"Work" },
   { id:"waivers",   label:"Waivers",   icon:"✍", crumb:"Work" },
   { id:"techs",     label:"Technicians", icon:"🔧", crumb:"Setup" },
@@ -1828,7 +2004,7 @@ function openNavSheet(){
   const groups = [
     ["Field",    ["today"]],
     ["Dispatch", ["dashboard","schedule"]],
-    ["Work",     ["estimates","jobs","customers","waivers"]],
+    ["Work",     ["estimates","jobs","timemoney","customers","waivers"]],
     ["Setup",    ["techs","pricebook","data"]]
   ];
   const sheet = $("#nav-sheet");
@@ -1857,6 +2033,7 @@ function go(view){
 
 function render(){
   renderBrand();
+  renderClockBar();
   renderNav();
   renderMobileNav();
   const v = VIEWS.find(x => x.id === App.view) || VIEWS[0];
@@ -1870,6 +2047,7 @@ function render(){
       case "schedule":  host.innerHTML = viewSchedule();  break;
       case "today":     host.innerHTML = viewToday();     break;
       case "estimates": host.innerHTML = viewEstimates(); break;
+      case "timemoney": host.innerHTML = viewTimeMoney(); break;
       case "waivers":   host.innerHTML = viewWaivers();   break;
       case "pricebook": host.innerHTML = viewPriceBook(); break;
       case "jobs":      host.innerHTML = viewJobs();      break;
@@ -1882,6 +2060,35 @@ function render(){
   }
   if (App.view === "schedule" && !App.search.trim()) wireBoard();
 }
+
+function renderClockBar(){
+  const bar = $("#clockbar");
+  if (!bar) return;
+  const r = Store.running();
+  if (!r){ bar.className = ""; bar.innerHTML = ""; return; }
+
+  const name = r.kind === "estimate"
+    ? `EST-${r.rec.no} · ${Store.estContact(r.rec).name}`
+    : `#${r.rec.no} · ${custName(r.rec.customerId)}`;
+  const stale = (Date.now() - r.entry.startedAt) > 8 * 3600000;
+
+  bar.className = "on" + (stale ? " stale" : "");
+  bar.innerHTML = `
+    <span class="pulse"></span>
+    <span class="who">${stale
+      ? `Clock still running since ${esc(fmtStamp(r.entry.startedAt))} — did you forget? `
+      : "On site · "}${esc(name)}</span>
+    <span class="el" id="clock-elapsed">${esc(fmtClock(Date.now() - r.entry.startedAt))}</span>
+    <button data-clock="out:${r.kind}:${r.rec.id}">Clock out</button>`;
+}
+
+/* Only the digits change each second — re-rendering the view would steal focus. */
+setInterval(() => {
+  const el = $("#clock-elapsed");
+  if (!el) return;
+  const r = Store.running();
+  if (r) el.textContent = fmtClock(Date.now() - r.entry.startedAt);
+}, 1000);
 
 function renderBrand(){
   const el = $("#brand-name");
@@ -1942,7 +2149,7 @@ function renderNav(){
   $("#nav").innerHTML =
     group("Field", ["today"]) +
     group("Dispatch", ["dashboard","schedule"]) +
-    group("Work", ["estimates","jobs","customers","waivers"]) +
+    group("Work", ["estimates","jobs","timemoney","customers","waivers"]) +
     group("Setup", ["techs","pricebook","data"]);
 }
 
@@ -2107,6 +2314,12 @@ function stopCard(j){
       ${addr ? `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${mapQ}" target="_blank" rel="noopener noreferrer">🧭 Directions</a>` : ""}
       ${missing.length ? `<button class="btn" data-add-waiver="${j.id}">✍ Waiver</button>` : ""}
       ${stepWord && next ? `<button class="btn accent" data-advance="${j.id}">${esc(stepWord)}</button>` : ""}
+      ${(() => {
+        const live = Store.entriesOf(j).some(e => !e.endedAt);
+        const spent = Store.totalMs(j);
+        if (live) return `<button class="btn clock-on" data-clock="out:job:${j.id}">⏹ Clock out</button>`;
+        return `<button class="btn" data-clock="in:job:${j.id}">▶ Clock in${spent ? ` · ${esc(fmtDur(spent))} so far` : ""}</button>`;
+      })()}
       ${j.status === "complete" && bal > 0.005 ? `<button class="btn accent" data-job="${j.id}">💵 Take payment</button>` : ""}
     </div>
   </div>`;
@@ -2550,6 +2763,144 @@ function wireBoard(){
       toast(`#${job.no} → ${bits.join(" · ")}`, "ok");
     });
   });
+}
+
+/* ============================================================
+   View: Time & Money — is the flat rate actually working?
+   ============================================================ */
+function viewTimeMoney(){
+  const days = App.moneyRange;
+  const since = days ? addDays(todayStr(), -days) : "0000-00-00";
+  const target = Number(Store.data.settings.laborRate) || 0;
+
+  const done = Store.data.jobs.filter(j =>
+    j.status === "complete" && (j.scheduledDate || "") >= since);
+  const timed = done.filter(j => Store.jobTotalMs(j) > 0);
+  const untimed = done.length - timed.length;
+
+  // Parts cost is optional. Until he enters it, "billed" includes the price of
+  // a water heater and the hourly figure reads far better than the day did.
+  const costed = timed.some(j => (Number(j.materialCost) || 0) > 0);
+
+  const row = list => {
+    const ms = list.reduce((s,j) => s + Store.jobTotalMs(j), 0);
+    const billed = list.reduce((s,j) => s + Store.jobTotal(j), 0);
+    const mat = list.reduce((s,j) => s + (Number(j.materialCost) || 0), 0);
+    const hrs = hoursOf(ms);
+    return { n:list.length, hrs, billed, mat, net: billed - mat,
+             rate: hrs > 0 ? (billed - mat) / hrs : null };
+  };
+  const all = row(timed);
+
+  const byType = [...new Set(timed.map(j => j.type))]
+    .map(type => Object.assign({ type }, row(timed.filter(j => j.type === type))))
+    .sort((a,b) => (a.rate ?? 1e9) - (b.rate ?? 1e9));
+
+  // Quoting is a cost whether or not the quote lands.
+  const sinceMs = days ? (parseYmd(since) ? parseYmd(since).getTime() : 0) : 0;
+  const quotes = Store.data.estimates.filter(e => (e.createdAt || 0) >= sinceMs);
+  const quoteMs = quotes.reduce((s,e) => s + Store.totalMs(e), 0);
+  const lost = quotes.filter(e => e.status === "declined");
+  const lostMs = lost.reduce((s,e) => s + Store.totalMs(e), 0);
+  const won = quotes.filter(e => e.status === "approved").length;
+  const decided = won + lost.length;
+
+  const rateClass = r => r == null ? "" : r >= target ? "rate-good" : r >= target * 0.7 ? "rate-thin" : "rate-bad";
+  const rateText = r => r == null ? "—" : money(r) + "/hr";
+  const pick = (d, label) =>
+    `<button class="btn sm ${days===d?"primary":""}" data-money-range="${d}">${esc(label)}</button>`;
+
+  return `
+  <div class="toolbar">
+    ${pick(30,"30 days")}${pick(90,"3 months")}${pick(180,"6 months")}${pick(365,"1 year")}${pick(0,"All")}
+    <div style="flex:1"></div>
+    <span class="filter-note">Your target is ${esc(money(target))}/hr</span>
+  </div>
+
+  ${timed.length < 5 ? `
+    <div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
+      <strong>Only ${timed.length} finished job${timed.length===1?"":"s"} with time on ${timed.length===1?"it":"them"} so far.</strong>
+      That's not enough to change your prices over — one bad morning skews it. Keep clocking in
+      and come back when you've got a couple of dozen.
+    </div>` : ""}
+
+  <div class="stat-row">
+    <div class="stat"><div class="label">Hours on the tools</div>
+      <div class="value">${all.hrs.toFixed(1)}</div>
+      <div class="foot">across ${all.n} finished job${all.n===1?"":"s"}</div></div>
+    <div class="stat"><div class="label">${costed ? "Kept after parts" : "Billed"}</div>
+      <div class="value">${esc(money(costed ? all.net : all.billed))}</div>
+      <div class="foot">${costed ? esc(money(all.billed)) + " billed, " + esc(money(all.mat)) + " of it parts"
+        : (untimed ? untimed + " job" + (untimed===1?"":"s") + " had no time logged" : "every job timed")}</div></div>
+    <div class="stat"><div class="label">You actually earn</div>
+      <div class="value ${rateClass(all.rate)}">${esc(rateText(all.rate))}</div>
+      <div class="foot">${all.rate == null ? "—" : all.rate >= target
+        ? "ahead of your " + money(target) + " target"
+        : "short of your " + money(target) + " target"}</div></div>
+    <div class="stat"><div class="label">Hours quoting</div>
+      <div class="value">${hoursOf(quoteMs).toFixed(1)}</div>
+      <div class="foot">${hoursOf(lostMs).toFixed(1)}h on quotes that went nowhere</div></div>
+  </div>
+
+  <div class="section-title">By type of work — worst rate first</div>
+  <div class="card"><table>
+    <thead><tr>
+      <th>Work</th><th class="num">Jobs</th><th class="num">Hours</th>
+      <th class="num">Avg time</th><th class="num">Billed</th>${costed
+        ? `<th class="num">Parts cost</th>` : ""}<th class="num">Avg price</th>
+      <th class="num">You earn</th>
+    </tr></thead>
+    <tbody>
+      ${byType.length ? byType.map(t => `
+        <tr>
+          <td class="t-strong">${esc(t.type)}</td>
+          <td class="num">${t.n}</td>
+          <td class="num">${t.hrs.toFixed(1)}</td>
+          <td class="num">${esc(fmtDur(t.hrs / t.n * 3600000))}</td>
+          <td class="num">${esc(money(t.billed))}</td>
+          ${costed ? `<td class="num t-sub">${esc(money(t.mat))}</td>` : ""}
+          <td class="num">${esc(money(t.billed / t.n))}</td>
+          <td class="num t-strong ${rateClass(t.rate)}">${esc(rateText(t.rate))}</td>
+        </tr>`).join("")
+      : `<tr><td colspan="${costed?8:7}"><div class="empty"><div class="big">⏱</div>
+          No finished jobs with time logged in this window yet.<br>
+          Clock in when you get to a job and out when you leave — this fills itself in.</div></td></tr>`}
+    </tbody>
+  </table></div>
+
+  ${byType.length && byType[0].rate != null && byType[0].rate < target ? `
+    <div class="callout" style="border-left:4px solid var(--amber);background:var(--amber-soft);padding:14px 16px;border-radius:0 6px 6px 0;margin-top:14px;font-size:14px;color:#9c5712">
+      <strong>${esc(byType[0].type)} is your thinnest work at ${esc(rateText(byType[0].rate))}.</strong>
+      To hit ${esc(money(target))}/hr on the ${byType[0].n} you've done, the average price would need to be
+      about ${esc(money((target * byType[0].hrs + byType[0].mat) / byType[0].n))} instead of ${esc(money(byType[0].billed / byType[0].n))}.
+    </div>` : ""}
+
+  ${timed.length && !costed ? `
+    <div class="legal-note">
+      <strong>These rates don't know what your parts cost you.</strong>
+      A water heater at ${esc(money(2250))} will always look like a great hour because the tank's
+      price is sitting in the billed column. Put what you paid in the
+      <em>"What the parts cost you"</em> box on a job and this table starts telling the truth.
+    </div>` : ""}
+
+  <div class="section-title">Quoting</div>
+  <div class="card"><div class="card-body">
+    <div class="money-row"><span class="mr-label">Quotes written</span>
+      <span class="mr-val">${quotes.length}</span></div>
+    <div class="money-row"><span class="mr-label">Won</span>
+      <span class="mr-val">${won}${decided ? ` · ${Math.round(won/decided*100)}% of the ones decided` : ""}</span></div>
+    <div class="money-row"><span class="mr-label">Time spent quoting</span>
+      <span class="mr-val">${hoursOf(quoteMs).toFixed(1)}h</span></div>
+    <div class="money-row" style="border-bottom:0"><span class="mr-label">Of that, on quotes you lost</span>
+      <span class="mr-val" style="color:${lostMs ? "var(--amber)" : "inherit"}">${hoursOf(lostMs).toFixed(1)}h${
+        target && lostMs ? ` · ${esc(money(hoursOf(lostMs) * target))} of your time` : ""}</span></div>
+  </div></div>
+
+  <p class="t-sub" style="margin-top:14px;max-width:70ch">
+    "You earn" is what you kept${costed ? " after parts" : ""} divided by the hours you actually
+    clocked, including the time spent quoting a job before it became one. It still isn't profit —
+    fuel, insurance, the truck and the hours you don't bill for all come out of it.
+  </p>`;
 }
 
 /* ============================================================
@@ -3162,6 +3513,16 @@ function openJob(id){
             <td colspan="3" class="t-strong" style="text-align:right">Job total</td>
             <td class="num t-strong">${esc(money(partsTotal + laborTotal))}</td><td></td>
           </tr>
+          <tr>
+            <td colspan="2" class="t-sub" style="text-align:right">
+              What the parts cost <em>you</em> <span class="t-sub">(optional)</span></td>
+            <td class="num"><input class="input" id="mat-cost" type="number" min="0" step="0.01"
+                 value="${j.materialCost ? esc(j.materialCost) : ""}" placeholder="0.00" style="width:90px"></td>
+            <td class="num t-sub">${j.materialCost
+              ? "leaves " + esc(money(partsTotal + laborTotal - j.materialCost))
+              : "for Time &amp; Money"}</td>
+            <td class="num"><button class="btn sm" data-save-matcost="${j.id}">✓</button></td>
+          </tr>
           ${j.quotedTotal != null ? (() => {
             const est = j.estimateId ? Store.estimate(j.estimateId) : null;
             const diff = (partsTotal + laborTotal) - j.quotedTotal;
@@ -3178,6 +3539,9 @@ function openJob(id){
           })() : ""}
         </tbody>
       </table>
+
+      <div class="section-title" style="margin-top:22px">Time on site</div>
+      ${timePanel("job", j)}
 
       <div class="section-title" style="margin-top:22px">Payment</div>
       ${(() => {
@@ -3458,6 +3822,9 @@ function openEstimate(id){
       </div>
 
       <div class="dl"><dt>Scope of work</dt><dd style="white-space:pre-wrap">${esc(e.description)||"—"}</dd></div>
+
+      <div class="section-title" style="margin-top:22px">Time quoting</div>
+      ${timePanel("estimate", e)}
 
       <div class="section-title" style="margin-top:22px">Line items</div>
       <table style="border:1px solid var(--line);border-radius:6px">
@@ -4176,6 +4543,85 @@ function saveTemplateFromForm(id){
   Store.save(); closeModal();
   App.view = "waivers"; App.waiverTab = "templates";
   render();
+}
+
+/* ---------- Time on site, shared by jobs and estimates ---------- */
+function timePanel(kind, rec){
+  const entries = Store.entriesOf(rec).slice().sort((a,b) => a.startedAt - b.startedAt);
+  const live = entries.find(e => !e.endedAt);
+  const total = Store.totalMs(rec);
+  const linked = kind === "job" && rec.estimateId ? Store.estimate(rec.estimateId) : null;
+  const quoteMs = linked ? Store.totalMs(linked) : 0;
+
+  return `
+    <div style="margin-bottom:12px">
+      ${live
+        ? `<button class="btn clock-btn clock-on" data-clock="out:${kind}:${rec.id}">⏹ Clock out — on site ${esc(fmtDur(Date.now() - live.startedAt))}</button>`
+        : `<button class="btn accent clock-btn" data-clock="in:${kind}:${rec.id}">▶ Clock in</button>`}
+    </div>
+
+    ${entries.length ? `<div>
+      ${entries.map(e => `
+        <div class="time-row ${e.endedAt ? "" : "live"}">
+          <span class="when">${esc(fmtStamp(e.startedAt))}${e.endedAt ? ` → ${esc(new Date(e.endedAt).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}))}` : " → running"}</span>
+          ${e.note ? `<span class="t-sub">${esc(e.note)}</span>` : ""}
+          <span class="dur">${esc(fmtDur((e.endedAt || Date.now()) - e.startedAt))}</span>
+          <button class="btn sm ghost" data-edit-time="${kind}:${rec.id}:${e.id}" title="Correct this">✎</button>
+          <button class="btn sm ghost" data-del-time="${kind}:${rec.id}:${e.id}" title="Remove">×</button>
+        </div>`).join("")}
+      <div class="time-sum">
+        <span>${kind === "estimate" ? "Time quoting" : "Time on this job"}</span>
+        <span class="n">${esc(fmtDur(total))}</span>
+      </div>
+      ${quoteMs ? `
+        <div class="time-row"><span class="when">Plus quoting it (EST-${linked.no})</span>
+          <span class="dur">${esc(fmtDur(quoteMs))}</span></div>
+        <div class="time-sum"><span>All in</span>
+          <span class="n">${esc(fmtDur(total + quoteMs))}</span></div>` : ""}
+    </div>` : `<p class="t-sub" style="margin:0">No time logged yet. Hit Clock in when you get there.</p>`}
+
+    <div style="margin-top:10px">
+      <button class="btn sm" data-add-time="${kind}:${rec.id}">＋ Add time by hand</button>
+    </div>`;
+}
+
+/* Correcting a forgotten clock-out, or adding a trip after the fact. */
+function openTimeEdit(kind, recId, entryId){
+  const rec = Store.recordOf(kind, recId);
+  const e = entryId ? Store.entriesOf(rec).find(x => x.id === entryId) : null;
+  const start = e ? e.startedAt : Date.now() - 3600000;
+  const end = e ? (e.endedAt || Date.now()) : Date.now();
+
+  openModal(`
+    <div class="modal-head"><h2>${e ? "Correct this time" : "Add time"}</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      ${e && !e.endedAt ? `<div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
+        This one is still running. Setting an end time stops it.</div>` : ""}
+      <div class="row2">
+        <div class="field"><label>Arrived</label>
+          <input class="input" id="te-start" type="datetime-local" value="${esc(toLocalInput(start))}"></div>
+        <div class="field"><label>Left</label>
+          <input class="input" id="te-end" type="datetime-local" value="${esc(toLocalInput(end))}"></div>
+      </div>
+      <div class="err" id="te-err" style="display:none">The leaving time has to be after the arriving time.</div>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-time="${kind}:${recId}:${entryId || ""}">Save</button>
+    </div>`);
+}
+
+function saveTimeEdit(payload){
+  const [kind, recId, entryId] = payload.split(":");
+  const start = fromLocalInput($("#te-start").value);
+  const end = fromLocalInput($("#te-end").value);
+  if (!start || !end || end <= start){ $("#te-err").style.display = "block"; return; }
+  if (entryId) Store.updateEntry(kind, recId, entryId, start, end);
+  else Store.addEntry(kind, recId, start, end, "");
+  closeModal(); render();
+  if (kind === "estimate") openEstimate(recId); else openJob(recId);
+  toast("Time saved", "ok");
 }
 
 /* ---------- Message the customer ---------- */
@@ -4923,6 +5369,41 @@ document.addEventListener("click", e => {
     Store.save(); openJob(jid);
     return;
   }
+  /* --- the clock --- */
+  const clock = hit("[data-clock]");
+  if (clock){
+    const [dir, kind, id] = clock.dataset.clock.split(":");
+    const rec = Store.recordOf(kind, id);
+    if (dir === "in"){
+      const was = Store.running();
+      Store.clockIn(kind, id);
+      if (was && was.rec.id !== id)
+        toast(`Clocked out of ${was.kind === "estimate" ? "EST-" + was.rec.no : "#" + was.rec.no} first`, "ok");
+      else toast("Clock running", "ok");
+    } else {
+      Store.clockOut(kind, id);
+      toast(`Clocked out — ${fmtDur(Store.totalMs(rec))} on this one`, "ok");
+    }
+    render();
+    if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
+    return;
+  }
+  const tEdit = hit("[data-edit-time]");
+  if (tEdit){ const [k,r,e] = tEdit.dataset.editTime.split(":"); return openTimeEdit(k, r, e); }
+  const tAdd = hit("[data-add-time]");
+  if (tAdd){ const [k,r] = tAdd.dataset.addTime.split(":"); return openTimeEdit(k, r, null); }
+  const tSave = hit("[data-save-time]");
+  if (tSave) return saveTimeEdit(tSave.dataset.saveTime);
+  const tDel = hit("[data-del-time]");
+  if (tDel){
+    const [k, r, e] = tDel.dataset.delTime.split(":");
+    if (!confirm("Remove this time entry?")) return;
+    Store.removeEntry(k, r, e);
+    render();
+    k === "estimate" ? openEstimate(r) : openJob(r);
+    return;
+  }
+
   /* --- customer messages --- */
   const mTpl = hit("[data-msg-tpl]");
   if (mTpl){ MsgState.tplId = mTpl.dataset.msgTpl; MsgState.bump = 0; return renderMessageSheet(); }
@@ -4993,6 +5474,14 @@ document.addEventListener("click", e => {
     Store.save(); openJob(j.id); toast("Labor saved", "ok");
     return;
   }
+  const saveMat = hit("[data-save-matcost]");
+  if (saveMat){
+    const j = Store.job(saveMat.dataset.saveMatcost);
+    j.materialCost = Number($("#mat-cost").value) || 0;
+    Store.save(); openJob(j.id); toast("Parts cost saved", "ok");
+    return;
+  }
+
   const addNote = hit("[data-add-note]");
   if (addNote){
     const j = Store.job(addNote.dataset.addNote);
@@ -5010,6 +5499,9 @@ document.addEventListener("click", e => {
   }
 
   /* --- estimate actions --- */
+  const mRange = hit("[data-money-range]");
+  if (mRange){ App.moneyRange = Number(mRange.dataset.moneyRange); return render(); }
+
   const estF = hit("[data-est-filter]");
   if (estF){ App.estFilter = estF.dataset.estFilter; return render(); }
 

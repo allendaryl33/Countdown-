@@ -130,6 +130,44 @@ Deactivating a tech takes their column off the board without touching their jobs
 problem, site notes, room to write up the work, and a signature line. Print the
 whole day from the dashboard or any single job from its detail view.
 
+**Clock in / clock out** — a button on every stop on Today, and on every job
+and estimate record. Hit it when you get there, hit it when you leave. A green
+bar sits across the top of the app the whole time it's running so you can't
+forget it's going; if it's been running more than eight hours it turns amber and
+asks whether you forgot to clock out.
+
+Only one clock runs at a time — starting one stops the other and writes a line
+saying so. Entries are listed on the record and every one can be corrected or
+deleted, because forgetting to clock out is the normal failure mode, not the
+exception. There's an **Add time by hand** button for the trip you didn't clock
+at all.
+
+Multiple trips to the same job stack up: you see each one and a total. Time
+spent quoting an estimate stays on the estimate, and if that estimate becomes a
+job, the job shows **on site**, **plus quoting it**, and an **all in** total.
+
+**Time & Money** — what the clock is for. Pick a window (30 days, 3 months, 6
+months, 1 year, all) and it shows, per type of work: how many you did, hours
+spent, average time per job, what you billed, and **what you actually earn an
+hour** — coloured green, amber or red against the target rate in Data & Setup.
+Worst rate first, because that's the row that needs the price change. Under the
+table it tells you in dollars what the thinnest work would have to charge to hit
+your target.
+
+It also totals the hours you spend quoting, and how many of those went into
+quotes you lost — priced at your own rate, because that's real money.
+
+Two honest limits, both of which the view states on screen:
+
+- Under five finished jobs it says so and tells you not to re-price off that
+  little. Early numbers are noise.
+- The hourly figure is gross until you tell it what parts cost you. A water
+  heater will always look like a fantastic hour while the tank's price is
+  sitting in the billed column. There's an optional **"What the parts cost
+  you"** box on each job; fill it in and the table switches to what you kept.
+  Even then it isn't profit — fuel, insurance, the truck and unbilled hours all
+  still come out of it.
+
 **Search** — the box at the top finds jobs, estimates and customers by name, address,
 email, job number, job type, description, or phone number (digits only work
 fine, so `5550231` matches `(435) 555-0231`).
