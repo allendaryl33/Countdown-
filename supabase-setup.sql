@@ -88,3 +88,23 @@ create policy "clear own history" on public.shop_backups
 
 -- The trigger writes history on your behalf, so no insert policy is needed:
 -- it runs as the function's owner, not as you.
+
+-- ------------------------------------------- hand the API these two tables
+-- Needed when "Automatically expose new tables" is switched off at project
+-- creation, which is what Supabase recommends and what you should do: nothing
+-- is reachable through the API unless it is named here.
+--
+-- Note who is missing. The anon role — the one your publishable key maps to
+-- before anybody signs in — is granted nothing at all, so that key on its own
+-- cannot read a single row. Everything below requires a signed-in user, and
+-- the policies above then narrow it to that user's own rows.
+--
+-- History is select and delete only. Nothing hand-edits an old version; the
+-- trigger writes those, running as its owner rather than as you.
+
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on public.shops        to authenticated;
+grant select, delete                 on public.shop_backups to authenticated;
+
+revoke all on public.shops        from anon;
+revoke all on public.shop_backups from anon;

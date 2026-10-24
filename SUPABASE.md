@@ -21,12 +21,32 @@ Two things worth knowing before you start:
 1. Go to **supabase.com** and sign up. Use your business email.
 2. Click **New project**.
 3. Fill in:
-   - **Name:** `poseidon`
+   - **Name:** `poseidon-dispatch` (it defaults to your email address, which
+     looks odd everywhere it appears)
    - **Database Password:** click Generate, then **save it in your password
      manager**. You will almost certainly never need it, but if you do need it
      and don't have it, there is no way to get it back.
-   - **Region:** pick the closest one to Edmonton — Central Canada or US West.
-4. Click **Create new project** and give it a couple of minutes to finish.
+   - **Region:** don't leave this on the "Americas" group — open **Need a
+     specific region?** and pick **Canada (Central)**. Your customers' names,
+     addresses and phone numbers then never leave the country, which saves you
+     the conversation entirely. If Canada isn't offered, US West is the
+     next-closest.
+4. Under **Security**, three boxes:
+   - **Enable Data API** — leave it **on**. The app talks to this; with it off
+     nothing works.
+   - **Automatically expose new tables** — turn it **off**. Supabase recommends
+     this and so do I: it means nothing is reachable through the API unless it
+     is named explicitly, and `supabase-setup.sql` names the two tables it
+     needs. Leaving it on also works, it's just looser.
+   - **Enable automatic RLS** — turn it **on**. The setup file switches row
+     security on for both tables anyway; this makes it impossible to forget on
+     anything added later.
+5. Click **Create new project** and give it a couple of minutes to finish.
+
+> If you see an **"Incident in progress"** banner about project creation in
+> your region, that's Supabase's own problem, not anything you did. Either wait
+> it out or pick another region. If the project sticks on "provisioning" for
+> more than about ten minutes, that's why.
 
 ## Step 2 — make the tables
 
