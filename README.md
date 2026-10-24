@@ -231,6 +231,17 @@ tickets) and the default labor rate used to price new jobs. Existing jobs keep
 whatever rate they were created with, so changing the rate never rewrites
 history.
 
+Name, phone, business email, website, business address and GST registration
+number. Everything except the name and phone is optional, and each one prints
+on dispatch tickets, estimates and signed waivers only once it's filled in — a
+shop with no website yet doesn't print an empty line.
+
+The GST number belongs there once you're registered: an invoice has to show it
+before a customer can claim the tax back. Leave the business address blank if
+you'd rather not print your home address on documents.
+
+Waiver bodies can merge in `{{company_email}}` alongside `{{company_phone}}`.
+
 ## Status flow
 
 Estimates:

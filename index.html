@@ -822,6 +822,7 @@ const JOB_TYPE_WAIVERS = {
 const MERGE_FIELDS = [
   ["{{company}}",        "Your company name"],
   ["{{company_phone}}",  "Office phone"],
+  ["{{company_email}}",  "Business email"],
   ["{{customer_name}}",  "Customer or signer on the job"],
   ["{{service_address}}","Service address"],
   ["{{job_number}}",     "Job number, if attached to a job"],
@@ -1262,6 +1263,10 @@ const Store = {
     this.data.signedWaivers   = this.data.signedWaivers   || [];
     this.data.counterWaiver   = this.data.counterWaiver   || 5000;
     // Added with customer messaging.
+    // Added once the business had its own domain and mailbox.
+    ["email","website","address","gst"].forEach(k => {
+      if (this.data.settings[k] == null) this.data.settings[k] = "";
+    });
     this.data.settings.zones    = this.data.settings.zones    || defaultZones();
     this.data.settings.messages = this.data.settings.messages || defaultMessages();
     this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
@@ -1375,6 +1380,10 @@ const Store = {
       settings: {
         company: opts.company,
         phone: opts.phone,
+        email: opts.email || "",
+        website: opts.website || "",
+        address: opts.address || "",
+        gst: opts.gst || "",
         laborRate: Number(opts.laborRate) || 0,
         zones: this.data.settings.zones || defaultZones(),
         messages: this.data.settings.messages || defaultMessages()
@@ -1720,6 +1729,7 @@ const Store = {
     return {
       company: st.company,
       company_phone: st.phone,
+      company_email: st.email || "",
       customer_name: c ? c.name : "",
       service_address: c ? [c.address, c.city].filter(Boolean).join(", ") : "",
       job_number: job ? "#" + job.no : "",
@@ -3449,6 +3459,17 @@ function viewSignedWaivers(){
 /* The connection panel. Keys are typed here and kept on the device — they
    are never part of the app's own code, so the published link carries no
    way into anybody's data. */
+/* The letterhead under the company name on anything printed or handed to a
+   customer. Each piece appears only once it's filled in, so a shop without a
+   website yet doesn't print an empty line. */
+function letterhead(st){
+  const bits = [st.phone, st.email, st.website].filter(Boolean);
+  return `
+    ${bits.length ? `<div>${bits.map(esc).join(" · ")}</div>` : ""}
+    ${st.address ? `<div>${esc(st.address)}</div>` : ""}
+    ${st.gst ? `<div style="font-size:11px">GST/HST ${esc(st.gst)}</div>` : ""}`;
+}
+
 function cloudCard(){
   const c = Cloud.cfg || {};
   const signedIn = !!(Cloud.configured() && c.refreshToken);
@@ -3687,9 +3708,26 @@ function viewData(){
           <div class="row2">
             <div class="field"><label>Company name</label>
               <input class="input" id="set-company" value="${esc(d.settings.company)}"></div>
-            <div class="field"><label>Office phone</label>
-              <input class="input" id="set-phone" value="${esc(d.settings.phone)}"></div>
+            <div class="field"><label>Phone customers call</label>
+              <input class="input" id="set-phone" value="${esc(d.settings.phone)}">
+              <div class="hint">Goes on every document and into your texts.</div></div>
           </div>
+          <div class="row2">
+            <div class="field"><label>Business email</label>
+              <input class="input" id="set-email" type="email" value="${esc(d.settings.email)}"
+                     placeholder="admin@yourdomain.ca"></div>
+            <div class="field"><label>Website</label>
+              <input class="input" id="set-website" value="${esc(d.settings.website)}"
+                     placeholder="yourdomain.ca"></div>
+          </div>
+          <div class="field"><label>Business address <span class="t-sub">(optional)</span></label>
+            <input class="input" id="set-address" value="${esc(d.settings.address)}"
+                   placeholder="Leave blank if you'd rather not print your home address">
+            <div class="hint">Printed on tickets, estimates and signed waivers when filled in.</div></div>
+          <div class="field" style="max-width:260px"><label>GST registration number</label>
+            <input class="input" id="set-gst" value="${esc(d.settings.gst)}" placeholder="123456789 RT0001">
+            <div class="hint">Required on invoices once you're registered, so customers can
+              claim the tax back. Leave blank until then.</div></div>
           <div class="field" style="max-width:220px"><label>Default labor rate ($/hr)</label>
             <input class="input" id="set-rate" type="number" min="0" step="5" value="${esc(d.settings.laborRate)}">
             <div class="hint">Used to price new jobs. Existing jobs keep the rate they were created with.</div>
@@ -5529,7 +5567,7 @@ function ticketHtml(j){
     <div class="tk-head">
       <div style="flex:1">
         <h1>${esc(s.company)}</h1>
-        <div>${esc(s.phone)}</div>
+        ${letterhead(s)}
       </div>
       <div style="text-align:right">
         <div style="font-size:22px;font-weight:700">Job #${j.no}</div>
@@ -5565,7 +5603,7 @@ function estimateDocHtml(e){
     <div class="ed-head">
       <div style="flex:1">
         <h1>${esc(st.company)}</h1>
-        <div>${esc(st.phone)}</div>
+        ${letterhead(st)}
       </div>
       <div style="text-align:right">
         <div style="font-size:22px;font-weight:700">Estimate</div>
@@ -5645,7 +5683,7 @@ function waiverDocHtml(w){
   return `
   <div class="wvdoc">
     <div class="wv-head">
-      <div style="flex:1"><h1>${esc(st.company)}</h1><div>${esc(st.phone)}</div></div>
+      <div style="flex:1"><h1>${esc(st.company)}</h1>${letterhead(st)}</div>
       <div style="text-align:right">
         <div style="font-size:15px;font-weight:700">${esc(w.title)}</div>
         <div>Ref W-${w.no}</div>
@@ -6230,6 +6268,10 @@ document.addEventListener("click", e => {
       const s = Store.data.settings;
       s.company = $("#set-company").value.trim() || "Poseidon Plumbing & Gasfitting Ltd.";
       s.phone   = $("#set-phone").value.trim();
+      s.email   = $("#set-email").value.trim();
+      s.website = $("#set-website").value.trim().replace(/^https?:\/\//, "");
+      s.address = $("#set-address").value.trim();
+      s.gst     = $("#set-gst").value.trim();
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");
       break;
