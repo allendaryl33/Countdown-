@@ -1427,10 +1427,10 @@ const Store = {
       settings: {
         company: opts.company,
         phone: opts.phone,
-        email: opts.email || "",
-        website: opts.website || "",
-        address: opts.address || "",
-        gst: opts.gst || "",
+        email: opts.email != null ? opts.email : (this.data.settings.email || ""),
+        website: opts.website != null ? opts.website : (this.data.settings.website || ""),
+        address: opts.address != null ? opts.address : (this.data.settings.address || ""),
+        gst: opts.gst != null ? opts.gst : (this.data.settings.gst || ""),
         laborRate: Number(opts.laborRate) || 0,
         zones: this.data.settings.zones || defaultZones(),
         messages: this.data.settings.messages || defaultMessages()
@@ -5416,8 +5416,15 @@ function openGoLive(){
         ${d.jobs.length} jobs, ${d.estimates.length} estimates and ${d.signedWaivers.length}
         signed waivers are deleted. Your <strong>price book (${d.priceBook.length} items)</strong>
         and <strong>waiver templates (${Store.activeTemplates().length})</strong> are kept — edit
-        those, don't retype them. Export a backup first if you want the samples back.
+        those, don't retype them. Your company details — email, website, address and GST
+        number — are kept too. Export a backup first if you want the samples back.
       </div>
+      ${Cloud.configured() && Cloud.cfg.refreshToken ? `
+      <div class="legal-note">
+        <strong>This clears your other devices too.</strong> The empty shop syncs up the same
+        way everything else does, so the phone and the laptop both land on it. That's the
+        point — just don't do it half way through a day's work on another device.
+      </div>` : ""}
 
       <div class="row2">
         <div class="field"><label>Company name *</label>
