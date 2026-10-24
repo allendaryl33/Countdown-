@@ -581,6 +581,45 @@ textarea.input{resize:vertical;min-height:76px}
 .toolbar select,.toolbar input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
 .filter-note{font-size:12.5px;color:var(--muted)}
 
+/* ---------- Materials ---------- */
+.mat-add{display:flex;gap:8px;margin-bottom:4px}
+.mat-add .input:first-child{flex:1;min-width:0}
+.mat-add .input.num{width:66px;flex:0 0 66px;text-align:center}
+.mat-add .btn{flex:0 0 auto}
+.mat-sum{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:12px 0 6px;font-size:13px}
+.mat-left{font-weight:650;color:var(--amber)}
+.mat-done{font-weight:650;color:var(--green)}
+.mat-cost{margin-left:auto;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;align-items:center;gap:6px}
+.mat-list{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.mat-list li{display:flex;align-items:center;gap:9px;padding:9px 11px;border-bottom:1px solid #eef2f6;background:#fff}
+.mat-list li:last-child{border-bottom:0}
+.mat-list li.got{background:#fafcfb}
+.mat-list li.got .mat-t{text-decoration:line-through;color:var(--muted-2)}
+.mat-tick{
+  flex:0 0 24px;width:24px;height:24px;border-radius:6px;border:1.5px solid #c6d2de;
+  background:#fff;color:#fff;font-size:14px;line-height:1;padding:0;font-weight:700;
+}
+.mat-list li.got .mat-tick{background:var(--green);border-color:var(--green)}
+.mat-tick:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.mat-q{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12.5px;min-width:22px}
+.mat-t{flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere}
+.mat-src{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--blue);
+  background:var(--blue-soft);padding:2px 6px;border-radius:4px;flex:0 0 auto}
+.mat-c{width:74px;flex:0 0 74px;padding:5px 7px;font-size:12.5px;text-align:right}
+@media (max-width:560px){
+  .mat-add{flex-wrap:wrap}
+  .mat-add .input:first-child{flex-basis:100%}
+  .mat-c{width:62px;flex-basis:62px}
+  .mat-src{display:none}
+}
+
+/* the pick-up view */
+.pick-group{margin-bottom:14px}
+.pick-head{display:flex;align-items:baseline;gap:9px;padding:0 2px 7px}
+.pick-head .nm{font-weight:650;font-size:14.5px}
+.pick-head .sub{font-size:12.5px;color:var(--muted)}
+.pick-head .when{margin-left:auto;font-size:12px;color:var(--muted)}
+
 /* ---------- Toast ---------- */
 #toasts{position:fixed;bottom:20px;right:20px;z-index:300;display:flex;flex-direction:column;gap:8px}
 .toast{
@@ -1183,7 +1222,7 @@ const Cloud = {
     return true;
   },
 
-  /* --- the operations the UI calls --- */
+  /* --- materials: the van list, never the customer's --- */
   async pull(opts){
     const force = opts && opts.force;
     await this.ensureToken();
@@ -1321,6 +1360,9 @@ const Store = {
     this.data.jobs.forEach(j => { if (!j.timeEntries) j.timeEntries = []; });
     this.data.jobs.forEach(j => { if (j.materialCost == null) j.materialCost = 0; });
     this.data.estimates.forEach(e => { if (!e.timeEntries) e.timeEntries = []; });
+    // Added after a Home Depot run: what to bring, kept off the customer's copy.
+    this.data.jobs.forEach(j => { if (!j.materials) j.materials = []; });
+    this.data.estimates.forEach(e => { if (!e.materials) e.materials = []; });
     // A demo should always demo. Real work is never moved.
     if (this.data.demo && !this.data.liveSince && this.data.seededOn
         && this.data.seededOn !== todayStr()){
@@ -1514,6 +1556,8 @@ const Store = {
       laborHours: 0, laborRate: this.data.settings.laborRate,
       payment: blankPayment(), timeEntries: [],
       parts: (e.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
+      // the van list comes with it, unticked items and all
+      materials: (e.materials || []).map(m => Object.assign({}, m, { id: uid("mat") })),
       estimateId: e.id, quotedTotal: total,
       log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no} · quoted ${money(total)}` }]
     };
@@ -1553,6 +1597,78 @@ const Store = {
   /* What's left after the parts bill — blank means he hasn't told us, so we
      can't deduct anything and the hourly figure reads high. */
   jobNet(job){ return this.jobTotal(job) - (Number(job.materialCost) || 0); },
+
+  /* ---------- Materials ----------
+     A running list of what the job needs, private to the shop. Not line
+     items: these are what you have to physically have in the van, which is
+     a different question from what the customer is charged. The one that
+     matters is how many are still needed, because that is what a second
+     trip to the supplier costs.
+
+     Named stillNeeded, not outstanding: Store.outstanding() already means
+     jobs with money owed, and the two quietly collided. */
+  materialsOf(rec){ return (rec && rec.materials) || []; },
+
+  stillNeeded(rec){ return this.materialsOf(rec).filter(m => !m.got).length; },
+
+  addMaterial(kind, id, text, qty){
+    const rec = this.recordOf(kind, id);
+    if (!rec || !String(text || "").trim()) return null;
+    rec.materials = rec.materials || [];
+    const m = {
+      id: uid("mat"), text: String(text).trim(), qty: Number(qty) || 1,
+      got: false, cost: null, from: kind, addedAt: Date.now()
+    };
+    rec.materials.push(m);
+    this.save();
+    return m;
+  },
+
+  setMaterial(kind, id, mid, patch){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    const m = (rec.materials || []).find(x => x.id === mid);
+    if (!m) return;
+    Object.assign(m, patch);
+    if (patch.got === true && !m.gotAt) m.gotAt = Date.now();
+    if (patch.got === false) m.gotAt = null;
+    this.save();
+  },
+
+  removeMaterial(kind, id, mid){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    rec.materials = (rec.materials || []).filter(x => x.id !== mid);
+    this.save();
+  },
+
+  /* What the list says the parts came to, for anyone who bothered to enter
+     costs. Offered to the job's parts-cost box rather than forced into it —
+     the supplier's invoice is the real number. */
+  materialsCost(rec){
+    return this.materialsOf(rec)
+      .reduce((s,m) => s + (Number(m.cost) || 0) * (Number(m.qty) || 1), 0);
+  },
+
+  /* Everything still to be picked up, across every open job and estimate.
+     Standing in the aisle you want one list, not eleven records. */
+  pickupList(){
+    const out = [];
+    const add = (kind, rec, label, sub, when) => {
+      const items = this.materialsOf(rec).filter(m => !m.got);
+      if (items.length) out.push({ kind, rec, label, sub, when, items });
+    };
+    this.data.jobs
+      .filter(j => isOpen(j))
+      .sort((a,b) => (a.scheduledDate || "9999").localeCompare(b.scheduledDate || "9999"))
+      .forEach(j => add("job", j, `#${j.no} · ${custName(j.customerId)}`,
+                        j.type, j.scheduledDate));
+    this.data.estimates
+      .filter(e => e.status !== "declined" && !e.jobId)
+      .forEach(e => add("estimate", e, `EST-${e.no} · ${this.estContact(e).name}`,
+                        e.type, null));
+    return out;
+  },
 
   jobTotalMs(job, now){
     let ms = this.totalMs(job, now);
@@ -2350,6 +2466,7 @@ const VIEWS = [
   { id:"estimates", label:"Estimates", icon:"📋", crumb:"Work" },
   { id:"jobs",      label:"Jobs",      icon:"🧾", crumb:"Work" },
   { id:"timemoney", label:"Time & Money", icon:"⏱", crumb:"Work" },
+  { id:"pickup",    label:"Pick Up",      icon:"🧰", crumb:"Field" },
   { id:"customers", label:"Customers", icon:"👤", crumb:"Work" },
   { id:"waivers",   label:"Waivers",   icon:"✍", crumb:"Work" },
   { id:"techs",     label:"Technicians", icon:"🔧", crumb:"Setup" },
@@ -2361,6 +2478,7 @@ function openNavSheet(){
   const groups = [
     ["Field",    ["today"]],
     ["Dispatch", ["dashboard","schedule"]],
+    ["Field",    ["pickup"]],
     ["Work",     ["estimates","jobs","timemoney","customers","waivers"]],
     ["Setup",    ["techs","pricebook","data"]]
   ];
@@ -2450,6 +2568,7 @@ function render(){
       case "today":     host.innerHTML = viewToday();     break;
       case "estimates": host.innerHTML = viewEstimates(); break;
       case "timemoney": host.innerHTML = viewTimeMoney(); break;
+      case "pickup":    host.innerHTML = viewPickup(); break;
       case "waivers":   host.innerHTML = viewWaivers();   break;
       case "pricebook": host.innerHTML = viewPriceBook(); break;
       case "jobs":      host.innerHTML = viewJobs();      break;
@@ -2654,6 +2773,7 @@ function renderNav(){
   $("#nav").innerHTML =
     group("Field", ["today"]) +
     group("Dispatch", ["dashboard","schedule"]) +
+    group("Field", ["pickup"]) +
     group("Work", ["estimates","jobs","timemoney","customers","waivers"]) +
     group("Setup", ["techs","pricebook","data"]);
 }
@@ -2812,6 +2932,8 @@ function stopCard(j){
 
     ${c && c.notes ? `<div class="stop-flag">📌 ${esc(c.notes)}</div>` : ""}
     ${missing.length ? `<div class="stop-flag">✍ Needs signing: ${esc(missing.map(w => w.title).join(" · "))}</div>` : ""}
+    ${(() => { const n = Store.stillNeeded(j); return n
+      ? `<div class="stop-flag">🧰 ${n} part${n===1?"":"s"} still to pick up for this one</div>` : ""; })()}
 
     <div class="stop-acts">
       ${tel ? `<a class="btn" href="tel:${esc(tel)}">📞 Call</a>` : ""}
@@ -3268,6 +3390,63 @@ function wireBoard(){
       toast(`#${job.no} → ${bits.join(" · ")}`, "ok");
     });
   });
+}
+
+/* ============================================================
+   View: Pick Up — everything outstanding, across every job
+
+   Standing in an aisle you do not want to flip between eleven records.
+   One list, grouped by job, nearest date first. Tick things off as they
+   go in the cart; anything still showing means don't drive away yet.
+   ============================================================ */
+function viewPickup(){
+  const groups = Store.pickupList();
+  const total = groups.reduce((s,g) => s + g.items.length, 0);
+
+  if (!total){
+    return `
+      <div class="empty" style="padding:56px 20px">
+        <div class="big">🧰</div>
+        <div style="font-size:16px;font-weight:650;color:var(--text);margin-bottom:6px">
+          Nothing to pick up</div>
+        Add what you need from a job or an estimate and it collects here,
+        so one trip covers every job instead of one trip each.
+      </div>`;
+  }
+
+  return `
+  <div class="toolbar">
+    <span class="filter-note"><strong>${total} item${total===1?"":"s"}</strong> across
+      ${groups.length} job${groups.length===1?"":"s"}</span>
+    <div style="flex:1"></div>
+    <button class="btn sm" data-action="pick-clear">Tick off everything</button>
+  </div>
+
+  ${groups.map(g => `
+    <div class="pick-group">
+      <div class="pick-head">
+        <span class="nm linkish" data-${g.kind === "job" ? "job" : "estimate"}="${g.rec.id}">${esc(g.label)}</span>
+        <span class="sub">${esc(g.sub || "")}</span>
+        ${g.when ? `<span class="when">${esc(fmtDate(g.when))}</span>` : ""}
+      </div>
+      <ul class="mat-list">
+        ${g.items.map(m => `
+          <li>
+            <button class="mat-tick" data-mat-tick="${g.kind}:${g.rec.id}:${m.id}"
+                    aria-label="Mark ${esc(m.text)} as picked up"></button>
+            <span class="mat-q">${m.qty > 1 ? esc(m.qty) + "&times;" : ""}</span>
+            <span class="mat-t">${esc(m.text)}</span>
+            <input class="input mat-c" type="number" min="0" step="0.01" placeholder="cost"
+                   value="${m.cost == null ? "" : esc(m.cost)}"
+                   data-mat-cost="${g.kind}:${g.rec.id}:${m.id}" aria-label="What it cost">
+          </li>`).join("")}
+      </ul>
+    </div>`).join("")}
+
+  <p class="t-sub" style="margin-top:16px;max-width:66ch">
+    Tick each one as it goes in the cart. Anything still on this list means
+    there's another trip in it — which is the whole reason this screen exists.
+  </p>`;
 }
 
 /* ============================================================
@@ -4160,6 +4339,10 @@ function openJob(id){
         </tbody>
       </table>
 
+      <div class="section-title" style="margin-top:22px">Materials
+        <span class="t-sub" style="text-transform:none;letter-spacing:0">— your list, not the customer's</span></div>
+      ${materialsPanel("job", j)}
+
       <div class="section-title" style="margin-top:22px">Time on site</div>
       ${timePanel("job", j)}
 
@@ -4442,6 +4625,10 @@ function openEstimate(id){
       </div>
 
       <div class="dl"><dt>Scope of work</dt><dd style="white-space:pre-wrap">${esc(e.description)||"—"}</dd></div>
+
+      <div class="section-title" style="margin-top:22px">Materials
+        <span class="t-sub" style="text-transform:none;letter-spacing:0">— your list, not the customer's</span></div>
+      ${materialsPanel("estimate", e)}
 
       <div class="section-title" style="margin-top:22px">Time quoting</div>
       ${timePanel("estimate", e)}
@@ -5163,6 +5350,86 @@ function saveTemplateFromForm(id){
   Store.save(); closeModal();
   App.view = "waivers"; App.waiverTab = "templates";
   render();
+}
+
+/* ---------- Materials, shared by jobs and estimates ----------
+   Typing is the whole point: one box, Enter adds and the box stays focused
+   so a list goes in as fast as it can be said out loud. Nothing here ever
+   reaches a printed estimate — it is what to put in the van, not what the
+   customer is charged. */
+function materialsPanel(kind, rec){
+  const list = Store.materialsOf(rec);
+  const left = Store.stillNeeded(rec);
+  const cost = Store.materialsCost(rec);
+  const sorted = list.slice().sort((a,b) => (a.got === b.got) ? a.addedAt - b.addedAt : (a.got ? 1 : -1));
+
+  return `
+  <div class="mat">
+    <div class="mat-add">
+      <input class="input" id="mat-text-${kind}" placeholder="Add a part — expansion tank, 3/4 sharkbite…"
+             autocomplete="off" enterkeyhint="done"
+             data-mat-add="${kind}:${rec.id}">
+      <input class="input num" id="mat-qty-${kind}" type="number" min="1" step="1" value="1"
+             aria-label="Quantity">
+      <button class="btn accent" data-mat-go="${kind}:${rec.id}">Add</button>
+    </div>
+
+    ${list.length ? `
+      <div class="mat-sum">
+        ${left
+          ? `<span class="mat-left">${left} still to pick up</span>`
+          : `<span class="mat-done">✓ everything's in the van</span>`}
+        ${cost ? `<span class="mat-cost">${esc(money(cost))} of parts
+            ${kind === "job" ? `<button class="btn sm ghost" data-mat-usecost="${rec.id}"
+              title="Put this in the job's parts-cost box">use as parts cost</button>` : ""}</span>` : ""}
+      </div>
+
+      <ul class="mat-list">
+        ${sorted.map(m => `
+          <li class="${m.got ? "got" : ""}">
+            <button class="mat-tick" data-mat-tick="${kind}:${rec.id}:${m.id}"
+                    aria-pressed="${m.got}" aria-label="${m.got ? "Put back on the list" : "Mark as picked up"}">
+              ${m.got ? "✓" : ""}
+            </button>
+            <span class="mat-q">${m.qty > 1 ? esc(m.qty) + "&times;" : ""}</span>
+            <span class="mat-t">${esc(m.text)}</span>
+            ${m.from === "estimate" && kind === "job"
+              ? `<span class="mat-src" title="Listed when you quoted it">quoted</span>` : ""}
+            <input class="input mat-c" type="number" min="0" step="0.01" placeholder="cost"
+                   value="${m.cost == null ? "" : esc(m.cost)}"
+                   data-mat-cost="${kind}:${rec.id}:${m.id}" aria-label="What it cost">
+            <button class="btn sm ghost" data-mat-del="${kind}:${rec.id}:${m.id}" title="Remove">&times;</button>
+          </li>`).join("")}
+      </ul>`
+    : `<p class="t-sub" style="margin:10px 0 0">
+         Nothing listed yet. Put down what you think you'll need while you're
+         standing in front of the job — the trip you don't make is the one this saves.
+       </p>`}
+  </div>`;
+}
+
+/* Re-render just this panel, so adding ten things in a row doesn't rebuild
+   the record ten times and lose the cursor. */
+function refreshMaterials(kind, id){
+  const rec = Store.recordOf(kind, id);
+  const host = $(".mat");
+  if (!rec || !host) return;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = materialsPanel(kind, rec);
+  host.replaceWith(wrap.firstElementChild);
+  const box = $("#mat-text-" + kind);
+  if (box) box.focus();
+}
+
+function addMaterialFromForm(kind, id){
+  const box = $("#mat-text-" + kind), qty = $("#mat-qty-" + kind);
+  if (!box) return;
+  const text = box.value.trim();
+  if (!text){ box.focus(); return; }
+  Store.addMaterial(kind, id, text, qty ? qty.value : 1);
+  box.value = "";
+  if (qty) qty.value = "1";
+  refreshMaterials(kind, id);
 }
 
 /* ---------- Time on site, shared by jobs and estimates ---------- */
@@ -6018,6 +6285,35 @@ document.addEventListener("click", e => {
     if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
     return;
   }
+  const mGo = hit("[data-mat-go]");
+  if (mGo){ const [k,id] = mGo.dataset.matGo.split(":"); return addMaterialFromForm(k, id); }
+
+  const mTick = hit("[data-mat-tick]");
+  if (mTick){
+    const [k,id,mid] = mTick.dataset.matTick.split(":");
+    const rec = Store.recordOf(k, id);
+    const cur = Store.materialsOf(rec).find(x => x.id === mid);
+    Store.setMaterial(k, id, mid, { got: !(cur && cur.got) });
+    if (App.view === "pickup") return render();
+    return refreshMaterials(k, id);
+  }
+
+  const mDel = hit("[data-mat-del]");
+  if (mDel){
+    const [k,id,mid] = mDel.dataset.matDel.split(":");
+    Store.removeMaterial(k, id, mid);
+    return refreshMaterials(k, id);
+  }
+
+  const mUse = hit("[data-mat-usecost]");
+  if (mUse){
+    const j = Store.job(mUse.dataset.matUsecost);
+    if (!j) return;
+    j.materialCost = Math.round(Store.materialsCost(j) * 100) / 100;
+    Store.save(); openJob(j.id);
+    return toast("Parts cost set to " + money(j.materialCost), "ok");
+  }
+
   const conf = hit("[data-conflict]");
   if (conf) return resolveConflict(conf.dataset.conflict);
 
@@ -6408,6 +6704,16 @@ document.addEventListener("click", e => {
       }
       break;
     case "close-sheet": closeNavSheet(); break;
+    case "pick-clear": {
+      const n = Store.pickupList().reduce((s,g) => s + g.items.length, 0);
+      if (!n) break;
+      if (!confirm(`Tick off all ${n} outstanding item${n===1?"":"s"} as picked up?`)) break;
+      Store.pickupList().forEach(g =>
+        g.items.forEach(m => Store.setMaterial(g.kind, g.rec.id, m.id, { got:true })));
+      render();
+      toast("All picked up", "ok");
+      break;
+    }
     case "export":     exportJson(); break;
     case "export-csv": exportCsv(); break;
     case "import":     $("#import-file").click(); break;
@@ -6483,6 +6789,31 @@ document.addEventListener("keydown", e => {
   }
   const save = $("[data-save-job],[data-save-customer],[data-save-tech],[data-save-estimate],[data-save-price],[data-save-template]", modal);
   if (save && e.target.closest(".modal-body")){ save.click(); e.preventDefault(); }
+});
+
+/* Enter adds and stays put, so a list goes in as fast as it can be said. */
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  // anywhere in the add row, including the quantity box — typing "12" then
+  // Enter is the obvious thing to do and used to do nothing at all
+  const row = e.target.closest(".mat-add");
+  if (!row) return;
+  const box = row.querySelector("[data-mat-add]");
+  if (!box) return;
+  e.preventDefault();
+  const [k,id] = box.dataset.matAdd.split(":");
+  addMaterialFromForm(k, id);
+});
+
+document.addEventListener("change", e => {
+  const c = e.target.closest("[data-mat-cost]");
+  if (!c) return;
+  const [k,id,mid] = c.dataset.matCost.split(":");
+  const v = c.value.trim();
+  Store.setMaterial(k, id, mid, { cost: v === "" ? null : Number(v) });
+  if (App.view === "pickup") return;
+  const sum = $(".mat-sum");
+  if (sum) refreshMaterials(k, id);
 });
 
 let searchTimer = null;
