@@ -1008,6 +1008,7 @@ const Cloud = {
   state: "off",      // off | signed-out | syncing | synced | conflict | error
   detail: "",
   dirty: false,
+  signingIn: false,
   pushTimer: null,
   _listeners: [],
 
@@ -1048,7 +1049,10 @@ const Cloud = {
         body: o.body === undefined ? undefined : JSON.stringify(o.body)
       });
     } catch(err){
-      const e = new Error("offline"); e.offline = true; throw e;
+      const e = new Error("offline");
+      e.offline = true;
+      e.framed = window.self !== window.top;
+      throw e;
     }
     const text = await res.text();
     let json = null;
@@ -2418,7 +2422,9 @@ function renderSync(){
   pill.hidden = false;
   pill.className = "sync " + Cloud.state;
   txt.textContent = SYNC_WORDS[Cloud.state](Cloud.detail);
-  if (App.view === "data") render();
+  // Re-rendering Data & Setup rebuilds the sign-in form from scratch, which
+  // throws away whatever is half-typed in it. Hold still while it's in use.
+  if (App.view === "data" && !Cloud.signingIn) render();
 }
 
 /* Two devices changed the same shop. Never pick for him, and never throw
@@ -6233,17 +6239,36 @@ document.addEventListener("click", e => {
       const err = $("#cl-err");
       err.style.display = "none";
       if (!email || !pass){ err.textContent = "Email and password, please."; err.style.display = "block"; break; }
+      const btn = hit("[data-action]");
+      if (btn){ btn.disabled = true; btn.textContent = "Signing in…"; }
+      Cloud.signingIn = true;
+      Cloud.cfg.email = email; Cloud.saveCfg();   // so a later render keeps it
       Cloud.set("syncing", "signing in…");
+
       Cloud.signIn(email, pass)
         .then(() => Cloud.syncNow())
-        .then(() => { render(); toast("Signed in — this shop is syncing", "ok"); })
-        .catch(e => {
-          Cloud.set("signed-out");
+        .then(() => {
+          Cloud.signingIn = false;
           render();
+          toast("Signed in — this shop is syncing", "ok");
+        })
+        .catch(e => {
+          // Leave the form exactly as typed; only the message changes.
+          Cloud.signingIn = false;
+          Cloud.state = "signed-out"; Cloud.detail = "";
+          if (btn){ btn.disabled = false; btn.textContent = "Sign in"; }
           const el = $("#cl-err");
           if (el){
-            el.textContent = e.offline ? "Couldn't reach the project — check the URL and your connection."
-              : /invalid/i.test(e.message || "") ? "Email or password not accepted."
+            el.textContent =
+              e.offline && e.framed
+                ? "This copy of the app can't reach the internet. A preview link runs in a "
+                  + "sandbox that blocks outside connections — open the app from its own web "
+                  + "address and sign in there."
+              : e.offline
+                ? "Couldn't reach the project — check the URL and your connection."
+              : /invalid/i.test(e.message || "")
+                ? "Email or password not accepted. If you just created this user, check "
+                  + "\"Auto Confirm User\" was ticked in Supabase."
               : (e.message || "Sign in failed.");
             el.style.display = "block";
           }
