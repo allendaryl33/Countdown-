@@ -130,6 +130,28 @@ Deactivating a tech takes their column off the board without touching their jobs
 problem, site notes, room to write up the work, and a signature line. Print the
 whole day from the dashboard or any single job from its detail view.
 
+**Materials and Pick Up** — the private van list. On an estimate and on a
+job there's a **Materials** section: one box, type a part, Enter, type the
+next. It never appears on a printed estimate, ticket or waiver — this is what
+goes in the truck, not what the customer is charged, and the two are different
+questions.
+
+The list follows the work. Parts listed while quoting carry into the job when
+the estimate converts, marked "quoted", and you add more once you're actually
+on site and find out what it really needs.
+
+**Pick Up** is the point of it. One screen gathering every outstanding item
+across every open job and estimate, grouped by job, nearest first. Standing in
+the aisle you tick things into the cart; anything still showing means don't
+drive away yet. One trip for three jobs instead of three trips.
+
+Today's stop cards flag anything still to pick up for that job, so you see it
+before setting off rather than on arrival.
+
+Each item takes an optional cost. Fill those in and the job offers the total to
+its "what the parts cost you" box in one tap, which is what makes the Time &
+Money figures true rather than gross.
+
 **Clock in / clock out** — a button on every stop on Today, and on every job
 and estimate record. Hit it when you get there, hit it when you leave. A green
 bar sits across the top of the app the whole time it's running so you can't
