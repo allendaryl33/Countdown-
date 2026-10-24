@@ -23,7 +23,11 @@
   --shadow:0 1px 2px rgba(16,36,56,.06),0 2px 8px rgba(16,36,56,.05);
 }
 *{box-sizing:border-box}
-html,body{height:100%}
+/* min-height, not height: with height:100% the body stays exactly one
+   viewport tall no matter how long the page is, which is invisible in a
+   normal tab but makes an embedding frame measure the page short and clip
+   everything below the fold. */
+html,body{min-height:100%}
 body{
   margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased;
@@ -34,7 +38,7 @@ input,select,textarea{font:inherit;color:inherit}
 a{color:var(--blue)}
 
 /* ---------- App shell ---------- */
-#app{display:flex;min-height:100vh}
+#app{display:flex;min-height:100vh;min-height:100dvh}
 #sidebar{
   width:216px;flex:0 0 216px;background:var(--navy);color:#cfdcea;
   display:flex;flex-direction:column;position:sticky;top:0;height:100vh;
@@ -66,8 +70,175 @@ nav button .count{
 nav button.active .count{background:rgba(255,255,255,.25)}
 nav button .count.alert{background:var(--amber);color:#fff}
 .sidebar-foot{padding:12px 16px;border-top:1px solid rgba(255,255,255,.09);font-size:11px;color:#6f8ca6}
+.sync{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px}
+.sync .d{width:7px;height:7px;border-radius:50%;background:#6f8ca6;flex:0 0 7px}
+.sync.synced .d{background:var(--green)}
+.sync.syncing .d{background:var(--gold);animation:blip 1.1s ease-in-out infinite}
+.sync.error .d,.sync.conflict .d{background:var(--amber)}
+.sync.signed-out .d{background:var(--muted-2)}
+.sync.conflict{color:var(--gold)}
+@keyframes blip{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.sync.syncing .d{animation:none}}
+.cloud-state{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:12px}
+.cloud-state .d{width:9px;height:9px;border-radius:50%;flex:0 0 9px;background:var(--muted-2)}
+.cloud-state.synced .d{background:var(--green)} .cloud-state.synced{color:var(--green)}
+.cloud-state.error .d,.cloud-state.conflict .d{background:var(--amber)}
+.cloud-state.error,.cloud-state.conflict{color:#9c5712}
 
 #main{flex:1;min-width:0;display:flex;flex-direction:column}
+
+/* ---------- Phone layout ---------- */
+#mobile-nav{display:none}
+.nav-sheet{display:none}
+.nav-sheet.open{
+  display:flex;position:fixed;inset:0;z-index:70;background:rgba(10,42,66,.5);
+  align-items:flex-end;
+}
+.nav-sheet .sheet{
+  background:#fff;width:100%;border-radius:14px 14px 0 0;padding:10px 10px
+  calc(14px + env(safe-area-inset-bottom,0px));max-height:76vh;overflow:auto;
+}
+.nav-sheet .sheet h4{
+  font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+  padding:12px 12px 6px;margin:0;
+}
+.nav-sheet .sheet button{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;background:none;
+  border:0;padding:13px 12px;border-radius:9px;font-size:15px;color:var(--text);
+}
+.nav-sheet .sheet button:hover{background:var(--bg)}
+.nav-sheet .sheet button .ico{width:22px;text-align:center;font-size:17px}
+.nav-sheet .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:6px auto 2px}
+
+/* ---------- Today: the field view ---------- */
+.today-head{
+  display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px;
+}
+.today-head .big{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.today-head .sub{color:var(--muted);font-size:14px}
+.today-sum{
+  display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;
+}
+.today-sum .pill{
+  background:var(--card);border:1px solid var(--line);border-radius:20px;
+  padding:6px 13px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px;
+}
+.today-sum .pill b{font-variant-numeric:tabular-nums}
+.today-sum .pill.cash{border-color:#bfe0cc;background:var(--green-soft);color:var(--green)}
+.today-sum .pill.warn{border-color:#f0d6bb;background:var(--amber-soft);color:#9c5712}
+
+.stop{
+  background:var(--card);border:1px solid var(--line);border-radius:11px;
+  box-shadow:var(--shadow);margin-bottom:11px;overflow:hidden;
+  border-left:4px solid var(--blue);
+}
+.stop.pri-Emergency{border-left-color:var(--red)}
+.stop.pri-High{border-left-color:var(--amber)}
+.stop.st-complete{border-left-color:var(--green);opacity:.75}
+.stop.st-cancelled{opacity:.5}
+.stop-main{display:flex;gap:12px;padding:13px 14px;cursor:pointer;align-items:flex-start}
+.stop-main:hover{background:#fafcfd}
+.stop-when{
+  flex:0 0 62px;text-align:center;padding-top:1px;
+}
+.stop-when .w{font-size:14px;font-weight:700;color:var(--navy);line-height:1.2;letter-spacing:-.01em}
+.stop-when .n{font-size:10.5px;color:var(--muted);margin-top:2px}
+.stop-body{flex:1;min-width:0}
+.stop-body .cust{font-weight:650;font-size:15.5px;line-height:1.25}
+.stop-body .addr{font-size:13.5px;color:var(--muted);margin-top:2px}
+.stop-body .what{font-size:13.5px;margin-top:5px}
+.stop-body .tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.stop-acts{
+  display:flex;gap:7px;padding:0 14px 12px;flex-wrap:wrap;
+}
+.stop-acts .btn{flex:1;min-width:92px;justify-content:center;padding:10px 10px}
+.stop-acts a.btn{text-decoration:none}
+.stop-flag{
+  font-size:12.5px;padding:7px 14px;background:var(--amber-soft);color:#9c5712;
+  border-top:1px solid #f0d6bb;font-weight:550;
+}
+.msg-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.msg-tabs button{
+  border:1px solid var(--line);background:#fff;border-radius:18px;padding:7px 14px;
+  font-size:13px;font-weight:600;color:var(--muted);
+}
+.msg-tabs button:hover{border-color:#c6d2de;color:var(--text)}
+.msg-tabs button.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.msg-prev{
+  width:100%;border:1px solid #d5dde5;border-radius:9px;padding:13px 14px;
+  font:15px/1.55 inherit;background:#fff;resize:vertical;min-height:112px;color:var(--text);
+}
+.msg-prev:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(22,104,171,.12);outline:none}
+.msg-meta{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--muted-2);margin-top:5px}
+.msg-eta{
+  display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:14px 0;
+  padding:12px 13px;background:var(--sunk,#f3f6f9);border:1px solid var(--line);border-radius:9px;
+}
+.msg-eta .lab{font-size:12.5px;font-weight:600;color:#455565;margin-right:2px}
+@media (max-width:560px){
+  .msg-eta{gap:6px}
+  .msg-eta .lab{flex-basis:100%;margin:0}
+  .msg-eta button{flex:1;min-width:0}
+  .msg-eta .zone-chip{flex-basis:100%}
+}
+.msg-eta button{
+  border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 12px;
+  font-size:13px;font-weight:600;color:var(--muted);
+}
+.msg-eta button.on{background:var(--amber);border-color:var(--amber);color:#fff}
+.msg-send{display:flex;gap:9px;flex-wrap:wrap}
+.msg-send .btn{flex:1;min-width:120px;justify-content:center;padding:12px 10px;text-decoration:none}
+.zone-chip{
+  display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;
+  background:var(--blue-soft);color:#105585;
+}
+/* Running-clock bar. Sticks to the top of every screen so a forgotten
+   clock-out is impossible to miss. */
+#clockbar{
+  display:none;position:sticky;top:0;z-index:55;
+  background:var(--green);color:#fff;padding:9px 14px;
+  align-items:center;gap:11px;font-size:14px;box-shadow:0 2px 8px rgba(16,36,56,.18);
+}
+#clockbar.on{display:flex}
+#clockbar.stale{background:var(--amber)}
+#clockbar .pulse{
+  width:9px;height:9px;border-radius:50%;background:#fff;flex:0 0 9px;
+  animation:beat 1.6s ease-in-out infinite;
+}
+@keyframes beat{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){#clockbar .pulse{animation:none}}
+#clockbar .who{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#clockbar .el{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:700;font-size:15px}
+#clockbar button{
+  background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.45);color:#fff;
+  border-radius:7px;padding:7px 13px;font-weight:650;font-size:13.5px;white-space:nowrap;
+}
+#clockbar button:hover{background:rgba(255,255,255,.3)}
+
+.clock-btn{width:100%;justify-content:center;padding:12px 10px;font-size:15px}
+.clock-on{background:var(--green)!important;border-color:var(--green)!important;color:#fff!important}
+.time-row{
+  display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #eef2f6;font-size:13.5px;
+}
+.time-row:last-child{border-bottom:0}
+.time-row .when{color:var(--muted);min-width:148px}
+.time-row .dur{margin-left:auto;font-weight:650;font-variant-numeric:tabular-nums}
+.time-row.live .dur{color:var(--green)}
+.time-sum{
+  display:flex;align-items:baseline;gap:10px;padding:11px 0 0;margin-top:4px;
+  border-top:2px solid var(--line);font-weight:700;
+}
+.time-sum .n{margin-left:auto;font-variant-numeric:tabular-nums}
+.rate-good{color:var(--green)} .rate-thin{color:var(--amber)} .rate-bad{color:var(--red)}
+.today-empty{
+  background:var(--card);border:1px dashed var(--line);border-radius:11px;
+  padding:34px 20px;text-align:center;color:var(--muted);
+}
+.today-empty .big{font-size:30px;opacity:.5;margin-bottom:9px}
+.sec-head{
+  font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+  font-weight:650;margin:22px 0 9px;
+}
 header.topbar{
   background:var(--card);border-bottom:1px solid var(--line);padding:14px 24px;
   display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20;
@@ -121,7 +292,7 @@ main.content{padding:22px 24px 60px;flex:1}
 .stat.alert .value{color:var(--amber)}
 .section-title{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650;margin:26px 0 10px}
 .two-col{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
-@media(max-width:1080px){.two-col{grid-template-columns:1fr}}
+@media(max-width:1080px){.two-col{grid-template-columns:minmax(0,1fr)}}
 
 /* ---------- Tables ---------- */
 table{width:100%;border-collapse:collapse}
@@ -381,6 +552,7 @@ textarea.input{resize:vertical;min-height:76px}
 }
 .timeline li .ts{font-size:11.5px;color:var(--muted-2);display:block;margin-top:1px}
 .status-steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.status-steps a.btn,.modal-head a.btn{text-decoration:none}
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .toolbar select,.toolbar input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
 .filter-note{font-size:12.5px;color:var(--muted)}
@@ -394,6 +566,65 @@ textarea.input{resize:vertical;min-height:76px}
 .toast.ok{background:var(--green)}
 .toast.err{background:var(--red)}
 @keyframes slidein{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
+
+/* ---------- Phone layout overrides ----------
+   Last in the sheet on purpose: these and the desktop rules have the
+   same specificity, so whichever comes later wins. Sitting above them
+   it lost every conflict and the phone quietly rendered desktop
+   padding, grids and modal sizing. */
+@media (max-width:820px){
+  #sidebar{display:none}
+  #mobile-nav{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
+    background:var(--navy);border-top:1px solid rgba(255,255,255,.1);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));
+  }
+  #mobile-nav button{
+    flex:1;background:none;border:0;color:#9db4cb;display:flex;flex-direction:column;
+    align-items:center;gap:3px;padding:6px 2px;font-size:10.5px;font-weight:600;border-radius:7px;
+    position:relative;min-height:46px;
+  }
+  #mobile-nav button .ico{font-size:17px;line-height:1}
+  #mobile-nav button.active{color:var(--gold)}
+  #mobile-nav button .dot{
+    position:absolute;top:4px;right:calc(50% - 18px);min-width:15px;height:15px;
+    border-radius:8px;background:var(--amber);color:#fff;font-size:9.5px;line-height:15px;
+    font-weight:700;padding:0 3px;
+  }
+  /* The bottom nav grows by the home-indicator inset, so the space we
+     reserve for it has to grow by the same amount or it covers the last
+     row of a long list. */
+  main.content{padding:14px 13px calc(92px + env(safe-area-inset-bottom,0px))}
+  header.topbar{padding:10px 13px;gap:9px;flex-wrap:wrap}
+  .topbar h1{font-size:17px}
+  .topbar .crumb{display:none}
+  .search{order:3;flex-basis:100%}
+  .search input{width:100%}
+  #btn-new-estimate{display:none}
+  .stat-row{grid-template-columns:1fr 1fr;gap:10px}
+  .two-col{grid-template-columns:minmax(0,1fr)}
+  .card-head{flex-wrap:wrap}
+  /* A record modal is a bottom sheet on a phone. Capping the modal itself
+     and letting only its body scroll keeps Close and Delete on screen — the
+     old fixed body max-height assumed a short header, and a wrapped one
+     pushed the footer 115px below the fold. */
+  .overlay{padding:0;align-items:flex-end}
+  .modal,.modal.wide{
+    max-width:100%;max-height:100vh;max-height:100dvh;
+    border-radius:13px 13px 0 0;display:flex;flex-direction:column;
+  }
+  .modal-head{flex:0 0 auto}
+  .modal-body{flex:1 1 auto;min-height:0;max-height:none;padding:15px}
+  .modal-foot{flex:0 0 auto;border-radius:0}
+  .modal-head,.modal-foot{padding:13px 15px}
+  /* Wide tables scroll inside their card instead of dragging the page sideways. */
+  .card{overflow-x:auto}
+  .row2,.row3{grid-template-columns:1fr}
+  .board{flex-direction:column}
+  .col{flex:1 1 auto;max-width:none;width:100%}
+  .toolbar{gap:6px}
+  .tpl-grid{grid-template-columns:1fr}
+}
 
 /* ---------- Print (dispatch ticket) ---------- */
 #print-area{display:none}
@@ -441,6 +672,7 @@ textarea.input{resize:vertical;min-height:76px}
     </div>
     <nav id="nav"></nav>
     <div class="sidebar-foot">
+      <div class="sync" id="sync-pill" hidden><span class="d"></span><span id="sync-text"></span></div>
       <div id="storage-note">Local prototype · data on this device</div>
     </div>
   </aside>
@@ -459,8 +691,12 @@ textarea.input{resize:vertical;min-height:76px}
       <button class="btn" id="btn-new-estimate">＋ Estimate</button>
       <button class="btn accent" id="btn-new-job">＋ New Job</button>
     </header>
+    <div id="clockbar" aria-live="polite"></div>
     <main class="content" id="view"></main>
   </div>
+
+  <nav id="mobile-nav" aria-label="Main"></nav>
+  <div class="nav-sheet" id="nav-sheet" hidden></div>
 </div>
 
 <div id="modal-root"></div>
@@ -530,6 +766,42 @@ const PAY_STATUSES = [
 const PAY_LABEL = Object.fromEntries(PAY_STATUSES.map(p => [p.id, p.label]));
 const PAY_METHODS = ["", "Card", "ACH / bank transfer", "Check", "Cash", "Other"];
 
+/* Travel zones. The label is what you call the area; the ETA is the phrase
+   that lands in the customer's text. Both are editable under Data & Setup. */
+function defaultZones(){
+  return [
+    { id:"city",    label:"Edmonton",         eta:"about 30 minutes" },
+    { id:"greater", label:"Greater Edmonton", eta:"about 45 minutes" },
+    { id:"out",     label:"Out of area",      eta:"about an hour" }
+  ];
+}
+
+/* Short, plain messages. Long ones don't get read standing in a doorway. */
+function defaultMessages(){
+  return [
+    { id:"confirm", label:"Booked",
+      body:"Hi {{first_name}} — {{tech}} from {{company}}. You're booked in for {{day}}, {{window}}, for {{work}}. Any questions, call {{phone}}." },
+    { id:"onway", label:"On my way",
+      body:"Hi {{first_name}} — {{tech}} from {{company}}. Heading your way now, {{eta}} out. See you shortly." },
+    { id:"late", label:"Running late",
+      body:"Hi {{first_name}} — {{tech}} from {{company}}. Running behind, sorry about that. Looking like {{eta}} now. I'll let you know if it shifts again." },
+    { id:"done", label:"Finished",
+      body:"Hi {{first_name}} — all finished at your place. Thanks for the business.{{pay_link}}" }
+  ];
+}
+
+const MSG_FIELDS = [
+  ["{{first_name}}", "Customer's first name"],
+  ["{{tech}}",       "Technician on the job"],
+  ["{{company}}",    "Your company name"],
+  ["{{phone}}",      "Your office phone"],
+  ["{{eta}}",        "Travel time for their zone, plus any bump"],
+  ["{{day}}",        "today / tomorrow / the weekday"],
+  ["{{window}}",     "Arrival window, e.g. 10–12"],
+  ["{{work}}",       "Type of work"],
+  ["{{pay_link}}",   "Payment link, if the job has one"]
+];
+
 const WAIVER_CATEGORIES = ["Drain & Sewer","Gas","Boiler & Hydronic","Plumbing","All trades"];
 
 /* Job types that normally want a signed acknowledgment before the tech starts.
@@ -550,6 +822,7 @@ const JOB_TYPE_WAIVERS = {
 const MERGE_FIELDS = [
   ["{{company}}",        "Your company name"],
   ["{{company_phone}}",  "Office phone"],
+  ["{{company_email}}",  "Business email"],
   ["{{customer_name}}",  "Customer or signer on the job"],
   ["{{service_address}}","Service address"],
   ["{{job_number}}",     "Job number, if attached to a job"],
@@ -589,6 +862,11 @@ function addDays(s, n){
   const d = parseYmd(s) || new Date();
   d.setDate(d.getDate() + n);
   return ymd(d);
+}
+function daysBetween(a, b){
+  const x = parseYmd(a), y = parseYmd(b);
+  if (!x || !y) return 0;
+  return Math.round((y - x) / 86400000);
 }
 function addMonths(s, n){
   const d = parseYmd(s) || new Date();
@@ -652,6 +930,31 @@ function fmtStamp(ts){
   return d.toLocaleDateString(undefined,{month:"short",day:"numeric"}) + " · " +
          d.toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
 }
+/* "1h 24m" reads faster than 84 minutes when you're glancing at a phone. */
+function fmtDur(ms){
+  const mins = Math.max(0, Math.round((Number(ms) || 0) / 60000));
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (!h) return m + "m";
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+function fmtClock(ms){
+  const total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+  const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), sec = total % 60;
+  const pad = n => String(n).padStart(2, "0");
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+function hoursOf(ms){ return (Number(ms) || 0) / 3600000; }
+/* For the datetime-local inputs used to correct a forgotten clock-out. */
+function toLocalInput(ts){
+  if (!ts) return "";
+  const d = new Date(ts), p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fromLocalInput(v){
+  const t = v ? new Date(v).getTime() : NaN;
+  return Number.isFinite(t) ? t : null;
+}
+
 function money(n){
   const v = Number(n) || 0;
   return "$" + v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
@@ -682,6 +985,249 @@ function toast(msg, kind){
 }
 
 /* ============================================================
+   Cloud — optional Supabase sync
+
+   Talks to Supabase's plain REST endpoints with fetch. No SDK, so the app
+   keeps its "no dependencies, nothing to rot" property. The whole shop is
+   one JSON row: at ~50 KB it isn't worth shredding into tables, and a blob
+   means adding a feature never needs a migration.
+
+   Two devices editing at once is the one way a blob can bite you, so every
+   write is guarded by the revision it claims to replace. A stale write is
+   refused by the server rather than silently winning, and the copy that
+   loses a conflict is always written to a file before anything is replaced.
+   ============================================================ */
+const CLOUD_KEY = "pcp.cloud.v1";
+
+const Cloud = {
+  cfg: null,         // { url, key, email, deviceId, refreshToken }
+  token: null,       // short-lived access token, memory only
+  tokenExp: 0,
+  uid: null,
+  baseRev: 0,        // the rev we last agreed with the server on
+  state: "off",      // off | signed-out | syncing | synced | conflict | error
+  detail: "",
+  dirty: false,
+  signingIn: false,
+  pushTimer: null,
+  _listeners: [],
+
+  onChange(fn){ this._listeners.push(fn); },
+  emit(){ this._listeners.forEach(fn => { try { fn(); } catch(e){} }); },
+  set(state, detail){ this.state = state; this.detail = detail || ""; this.emit(); },
+
+  loadCfg(){
+    try { this.cfg = JSON.parse(localStorage.getItem(CLOUD_KEY) || "null"); }
+    catch(e){ this.cfg = null; }
+    if (this.cfg && !this.cfg.deviceId) this.cfg.deviceId = this.newDeviceId();
+    this.state = this.cfg ? "signed-out" : "off";
+  },
+  saveCfg(){
+    try { localStorage.setItem(CLOUD_KEY, JSON.stringify(this.cfg)); } catch(e){}
+  },
+  newDeviceId(){
+    const n = (navigator.userAgent.match(/iPhone|iPad|Android|Macintosh|Windows/) || ["device"])[0];
+    return n + "-" + Math.random().toString(36).slice(2,7);
+  },
+  configured(){ return !!(this.cfg && this.cfg.url && this.cfg.key); },
+
+  /* --- plumbing --- */
+  base(){ return String(this.cfg.url).replace(/\/+$/, ""); },
+
+  async call(path, opts){
+    const o = opts || {};
+    const headers = Object.assign({
+      "apikey": this.cfg.key,                 // key goes here and nowhere else
+      "Content-Type": "application/json"
+    }, o.headers || {});
+    if (o.auth !== false && this.token) headers["Authorization"] = "Bearer " + this.token;
+
+    let res;
+    try {
+      res = await fetch(this.base() + path, {
+        method: o.method || "GET", headers,
+        body: o.body === undefined ? undefined : JSON.stringify(o.body)
+      });
+    } catch(err){
+      const e = new Error("offline");
+      e.offline = true;
+      e.framed = window.self !== window.top;
+      throw e;
+    }
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : null; } catch(e){}
+    if (!res.ok){
+      const msg = (json && (json.error_description || json.msg || json.message || json.error))
+        || ("HTTP " + res.status);
+      const e = new Error(msg); e.status = res.status; e.body = json; throw e;
+    }
+    return json;
+  },
+
+  /* --- auth --- */
+  async signIn(email, password){
+    const r = await this.call("/auth/v1/token?grant_type=password", {
+      method:"POST", auth:false, body:{ email, password }
+    });
+    this.applySession(r);
+    this.cfg.email = email;
+    this.saveCfg();
+    return r;
+  },
+
+  applySession(r){
+    this.token = r.access_token;
+    this.tokenExp = Date.now() + ((Number(r.expires_in) || 3600) - 60) * 1000;
+    this.uid = r.user && r.user.id;
+    if (r.refresh_token){ this.cfg.refreshToken = r.refresh_token; this.saveCfg(); }
+  },
+
+  async refresh(){
+    if (!this.cfg.refreshToken) throw new Error("signed out");
+    const r = await this.call("/auth/v1/token?grant_type=refresh_token", {
+      method:"POST", auth:false, body:{ refresh_token: this.cfg.refreshToken }
+    });
+    this.applySession(r);
+    return r;
+  },
+
+  async ensureToken(){
+    if (this.token && Date.now() < this.tokenExp) return;
+    await this.refresh();
+  },
+
+  signOut(){
+    this.token = null; this.tokenExp = 0; this.uid = null; this.baseRev = 0;
+    if (this.cfg){ delete this.cfg.refreshToken; this.saveCfg(); }
+    this.set("signed-out");
+  },
+
+  disconnect(){
+    this.cfg = null; this.token = null; this.uid = null; this.baseRev = 0;
+    try { localStorage.removeItem(CLOUD_KEY); } catch(e){}
+    this.set("off");
+  },
+
+  /* --- the row --- */
+  async fetchRow(){
+    const rows = await this.call("/rest/v1/shops?select=data,rev,device,updated_at&limit=1");
+    return (rows && rows[0]) || null;
+  },
+
+  /* First write for a brand-new account. */
+  async createRow(){
+    const row = { owner: this.uid, data: Store.data, rev: 1, device: this.cfg.deviceId };
+    const r = await this.call("/rest/v1/shops", {
+      method:"POST", headers:{ "Prefer":"return=representation" }, body: row
+    });
+    this.baseRev = (r && r[0] && r[0].rev) || 1;
+    return this.baseRev;
+  },
+
+  /* Guarded by rev: the server only accepts the write if nobody moved since
+     we last pulled. An empty result means somebody did. */
+  async pushGuarded(){
+    const next = this.baseRev + 1;
+    const r = await this.call(
+      `/rest/v1/shops?owner=eq.${encodeURIComponent(this.uid)}&rev=eq.${this.baseRev}`, {
+        method:"PATCH", headers:{ "Prefer":"return=representation" },
+        body:{ data: Store.data, rev: next, device: this.cfg.deviceId,
+               updated_at: new Date().toISOString() }
+      });
+    if (!r || !r.length) return false;      // somebody else got there first
+    this.baseRev = r[0].rev;
+    return true;
+  },
+
+  /* --- the operations the UI calls --- */
+  async pull(opts){
+    const force = opts && opts.force;
+    await this.ensureToken();
+    const row = await this.fetchRow();
+    if (!row){ await this.createRow(); return { created:true }; }
+
+    if (this.dirty && !force && row.rev !== this.baseRev)
+      return { conflict:true, remote:row };
+
+    Store.adopt(row.data);
+    this.baseRev = row.rev;
+    this.dirty = false;
+    return { pulled:true, rev: row.rev };
+  },
+
+  async push(opts){
+    const force = opts && opts.force;
+    await this.ensureToken();
+
+    if (!this.baseRev){
+      const row = await this.fetchRow();
+      if (!row){ await this.createRow(); this.dirty = false; return { created:true }; }
+      this.baseRev = row.rev;
+    }
+    if (force){
+      const row = await this.fetchRow();
+      if (row) this.baseRev = row.rev;
+    }
+
+    const ok = await this.pushGuarded();
+    if (!ok){
+      const row = await this.fetchRow();
+      return { conflict:true, remote:row };
+    }
+    this.dirty = false;
+    return { pushed:true, rev: this.baseRev };
+  },
+
+  /* Called from Store.save(). Batches a burst of edits into one write. */
+  markDirty(){
+    if (!this.configured() || !this.cfg.refreshToken) return;
+    this.dirty = true;
+    clearTimeout(this.pushTimer);
+    this.pushTimer = setTimeout(() => this.syncNow({ quiet:true }), 2500);
+    if (this.state === "synced") this.set("syncing", "saving…");
+  },
+
+  async syncNow(opts){
+    const quiet = opts && opts.quiet;
+    if (!this.configured()) return;
+    if (!this.cfg.refreshToken){ this.set("signed-out"); return; }
+    if (this.state === "conflict") return;      // wait for the person to choose
+
+    this.set("syncing", quiet ? "saving…" : "syncing…");
+    try {
+      const r = this.dirty ? await this.push() : await this.pull();
+      if (r.conflict){
+        this.set("conflict", "changed on another device");
+        onCloudConflict(r.remote);
+        return;
+      }
+      this.set("synced", "just now");
+    } catch(err){
+      if (err.offline){ this.set("error", "no connection — saved on this device"); return; }
+      if (err.status === 401 || /refresh|jwt|token/i.test(err.message || "")){
+        this.signOut(); this.set("signed-out", "sign in again"); return;
+      }
+      this.set("error", err.message || "sync failed");
+    }
+  },
+
+  /* Resume a session on open, then catch up. */
+  async boot(){
+    this.loadCfg();
+    if (!this.configured() || !this.cfg.refreshToken) return;
+    this.set("syncing", "connecting…");
+    try {
+      await this.refresh();
+      await this.syncNow();
+    } catch(err){
+      if (err.offline) this.set("error", "no connection — saved on this device");
+      else { this.signOut(); this.set("signed-out", "sign in again"); }
+    }
+  }
+};
+
+/* ============================================================
    Store — everything lives in one object, saved to localStorage
    ============================================================ */
 const Store = {
@@ -697,26 +1243,7 @@ const Store = {
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.jobs)){
           this.data = parsed;
-          this.data.techs     = this.data.techs     || [];
-          this.data.customers = this.data.customers || [];
-          this.data.counter   = this.data.counter   || 1000;
-          // Added with estimates — older saved data won't have these.
-          this.data.estimates  = this.data.estimates  || [];
-          this.data.priceBook  = this.data.priceBook  || seedPriceBook();
-          this.data.counterEst = this.data.counterEst || 2000;
-          // Added with waivers.
-          this.data.waiverTemplates = this.data.waiverTemplates || seedWaiverTemplates();
-          this.data.signedWaivers   = this.data.signedWaivers   || [];
-          this.data.counterWaiver   = this.data.counterWaiver   || 5000;
-          // Added with payment tracking — older jobs have no payment block.
-          this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
-          // Renamed on rebrand. Only a name this app shipped as a default is
-          // carried forward — anything the office typed is left alone.
-          const SHIPPED_DEFAULTS = ["Park City Plumbing", "Park City Plumbing Inc.",
-                                    "Poseidon Plumbing and Heating Ltd."];
-          if (this.data.settings && SHIPPED_DEFAULTS.includes(this.data.settings.company)){
-            this.data.settings.company = "Poseidon Plumbing & Gasfitting Ltd.";
-          }
+          this.backfill();
           return;
         }
       } catch(e){ console.warn("Saved data was unreadable; starting fresh.", e); }
@@ -725,7 +1252,59 @@ const Store = {
     this.save();
   },
 
-  save(){
+  /* Everything a shop needs to have, whatever version it was written by and
+     wherever it came from — this device, a backup file, or another device. */
+  backfill(){
+    this.data.techs     = this.data.techs     || [];
+    this.data.customers = this.data.customers || [];
+    this.data.counter   = this.data.counter   || 1000;
+    // Added with estimates — older saved data won't have these.
+    this.data.estimates  = this.data.estimates  || [];
+    this.data.priceBook  = this.data.priceBook  || seedPriceBook();
+    this.data.counterEst = this.data.counterEst || 2000;
+    // Added with waivers.
+    this.data.waiverTemplates = this.data.waiverTemplates || seedWaiverTemplates();
+    this.data.signedWaivers   = this.data.signedWaivers   || [];
+    this.data.counterWaiver   = this.data.counterWaiver   || 5000;
+    // Added with customer messaging.
+    // Added once the business had its own domain and mailbox.
+    ["email","website","address","gst"].forEach(k => {
+      if (this.data.settings[k] == null) this.data.settings[k] = "";
+    });
+    this.data.settings.zones    = this.data.settings.zones    || defaultZones();
+    this.data.settings.messages = this.data.settings.messages || defaultMessages();
+    this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
+    // Added with time tracking.
+    this.data.jobs.forEach(j => { if (!j.timeEntries) j.timeEntries = []; });
+    this.data.jobs.forEach(j => { if (j.materialCost == null) j.materialCost = 0; });
+    this.data.estimates.forEach(e => { if (!e.timeEntries) e.timeEntries = []; });
+    // A demo should always demo. Real work is never moved.
+    if (this.data.demo && !this.data.liveSince && this.data.seededOn
+        && this.data.seededOn !== todayStr()){
+      this.shiftDemoDates(daysBetween(this.data.seededOn, todayStr()));
+    }
+    // Added with payment tracking — older jobs have no payment block.
+    this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
+    // Renamed on rebrand. Only a name this app shipped as a default is
+    // carried forward — anything the office typed is left alone.
+    const SHIPPED_DEFAULTS = ["Park City Plumbing", "Park City Plumbing Inc.",
+                              "Poseidon Plumbing and Heating Ltd."];
+    if (this.data.settings && SHIPPED_DEFAULTS.includes(this.data.settings.company)){
+      this.data.settings.company = "Poseidon Plumbing & Gasfitting Ltd.";
+    }
+  },
+
+  /* Take a shop handed to us by the cloud. Writes straight through to disk
+     without marking the result dirty — it already matches the server. */
+  adopt(data){
+    if (!data || !Array.isArray(data.jobs)) throw new Error("that doesn't look like a shop");
+    this.data = data;
+    this.backfill();
+    this.saveLocal();
+    if (typeof render === "function") render();
+  },
+
+  saveLocal(){
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(this.data)); }
     catch(e){
       // Quota or private-mode failure: keep working in memory, but say so once.
@@ -733,8 +1312,96 @@ const Store = {
     }
   },
 
+  save(){
+    this.saveLocal();
+    if (typeof Cloud !== "undefined") Cloud.markDirty();
+  },
+
   reset(){
     this.data = seedData();
+    this.save();
+  },
+
+  /* Sample data is stamped with the day it was created, so a demo opened a
+     month later shows an empty board. Slide the whole sample forward, keeping
+     yesterday yesterday and tomorrow tomorrow. Never runs on a live shop. */
+  shiftDemoDates(days){
+    if (!days) return;
+    const ms = days * 86400000;
+    const ts = v => (typeof v === "number" && v > 0) ? v + ms : v;
+    const stamps = o => { (o.log || []).forEach(l => l.ts = ts(l.ts)); };
+
+    (this.data.jobs || []).forEach(j => {
+      if (j.scheduledDate) j.scheduledDate = addDays(j.scheduledDate, days);
+      j.createdAt = ts(j.createdAt);
+      j.completedAt = ts(j.completedAt);
+      if (j.payment){
+        j.payment.invoicedAt = ts(j.payment.invoicedAt);
+        j.payment.paidAt = ts(j.payment.paidAt);
+      }
+      stamps(j);
+    });
+    (this.data.estimates || []).forEach(e => {
+      e.createdAt = ts(e.createdAt); e.sentAt = ts(e.sentAt); e.decidedAt = ts(e.decidedAt);
+      stamps(e);
+    });
+    (this.data.signedWaivers || []).forEach(w => { w.signedAt = ts(w.signedAt); });
+
+    this.data.seededOn = todayStr();
+    this.save();
+  },
+
+  /* For sample data saved before it carried its own date: the day with the
+     most jobs on it was "today" when the sample was made. */
+  inferredSampleDay(){
+    const tally = {};
+    (this.data.jobs || []).forEach(j => {
+      if (j.scheduledDate) tally[j.scheduledDate] = (tally[j.scheduledDate] || 0) + 1;
+    });
+    let best = null, n = 0;
+    Object.keys(tally).forEach(d => { if (tally[d] > n){ n = tally[d]; best = d; } });
+    return best;
+  },
+
+  /* Still on the sample, and the sample has drifted into the past. */
+  sampleIsStale(){
+    if (this.data.liveSince) return false;
+    const day = this.data.seededOn || this.inferredSampleDay();
+    return !!day && daysBetween(day, todayStr()) > 0;
+  },
+
+  /* Going live. Clears the sample shop but keeps the things worth keeping:
+     the price book and the waiver templates, both of which are edited, not
+     re-typed. Company settings come from the form. */
+  goLive(opts){
+    const book = this.data.priceBook;
+    const templates = this.data.waiverTemplates;
+    this.data = {
+      version: 3,
+      counter: Number(opts.startJobNo) || 1000,
+      counterEst: 2000,
+      counterWaiver: 5000,
+      settings: {
+        company: opts.company,
+        phone: opts.phone,
+        email: opts.email || "",
+        website: opts.website || "",
+        address: opts.address || "",
+        gst: opts.gst || "",
+        laborRate: Number(opts.laborRate) || 0,
+        zones: this.data.settings.zones || defaultZones(),
+        messages: this.data.settings.messages || defaultMessages()
+      },
+      techs: opts.techName
+        ? [{ id: uid("tech"), name: opts.techName, phone: opts.techPhone || opts.phone,
+             color: TECH_COLORS[0], skill: opts.techSkill || "", active: true }]
+        : [],
+      demo: false,
+      customers: [], jobs: [], estimates: [], signedWaivers: [],
+      priceBook: book,
+      waiverTemplates: templates,
+      liveSince: Date.now()
+    };
     this.save();
   },
 
@@ -802,7 +1469,7 @@ const Store = {
       window: opts.window || "Anytime",
       techId: null, status: "new", completedAt: null,
       laborHours: 0, laborRate: this.data.settings.laborRate,
-      payment: blankPayment(),
+      payment: blankPayment(), timeEntries: [],
       parts: (e.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
       estimateId: e.id, quotedTotal: total,
       log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no} · quoted ${money(total)}` }]
@@ -826,6 +1493,186 @@ const Store = {
   deleteEstimate(id){
     this.data.estimates = this.data.estimates.filter(e => e.id !== id);
     this.save();
+  },
+
+  /* ----- Time on the job -------------------------------------------------
+     Each visit is one entry. A job can have several — quote trip, rough-in,
+     come back for the part. An entry with no end is still running. */
+  entriesOf(rec){ return (rec && rec.timeEntries) || []; },
+
+  totalMs(rec, now){
+    const t = now || Date.now();
+    return this.entriesOf(rec).reduce((sum, e) =>
+      sum + Math.max(0, (e.endedAt || t) - e.startedAt), 0);
+  },
+
+  /* Quote time belongs to the job it turned into, for a true cost. */
+  /* What's left after the parts bill — blank means he hasn't told us, so we
+     can't deduct anything and the hourly figure reads high. */
+  jobNet(job){ return this.jobTotal(job) - (Number(job.materialCost) || 0); },
+
+  jobTotalMs(job, now){
+    let ms = this.totalMs(job, now);
+    if (job.estimateId){
+      const e = this.estimate(job.estimateId);
+      if (e) ms += this.totalMs(e, now);
+    }
+    return ms;
+  },
+
+  /* You can only be in one place, so starting one stops the other. */
+  running(){
+    for (const j of this.data.jobs){
+      const e = this.entriesOf(j).find(x => !x.endedAt);
+      if (e) return { kind:"job", rec:j, entry:e };
+    }
+    for (const q of this.data.estimates){
+      const e = this.entriesOf(q).find(x => !x.endedAt);
+      if (e) return { kind:"estimate", rec:q, entry:e };
+    }
+    return null;
+  },
+
+  recordOf(kind, id){ return kind === "estimate" ? this.estimate(id) : this.job(id); },
+
+  clockIn(kind, id){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return null;
+    const open = this.running();
+    if (open){
+      if (open.rec.id === rec.id) return open.entry;      // already running here
+      this.clockOut(open.kind, open.rec.id, "Stopped automatically — clocked in elsewhere");
+    }
+    rec.timeEntries = rec.timeEntries || [];
+    const entry = { id: uid("te"), startedAt: Date.now(), endedAt: null, note: "" };
+    rec.timeEntries.push(entry);
+    this.logOn(kind, rec, "Clocked in on site");
+    this.save();
+    return entry;
+  },
+
+  clockOut(kind, id, why){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    const entry = this.entriesOf(rec).find(e => !e.endedAt);
+    if (!entry) return;
+    entry.endedAt = Date.now();
+    if (why) entry.note = why;
+    this.logOn(kind, rec, `Clocked out — ${fmtDur(entry.endedAt - entry.startedAt)} on site`);
+    this.save();
+  },
+
+  addEntry(kind, id, startedAt, endedAt, note){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    rec.timeEntries = rec.timeEntries || [];
+    rec.timeEntries.push({ id: uid("te"), startedAt, endedAt, note: note || "" });
+    rec.timeEntries.sort((a,b) => a.startedAt - b.startedAt);
+    this.logOn(kind, rec, `Time added by hand — ${fmtDur(endedAt - startedAt)}`);
+    this.save();
+  },
+
+  updateEntry(kind, id, entryId, startedAt, endedAt){
+    const rec = this.recordOf(kind, id);
+    const e = this.entriesOf(rec).find(x => x.id === entryId);
+    if (!e) return;
+    e.startedAt = startedAt;
+    e.endedAt = endedAt;
+    this.logOn(kind, rec, "Time corrected");
+    this.save();
+  },
+
+  removeEntry(kind, id, entryId){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    rec.timeEntries = this.entriesOf(rec).filter(x => x.id !== entryId);
+    this.logOn(kind, rec, "Time entry removed");
+    this.save();
+  },
+
+  logOn(kind, rec, text){
+    if (kind === "estimate") this.addEstLog(rec, text); else this.addLog(rec, text);
+  },
+
+  /* A clock left running overnight is a forgotten clock-out, not a long day. */
+  staleRunning(){
+    const r = this.running();
+    if (!r) return null;
+    return (Date.now() - r.entry.startedAt) > 8 * 3600000 ? r : null;
+  },
+
+  /* Customer messaging. The app writes the message; the phone sends it, from
+     your own number, so a reply comes back to you. */
+  /* Texts should sound like a person, not a registry entry. Waivers, tickets
+     and estimates keep the full legal name; messages use the trading name. */
+  tradeName(){
+    const st = this.data.settings;
+    if (st.shortName && st.shortName.trim()) return st.shortName.trim();
+    return String(st.company || "").replace(/[,\s]+(Ltd|Inc|Corp|Co|LLC|ULC)\.?$/i, "").trim()
+        || st.company || "";
+  },
+
+  zones(){ return this.data.settings.zones || defaultZones(); },
+  zone(id){ return this.zones().find(z => z.id === id) || this.zones()[0]; },
+  messages(){ return this.data.settings.messages || defaultMessages(); },
+  message(id){ return this.messages().find(m => m.id === id) || this.messages()[0]; },
+
+  /* "today" and "tomorrow" read better in a text than a date does. */
+  dayWord(dateStr){
+    if (!dateStr) return "your appointment";
+    const t = todayStr();
+    if (dateStr === t) return "today";
+    if (dateStr === addDays(t, 1)) return "tomorrow";
+    const d = parseYmd(dateStr);
+    return d.toLocaleDateString(undefined, { weekday:"long", month:"short", day:"numeric" });
+  },
+
+  /* "about 30 minutes" + 30 => "about an hour". The result has to read as a
+     time, because the template drops it mid-sentence: "... {{eta}} out." */
+  bumpEta(phrase, mins){
+    if (!mins) return phrase;
+    if (!/\d/.test(phrase)) return `${phrase}, plus about ${mins} minutes`;
+    // A range ("20-25 min") needs both ends moved, not just the first.
+    const nums = phrase.match(/\d+/g);
+    if (nums.length > 1) return phrase.replace(/\d+/g, n => String(Number(n) + mins));
+    const total = Number(nums[0]) + mins;
+    const friendly = { 60:"an hour", 90:"an hour and a half", 120:"two hours" }[total];
+    if (!friendly) return phrase.replace(/\d+/, String(total));
+    // Swap the whole "30 minutes" chunk, or just the number if there's no unit.
+    const withUnit = /\d+\s*(?:minutes?|mins?)/i;
+    return withUnit.test(phrase) ? phrase.replace(withUnit, friendly)
+                                 : phrase.replace(/\d+/, friendly);
+  },
+
+  messageContext(job, bumpMins){
+    const st = this.data.settings;
+    const c = job ? this.customer(job.customerId) : null;
+    const z = this.zone(c ? c.zone : "city");
+    const tech = job && job.techId ? (this.tech(job.techId) || {}).name
+               : (this.activeTechs()[0] || {}).name || "";
+    const pay = (job && job.payment) || {};
+    return {
+      first_name: c ? String(c.name).trim().split(/\s+/)[0] : "there",
+      tech: tech || st.company,
+      company: this.tradeName(),
+      phone: st.phone,
+      eta: this.bumpEta(z.eta, bumpMins),
+      day: this.dayWord(job && job.scheduledDate),
+      window: job ? fieldWindow(job.window) : "",
+      work: job ? String(job.type).toLowerCase() : "the work",
+      pay_link: pay.url ? ` Pay here: ${pay.url}` : ""
+    };
+  },
+
+  renderMessage(tplId, job, bumpMins){
+    const tpl = this.message(tplId);
+    const ctx = this.messageContext(job, bumpMins);
+    return String(tpl.body)
+      .replace(/\{\{(\w+)\}\}/g, (m, k) => (k in ctx ? ctx[k] : m))
+      // A value ending in a full stop, butted against the template's own.
+      .replace(/([A-Za-z])\.\.(\s|$)/g, "$1.$2")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
   },
 
   /* Payment tracking. Deliberately manual: Stripe (or whoever) stays the system
@@ -886,6 +1733,7 @@ const Store = {
     return {
       company: st.company,
       company_phone: st.phone,
+      company_email: st.email || "",
       customer_name: c ? c.name : "",
       service_address: c ? [c.address, c.city].filter(Boolean).join(", ") : "",
       job_number: job ? "#" + job.no : "",
@@ -1020,12 +1868,12 @@ function seedData(){
   ];
 
   const customers = [
-    { id:"cus_1", name:"Holly Bennett",            phone:"7805550231", email:"holly.bennett@example.com",   address:"10832 Saskatchewan Dr NW", city:"Edmonton", notes:"Gate code 4417. Dog is friendly." },
-    { id:"cus_2", name:"Glenora Gates Condo Corp", phone:"7805550288", email:"manager@glenoragates.example", address:"11240 Jasper Ave NW",     city:"Edmonton", notes:"Bill to the property manager. Unit access via the front desk." },
-    { id:"cus_3", name:"Tomás Delgado",            phone:"5875550304", email:"tdelgado@example.com",        address:"9617 76 Ave NW",           city:"Edmonton", notes:"" },
-    { id:"cus_4", name:"Ironwood Brewing Co.",     phone:"7805550377", email:"ops@ironwoodbrewing.example",  address:"10345 104 St NW",          city:"Edmonton", notes:"Commercial. Prefers before 10am — kitchen opens at 11." },
-    { id:"cus_5", name:"Priya Raghunathan",        phone:"7805550412", email:"priya.r@example.com",         address:"14820 Riverbend Rd NW",    city:"Edmonton", notes:"Snowbird — away November to April. Call the caretaker before rolling." },
-    { id:"cus_6", name:"Grant Halvorsen",          phone:"5875550455", email:"",                            address:"8715 149 St NW",           city:"Edmonton", notes:"" }
+    { id:"cus_1", name:"Holly Bennett",            phone:"7805550231", email:"holly.bennett@example.com",   address:"10832 Saskatchewan Dr NW", city:"Edmonton", zone:"city", notes:"Gate code 4417. Dog is friendly." },
+    { id:"cus_2", name:"Glenora Gates Condo Corp", phone:"7805550288", email:"manager@glenoragates.example", address:"11240 Jasper Ave NW",     city:"Edmonton", zone:"city", notes:"Bill to the property manager. Unit access via the front desk." },
+    { id:"cus_3", name:"Tomás Delgado",            phone:"5875550304", email:"tdelgado@example.com",        address:"9617 76 Ave NW",           city:"Edmonton", zone:"city", notes:"" },
+    { id:"cus_4", name:"Ironwood Brewing Co.",     phone:"7805550377", email:"ops@ironwoodbrewing.example",  address:"10345 104 St NW",          city:"Edmonton", zone:"city", notes:"Commercial. Prefers before 10am — kitchen opens at 11." },
+    { id:"cus_5", name:"Priya Raghunathan",        phone:"7805550412", email:"priya.r@example.com",         address:"14820 Riverbend Rd NW",    city:"Edmonton", zone:"greater", notes:"Snowbird — away November to April. Call the caretaker before rolling." },
+    { id:"cus_6", name:"Grant Halvorsen",          phone:"5875550455", email:"",                            address:"8715 149 St NW",           city:"Edmonton", zone:"city", notes:"" }
   ];
 
   let n = 1000;
@@ -1155,9 +2003,14 @@ function seedData(){
 
   return {
     version: 2,
+    // The sample bakes in real dates, so it carries the day it was made and
+    // gets re-anchored on open. Cleared the moment the shop goes live.
+    demo: true,
+    seededOn: t,
     counter: n,
     counterEst: en,
-    settings: { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"(780) 555-0100" },
+    settings: { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"(780) 555-0100",
+                zones: defaultZones(), messages: defaultMessages() },
     counterWaiver: 5000,
     techs, customers, jobs, estimates,
     priceBook: seedPriceBook(),
@@ -1436,27 +2289,55 @@ function seedPriceBook(){
    App state + routing
    ============================================================ */
 const App = {
-  view: "dashboard",
+  view: "today",
   date: todayStr(),
   search: "",
   filters: { status:"", techId:"", type:"", when:"upcoming" },
   estFilter: "open",
+  moneyRange: 90,
   waiverTab: "templates",
   scheduleMode: "day",
   customerSort: "name"
 };
 
 const VIEWS = [
+  { id:"today",     label:"Today",     icon:"🚐", crumb:"Field" },
   { id:"dashboard", label:"Dashboard", icon:"▦",  crumb:"Dispatch" },
   { id:"schedule",  label:"Schedule",  icon:"🗓", crumb:"Dispatch" },
   { id:"estimates", label:"Estimates", icon:"📋", crumb:"Work" },
   { id:"jobs",      label:"Jobs",      icon:"🧾", crumb:"Work" },
+  { id:"timemoney", label:"Time & Money", icon:"⏱", crumb:"Work" },
   { id:"customers", label:"Customers", icon:"👤", crumb:"Work" },
   { id:"waivers",   label:"Waivers",   icon:"✍", crumb:"Work" },
   { id:"techs",     label:"Technicians", icon:"🔧", crumb:"Setup" },
   { id:"pricebook", label:"Price Book", icon:"🏷", crumb:"Setup" },
   { id:"data",      label:"Data & Setup", icon:"⚙", crumb:"Setup" }
 ];
+
+function openNavSheet(){
+  const groups = [
+    ["Field",    ["today"]],
+    ["Dispatch", ["dashboard","schedule"]],
+    ["Work",     ["estimates","jobs","timemoney","customers","waivers"]],
+    ["Setup",    ["techs","pricebook","data"]]
+  ];
+  const sheet = $("#nav-sheet");
+  sheet.innerHTML = `<div class="sheet">
+    <div class="grab"></div>
+    ${groups.map(([label, ids]) => `<h4>${esc(label)}</h4>` + ids.map(id => {
+      const v = VIEWS.find(x => x.id === id);
+      return `<button data-nav="${id}"><span class="ico">${v.icon}</span>${esc(v.label)}</button>`;
+    }).join("")).join("")}
+  </div>`;
+  sheet.hidden = false;
+  sheet.classList.add("open");
+}
+function closeNavSheet(){
+  const sheet = $("#nav-sheet");
+  if (!sheet) return;
+  sheet.classList.remove("open");
+  sheet.hidden = true;
+}
 
 function go(view){
   App.view = view;
@@ -1466,7 +2347,9 @@ function go(view){
 
 function render(){
   renderBrand();
+  renderClockBar();
   renderNav();
+  renderMobileNav();
   const v = VIEWS.find(x => x.id === App.view) || VIEWS[0];
   $("#crumb").textContent = v.crumb;
   $("#page-title").textContent = v.label;
@@ -1476,17 +2359,129 @@ function render(){
   else {
     switch(App.view){
       case "schedule":  host.innerHTML = viewSchedule();  break;
+      case "today":     host.innerHTML = viewToday();     break;
       case "estimates": host.innerHTML = viewEstimates(); break;
+      case "timemoney": host.innerHTML = viewTimeMoney(); break;
       case "waivers":   host.innerHTML = viewWaivers();   break;
       case "pricebook": host.innerHTML = viewPriceBook(); break;
       case "jobs":      host.innerHTML = viewJobs();      break;
       case "customers": host.innerHTML = viewCustomers(); break;
       case "techs":     host.innerHTML = viewTechs();     break;
       case "data":      host.innerHTML = viewData();      break;
-      default:          host.innerHTML = viewDashboard();
+      case "dashboard": host.innerHTML = viewDashboard(); break;
+      default:          host.innerHTML = viewToday();
     }
   }
   if (App.view === "schedule" && !App.search.trim()) wireBoard();
+}
+
+Cloud.onChange(renderSync);
+
+function renderClockBar(){
+  const bar = $("#clockbar");
+  if (!bar) return;
+  const r = Store.running();
+  if (!r){ bar.className = ""; bar.innerHTML = ""; return; }
+
+  const name = r.kind === "estimate"
+    ? `EST-${r.rec.no} · ${Store.estContact(r.rec).name}`
+    : `#${r.rec.no} · ${custName(r.rec.customerId)}`;
+  const stale = (Date.now() - r.entry.startedAt) > 8 * 3600000;
+
+  bar.className = "on" + (stale ? " stale" : "");
+  bar.innerHTML = `
+    <span class="pulse"></span>
+    <span class="who">${stale
+      ? `Clock still running since ${esc(fmtStamp(r.entry.startedAt))} — did you forget? `
+      : "On site · "}${esc(name)}</span>
+    <span class="el" id="clock-elapsed">${esc(fmtClock(Date.now() - r.entry.startedAt))}</span>
+    <button data-clock="out:${r.kind}:${r.rec.id}">Clock out</button>`;
+}
+
+/* Only the digits change each second — re-rendering the view would steal focus. */
+setInterval(() => {
+  const el = $("#clock-elapsed");
+  if (!el) return;
+  const r = Store.running();
+  if (r) el.textContent = fmtClock(Date.now() - r.entry.startedAt);
+}, 1000);
+
+const SYNC_WORDS = {
+  "off":        () => "",
+  "signed-out": d => "Not signed in" + (d ? " · " + d : ""),
+  "syncing":    d => d || "Syncing…",
+  "synced":     d => "Synced" + (d ? " · " + d : ""),
+  "conflict":   () => "Changed elsewhere — needs you",
+  "error":      d => d || "Sync problem"
+};
+
+function renderSync(){
+  const pill = $("#sync-pill"), txt = $("#sync-text");
+  if (!pill) return;
+  if (Cloud.state === "off"){ pill.hidden = true; return; }
+  pill.hidden = false;
+  pill.className = "sync " + Cloud.state;
+  txt.textContent = SYNC_WORDS[Cloud.state](Cloud.detail);
+  // Re-rendering Data & Setup rebuilds the sign-in form from scratch, which
+  // throws away whatever is half-typed in it. Hold still while it's in use.
+  if (App.view === "data" && !Cloud.signingIn) render();
+}
+
+/* Two devices changed the same shop. Never pick for him, and never throw
+   either copy away — the losing side goes to a file before anything moves. */
+function onCloudConflict(remote){
+  const mine = Store.data, theirs = remote && remote.data;
+  const count = d => d ? `${(d.jobs||[]).length} jobs · ${(d.customers||[]).length} customers` : "—";
+  openModal(`
+    <div class="modal-head"><h2>This shop changed somewhere else</h2></div>
+    <div class="modal-body">
+      <p style="margin-top:0">Another device saved changes while this one had its own.
+        Nothing has been overwritten. Pick which one is right — whichever you don't
+        keep gets downloaded first, so you can always get it back.</p>
+      <div class="opt-card" style="cursor:default">
+        <div class="oc-t">📱 This device</div>
+        <div class="oc-s">${esc(count(mine))}</div>
+      </div>
+      <div class="opt-card" style="cursor:default">
+        <div class="oc-t">☁️ The other device${remote && remote.device ? " · " + esc(remote.device) : ""}</div>
+        <div class="oc-s">${esc(count(theirs))}${remote && remote.updated_at
+          ? " · saved " + esc(fmtStamp(Date.parse(remote.updated_at))) : ""}</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-conflict="theirs">Take the other one</button>
+      <button class="btn primary" data-conflict="mine">Keep this device</button>
+    </div>`, { wide:true });
+  Cloud._conflictRemote = remote;
+}
+
+async function resolveConflict(which){
+  const remote = Cloud._conflictRemote;
+  const stamp = todayStr();
+  try {
+    if (which === "mine"){
+      if (remote) download(`poseidon-other-device-${stamp}.json`,
+        JSON.stringify(remote.data, null, 2));
+      closeModal();
+      Cloud.set("syncing", "replacing the other copy…");
+      Cloud.dirty = true;
+      const r = await Cloud.push({ force:true });
+      Cloud.set(r.pushed || r.created ? "synced" : "error",
+                r.pushed || r.created ? "just now" : "couldn't write");
+    } else {
+      download(`poseidon-this-device-${stamp}.json`, JSON.stringify(Store.data, null, 2));
+      closeModal();
+      Cloud.set("syncing", "taking the other copy…");
+      Cloud.dirty = false;
+      await Cloud.pull({ force:true });
+      Cloud.set("synced", "just now");
+      toast("Took the other device's copy", "ok");
+    }
+  } catch(err){
+    Cloud.set("error", err.message || "couldn't resolve");
+  }
+  Cloud._conflictRemote = null;
 }
 
 function renderBrand(){
@@ -1494,10 +2489,35 @@ function renderBrand(){
   if (el) el.textContent = Store.data.settings.company || "Poseidon Plumbing & Gasfitting Ltd.";
 }
 
+const MOBILE_NAV = ["today","schedule","jobs","estimates"];
+
+function renderMobileNav(){
+  const el = $("#mobile-nav");
+  if (!el) return;
+  const t = todayStr();
+  const jobs = Store.data.jobs;
+  const badge = {
+    today: jobs.filter(j => j.scheduledDate === t && isOpen(j)).length,
+    schedule: jobs.filter(j => !j.techId && isOpen(j)).length,
+    jobs: 0,
+    estimates: Store.openEstimates().length
+  };
+  el.innerHTML = MOBILE_NAV.map(id => {
+    const v = VIEWS.find(x => x.id === id);
+    const n = badge[id];
+    return `<button class="${App.view===id?"active":""}" data-nav="${id}">
+      <span class="ico">${v.icon}</span>${esc(v.label)}
+      ${n ? `<span class="dot">${n}</span>` : ""}
+    </button>`;
+  }).join("") +
+  `<button data-navsheet><span class="ico">☰</span>More</button>`;
+}
+
 function renderNav(){
   const jobs = Store.data.jobs;
   const t = todayStr();
   const counts = {
+    today: jobs.filter(j => j.scheduledDate === t && isOpen(j)).length,
     schedule: jobs.filter(j => j.scheduledDate === t && j.status !== "cancelled").length,
     estimates: Store.openEstimates().length,
     jobs: jobs.filter(j => !["complete","cancelled"].includes(j.status)).length,
@@ -1521,8 +2541,9 @@ function renderNav(){
     }).join("")}`;
 
   $("#nav").innerHTML =
+    group("Field", ["today"]) +
     group("Dispatch", ["dashboard","schedule"]) +
-    group("Work", ["estimates","jobs","customers","waivers"]) +
+    group("Work", ["estimates","jobs","timemoney","customers","waivers"]) +
     group("Setup", ["techs","pricebook","data"]);
 }
 
@@ -1578,6 +2599,127 @@ const JOB_TABLE_HEAD = `<thead><tr>
 </tr></thead>`;
 
 /* ============================================================
+   View: Today — the field view. Built for a phone in one hand,
+   standing in somebody's utility room.
+   ============================================================ */
+function viewToday(){
+  const t = todayStr();
+  const mine = Store.data.jobs
+    .filter(j => j.scheduledDate === t && j.status !== "cancelled")
+    .sort((a,b) => {
+      const w = WINDOWS.indexOf(a.window) - WINDOWS.indexOf(b.window);
+      return w !== 0 ? w : PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
+    });
+  const open = mine.filter(isOpen);
+  const done = mine.filter(j => j.status === "complete");
+  const collected = mine.reduce((s,j) => s + (Number((j.payment||{}).amountPaid) || 0), 0);
+  const owed = mine.filter(j => j.status === "complete").reduce((s,j) => s + Store.balance(j), 0);
+  const overdue = Store.outstanding().filter(j => j.scheduledDate < t);
+
+  const staleDay = Store.sampleIsStale() ? (Store.data.seededOn || Store.inferredSampleDay()) : null;
+
+  return `
+  ${staleDay ? `
+    <div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea;margin-bottom:14px">
+      <strong>This sample day is dated ${esc(fmtDate(staleDay, { weekday:"long", month:"long", day:"numeric" }))}.</strong>
+      The demo jobs are still here, they've just aged — which is why today looks empty.
+      <div style="margin-top:9px">
+        <button class="btn sm accent" data-action="resync-demo">Move the sample to today</button>
+      </div>
+    </div>` : ""}
+
+  <div class="today-head">
+    <span class="big">${open.length ? open.length + " stop" + (open.length===1?"":"s") + " left" : "Day's done"}</span>
+    <span class="sub">${esc(fmtDateLong(t))}</span>
+  </div>
+
+  <div class="today-sum">
+    <span class="pill"><b>${mine.length}</b> booked</span>
+    <span class="pill"><b>${done.length}</b> done</span>
+    ${collected ? `<span class="pill cash">＋${esc(money(collected))} in</span>` : ""}
+    ${owed ? `<span class="pill warn">${esc(money(owed))} to collect</span>` : ""}
+  </div>
+
+  ${open.length ? open.map(stopCard).join("")
+    : `<div class="today-empty">
+         <div class="big">🚐</div>
+         <div style="font-weight:600;color:var(--text);margin-bottom:4px">Nothing booked for today.</div>
+         <div>Take a call, or check the week.</div>
+       </div>`}
+
+  ${done.length ? `<div class="sec-head">Finished today</div>${done.map(stopCard).join("")}` : ""}
+
+  ${overdue.length ? `
+    <div class="sec-head">Still owed from earlier</div>
+    ${overdue.slice(0,5).map(j => `
+      <div class="stop" data-job="${j.id}" style="cursor:pointer;border-left-color:var(--amber)">
+        <div class="stop-main">
+          <div class="stop-when"><div class="w">${esc(money(Store.balance(j)))}</div>
+            <div class="n">${esc(fmtDate(j.scheduledDate))}</div></div>
+          <div class="stop-body">
+            <div class="cust">${esc(custName(j.customerId))}</div>
+            <div class="addr">${esc(j.type)} · ${esc((j.payment||{}).ref || "no invoice ref")}</div>
+          </div>
+        </div>
+      </div>`).join("")}` : ""}`;
+}
+
+/* One stop on the run, with the actions you'd actually reach for on site. */
+function stopCard(j){
+  const c = Store.customer(j.customerId);
+  const addr = custAddr(j.customerId);
+  const next = NEXT_STATUS[j.status];
+  const missing = Store.missingFor(j);
+  const paid = Store.payState(j);
+  const bal = Store.balance(j);
+  const mapQ = encodeURIComponent(addr + ", AB");
+  const tel = String(c && c.phone || "").replace(/\D/g,"");
+
+  // The forward button says what actually happens next, in field words.
+  const stepWord = { scheduled:"On my way", dispatched:"I'm here",
+                     in_progress:"Mark done", new:"Schedule it" }[j.status] || null;
+
+  return `
+  <div class="stop pri-${esc(j.priority)} st-${esc(j.status)}">
+    <div class="stop-main" data-job="${j.id}">
+      <div class="stop-when">
+        <div class="w">${esc(fieldWindow(j.window))}</div>
+        <div class="n">#${j.no}</div>
+      </div>
+      <div class="stop-body">
+        <div class="cust">${esc(custName(j.customerId))}</div>
+        <div class="addr">${esc(addr) || "No address on file"}</div>
+        <div class="what">${esc(j.type)}</div>
+        <div class="tags">
+          ${statusBadge(j.status)}
+          ${j.priority !== "Normal" ? priorityBadge(j.priority) : ""}
+          ${j.status === "complete" && bal > 0.005 ? `<span class="badge pay-invoiced"><span class="dot"></span>${esc(money(bal))} owing</span>` : ""}
+          ${paid === "paid" ? `<span class="badge pay-paid"><span class="dot"></span>Paid</span>` : ""}
+        </div>
+      </div>
+    </div>
+
+    ${c && c.notes ? `<div class="stop-flag">📌 ${esc(c.notes)}</div>` : ""}
+    ${missing.length ? `<div class="stop-flag">✍ Needs signing: ${esc(missing.map(w => w.title).join(" · "))}</div>` : ""}
+
+    <div class="stop-acts">
+      ${tel ? `<a class="btn" href="tel:${esc(tel)}">📞 Call</a>` : ""}
+      ${c ? `<button class="btn" data-message="${j.id}:${j.status==="scheduled"?"onway":j.status==="complete"?"done":"onway"}">💬 Text</button>` : ""}
+      ${addr ? `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${mapQ}" target="_blank" rel="noopener noreferrer">🧭 Directions</a>` : ""}
+      ${missing.length ? `<button class="btn" data-add-waiver="${j.id}">✍ Waiver</button>` : ""}
+      ${stepWord && next ? `<button class="btn accent" data-advance="${j.id}">${esc(stepWord)}</button>` : ""}
+      ${(() => {
+        const live = Store.entriesOf(j).some(e => !e.endedAt);
+        const spent = Store.totalMs(j);
+        if (live) return `<button class="btn clock-on" data-clock="out:job:${j.id}">⏹ Clock out</button>`;
+        return `<button class="btn" data-clock="in:job:${j.id}">▶ Clock in${spent ? ` · ${esc(fmtDur(spent))} so far` : ""}</button>`;
+      })()}
+      ${j.status === "complete" && bal > 0.005 ? `<button class="btn accent" data-job="${j.id}">💵 Take payment</button>` : ""}
+    </div>
+  </div>`;
+}
+
+/* ============================================================
    View: Dashboard
    ============================================================ */
 function viewDashboard(){
@@ -1622,6 +2764,14 @@ function viewDashboard(){
     <div class="stat"><div class="label">Estimates out</div><div class="value">${estSent.length}</div>
       <div class="foot">${esc(money(estValue))} awaiting a yes</div></div>
   </div>
+
+  ${Store.sampleIsStale() ? `
+    <div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea;margin-bottom:16px">
+      <strong>The sample day has aged out.</strong> These demo jobs were dated
+      ${esc(fmtDate(Store.data.seededOn || Store.inferredSampleDay(), { month:"long", day:"numeric" }))},
+      so today reads empty.
+      <button class="btn sm accent" style="margin-left:8px" data-action="resync-demo">Move it to today</button>
+    </div>` : ""}
 
   <div class="two-col">
     <div>
@@ -1805,6 +2955,11 @@ function sortForBoard(list){
 /* ---------- Day: a column per technician ---------- */
 function dayBoard(){
   const d = App.date;
+  if (!Store.activeTechs().length){
+    return `<div class="today-empty"><div class="big">🔧</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px">No technicians yet.</div>
+      <div>Add yourself under Technicians and the board fills in.</div></div>`;
+  }
   const dayJobs = Store.data.jobs.filter(j => j.scheduledDate === d);
   const cols = [
     { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
@@ -1916,6 +3071,15 @@ function miniCard(j, opts){
   </div>`;
 }
 
+/* On a field card the arrival window is the thing that matters: "10–12". */
+function fieldWindow(w){
+  if (!w) return "";
+  if (w.startsWith("ASAP")) return "ASAP";
+  if (w === "Anytime") return "Any time";
+  const m = /^(\d+):\d+–(\d+):\d+/.exec(w);
+  return m ? m[1] + "–" + m[2] : w;
+}
+
 /* "8:00–10:00" is too wide for a month cell; "8a" is enough. */
 function shortWindow(w){
   if (!w) return "";
@@ -1993,6 +3157,150 @@ function wireBoard(){
       toast(`#${job.no} → ${bits.join(" · ")}`, "ok");
     });
   });
+}
+
+/* ============================================================
+   View: Time & Money — is the flat rate actually working?
+   ============================================================ */
+function viewTimeMoney(){
+  const days = App.moneyRange;
+  const since = days ? addDays(todayStr(), -days) : "0000-00-00";
+  const target = Number(Store.data.settings.laborRate) || 0;
+
+  const done = Store.data.jobs.filter(j =>
+    j.status === "complete" && (j.scheduledDate || "") >= since);
+  const timed = done.filter(j => Store.jobTotalMs(j) > 0);
+  const untimed = done.length - timed.length;
+
+  // Parts cost is optional. Until he enters it, "billed" includes the price of
+  // a water heater and the hourly figure reads far better than the day did.
+  const costed = timed.some(j => (Number(j.materialCost) || 0) > 0);
+
+  const row = list => {
+    const ms = list.reduce((s,j) => s + Store.jobTotalMs(j), 0);
+    const billed = list.reduce((s,j) => s + Store.jobTotal(j), 0);
+    const mat = list.reduce((s,j) => s + (Number(j.materialCost) || 0), 0);
+    const hrs = hoursOf(ms);
+    return { n:list.length, hrs, billed, mat, net: billed - mat,
+             rate: hrs > 0 ? (billed - mat) / hrs : null };
+  };
+  const all = row(timed);
+
+  const byType = [...new Set(timed.map(j => j.type))]
+    .map(type => Object.assign({ type }, row(timed.filter(j => j.type === type))))
+    .sort((a,b) => (a.rate ?? 1e9) - (b.rate ?? 1e9));
+
+  // Quoting is a cost whether or not the quote lands.
+  const sinceMs = days ? (parseYmd(since) ? parseYmd(since).getTime() : 0) : 0;
+  const quotes = Store.data.estimates.filter(e => (e.createdAt || 0) >= sinceMs);
+  const quoteMs = quotes.reduce((s,e) => s + Store.totalMs(e), 0);
+  const lost = quotes.filter(e => e.status === "declined");
+  const lostMs = lost.reduce((s,e) => s + Store.totalMs(e), 0);
+  const won = quotes.filter(e => e.status === "approved").length;
+  const decided = won + lost.length;
+
+  const rateClass = r => r == null ? "" : r >= target ? "rate-good" : r >= target * 0.7 ? "rate-thin" : "rate-bad";
+  const rateText = r => r == null ? "—" : money(r) + "/hr";
+  const pick = (d, label) =>
+    `<button class="btn sm ${days===d?"primary":""}" data-money-range="${d}">${esc(label)}</button>`;
+
+  return `
+  <div class="toolbar">
+    ${pick(30,"30 days")}${pick(90,"3 months")}${pick(180,"6 months")}${pick(365,"1 year")}${pick(0,"All")}
+    <div style="flex:1"></div>
+    <span class="filter-note">Your target is ${esc(money(target))}/hr</span>
+  </div>
+
+  ${timed.length < 5 ? `
+    <div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
+      <strong>Only ${timed.length} finished job${timed.length===1?"":"s"} with time on ${timed.length===1?"it":"them"} so far.</strong>
+      That's not enough to change your prices over — one bad morning skews it. Keep clocking in
+      and come back when you've got a couple of dozen.
+    </div>` : ""}
+
+  <div class="stat-row">
+    <div class="stat"><div class="label">Hours on the tools</div>
+      <div class="value">${all.hrs.toFixed(1)}</div>
+      <div class="foot">across ${all.n} finished job${all.n===1?"":"s"}</div></div>
+    <div class="stat"><div class="label">${costed ? "Kept after parts" : "Billed"}</div>
+      <div class="value">${esc(money(costed ? all.net : all.billed))}</div>
+      <div class="foot">${costed ? esc(money(all.billed)) + " billed, " + esc(money(all.mat)) + " of it parts"
+        : (untimed ? untimed + " job" + (untimed===1?"":"s") + " had no time logged" : "every job timed")}</div></div>
+    <div class="stat"><div class="label">You actually earn</div>
+      <div class="value ${rateClass(all.rate)}"${all.rate == null
+        ? ` style="font-size:19px;color:var(--muted-2)"` : ""}>${all.rate == null
+        ? "Nothing yet" : esc(rateText(all.rate))}</div>
+      <div class="foot">${all.rate == null ? "clock a job and this fills itself in"
+        : all.rate >= target
+        ? "ahead of your " + money(target) + " target"
+        : "short of your " + money(target) + " target"}</div></div>
+    <div class="stat"><div class="label">Hours quoting</div>
+      <div class="value">${hoursOf(quoteMs).toFixed(1)}</div>
+      <div class="foot">${hoursOf(lostMs).toFixed(1)}h on quotes that went nowhere</div></div>
+  </div>
+
+  <div class="section-title">By type of work — worst rate first</div>
+  ${!byType.length ? `
+  <div class="card"><div class="empty">
+    <div class="big">⏱</div>
+    No finished jobs with time logged in this window yet.<br>
+    Clock in when you get to a job and out when you leave — this fills itself in.
+  </div></div>` : `
+  <div class="card"><table>
+    <thead><tr>
+      <th>Work</th><th class="num">Jobs</th><th class="num">Hours</th>
+      <th class="num">Avg time</th><th class="num">Billed</th>${costed
+        ? `<th class="num">Parts cost</th>` : ""}<th class="num">Avg price</th>
+      <th class="num">You earn</th>
+    </tr></thead>
+    <tbody>
+      ${byType.map(t => `
+        <tr>
+          <td class="t-strong">${esc(t.type)}</td>
+          <td class="num">${t.n}</td>
+          <td class="num">${t.hrs.toFixed(1)}</td>
+          <td class="num">${esc(fmtDur(t.hrs / t.n * 3600000))}</td>
+          <td class="num">${esc(money(t.billed))}</td>
+          ${costed ? `<td class="num t-sub">${esc(money(t.mat))}</td>` : ""}
+          <td class="num">${esc(money(t.billed / t.n))}</td>
+          <td class="num t-strong ${rateClass(t.rate)}">${esc(rateText(t.rate))}</td>
+        </tr>`).join("")}
+    </tbody>
+  </table></div>`}
+
+  ${byType.length && byType[0].rate != null && byType[0].rate < target ? `
+    <div class="callout" style="border-left:4px solid var(--amber);background:var(--amber-soft);padding:14px 16px;border-radius:0 6px 6px 0;margin-top:14px;font-size:14px;color:#9c5712">
+      <strong>${esc(byType[0].type)} is your thinnest work at ${esc(rateText(byType[0].rate))}.</strong>
+      To hit ${esc(money(target))}/hr on the ${byType[0].n} you've done, the average price would need to be
+      about ${esc(money((target * byType[0].hrs + byType[0].mat) / byType[0].n))} instead of ${esc(money(byType[0].billed / byType[0].n))}.
+    </div>` : ""}
+
+  ${timed.length && !costed ? `
+    <div class="legal-note">
+      <strong>These rates don't know what your parts cost you.</strong>
+      A water heater at ${esc(money(2250))} will always look like a great hour because the tank's
+      price is sitting in the billed column. Put what you paid in the
+      <em>"What the parts cost you"</em> box on a job and this table starts telling the truth.
+    </div>` : ""}
+
+  <div class="section-title">Quoting</div>
+  <div class="card"><div class="card-body">
+    <div class="money-row"><span class="mr-label">Quotes written</span>
+      <span class="mr-val">${quotes.length}</span></div>
+    <div class="money-row"><span class="mr-label">Won</span>
+      <span class="mr-val">${won}${decided ? ` · ${Math.round(won/decided*100)}% of the ones decided` : ""}</span></div>
+    <div class="money-row"><span class="mr-label">Time spent quoting</span>
+      <span class="mr-val">${hoursOf(quoteMs).toFixed(1)}h</span></div>
+    <div class="money-row" style="border-bottom:0"><span class="mr-label">Of that, on quotes you lost</span>
+      <span class="mr-val" style="color:${lostMs ? "var(--amber)" : "inherit"}">${hoursOf(lostMs).toFixed(1)}h${
+        target && lostMs ? ` · ${esc(money(hoursOf(lostMs) * target))} of your time` : ""}</span></div>
+  </div></div>
+
+  <p class="t-sub" style="margin-top:14px;max-width:70ch">
+    "You earn" is what you kept${costed ? " after parts" : ""} divided by the hours you actually
+    clocked, including the time spent quoting a job before it became one. It still isn't profit —
+    fuel, insurance, the truck and the hours you don't bill for all come out of it.
+  </p>`;
 }
 
 /* ============================================================
@@ -2154,6 +3462,85 @@ function viewSignedWaivers(){
 /* ============================================================
    View: Price book
    ============================================================ */
+/* The connection panel. Keys are typed here and kept on the device — they
+   are never part of the app's own code, so the published link carries no
+   way into anybody's data. */
+/* The letterhead under the company name on anything printed or handed to a
+   customer. Each piece appears only once it's filled in, so a shop without a
+   website yet doesn't print an empty line. */
+function letterhead(st){
+  const bits = [st.phone, st.email, st.website].filter(Boolean);
+  return `
+    ${bits.length ? `<div>${bits.map(esc).join(" · ")}</div>` : ""}
+    ${st.address ? `<div>${esc(st.address)}</div>` : ""}
+    ${st.gst ? `<div style="font-size:11px">GST/HST ${esc(st.gst)}</div>` : ""}`;
+}
+
+function cloudCard(){
+  const c = Cloud.cfg || {};
+  const signedIn = !!(Cloud.configured() && c.refreshToken);
+
+  if (!Cloud.configured()){
+    return `
+      <p class="t-sub" style="margin-top:0">
+        Right now this shop lives in this browser on this device only. Connect a free
+        Supabase project and every device you sign in on keeps the same shop, backed up
+        off the phone. Setup is in <strong>SUPABASE.md</strong> in the repo — about ten minutes, once.
+      </p>
+      <div class="row2">
+        <div class="field"><label for="cl-url">Project URL</label>
+          <input class="input" id="cl-url" placeholder="https://abcdefgh.supabase.co" autocomplete="off">
+          <div class="hint">Supabase → Project Settings → Data API</div></div>
+        <div class="field"><label for="cl-key">Publishable (anon) key</label>
+          <input class="input" id="cl-key" placeholder="sb_publishable_… or eyJ…" autocomplete="off">
+          <div class="hint">The publishable one. Never the secret one.</div></div>
+      </div>
+      <div id="cl-err" class="err" style="display:none"></div>
+      <button class="btn primary" data-action="cloud-save">Save connection</button>`;
+  }
+
+  const stateLine = `
+    <div class="cloud-state ${esc(Cloud.state)}"><span class="d"></span>
+      ${esc(SYNC_WORDS[Cloud.state](Cloud.detail) || "Not connected")}</div>`;
+
+  if (!signedIn){
+    return `
+      ${stateLine}
+      <p class="t-sub" style="margin-top:0">Connected to <strong>${esc(c.url)}</strong>.
+        Sign in with the user you made in Supabase → Authentication → Users.</p>
+      <div class="row2">
+        <div class="field"><label for="cl-email">Email</label>
+          <input class="input" id="cl-email" type="email" value="${esc(c.email || "")}" autocomplete="username"></div>
+        <div class="field"><label for="cl-pass">Password</label>
+          <input class="input" id="cl-pass" type="password" autocomplete="current-password"></div>
+      </div>
+      <div id="cl-err" class="err" style="display:none"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" data-action="cloud-signin">Sign in</button>
+        <button class="btn ghost" data-action="cloud-forget">Use a different project</button>
+      </div>`;
+  }
+
+  return `
+    ${stateLine}
+    <div class="money-row"><span class="mr-label">Project</span>
+      <span class="mr-val" style="font-weight:500;font-size:12.5px">${esc(c.url)}</span></div>
+    <div class="money-row"><span class="mr-label">Signed in as</span>
+      <span class="mr-val" style="font-weight:500;font-size:12.5px">${esc(c.email || "—")}</span></div>
+    <div class="money-row"><span class="mr-label">This device</span>
+      <span class="mr-val" style="font-weight:500;font-size:12.5px">${esc(c.deviceId || "—")}</span></div>
+    <div class="money-row" style="border-bottom:0"><span class="mr-label">Version on the server</span>
+      <span class="mr-val">${Cloud.baseRev || "—"}</span></div>
+    <p class="t-sub">Changes go up a couple of seconds after you stop typing, and this
+      device catches up whenever you come back to the app. It keeps working with no
+      signal — anything you do offline goes up next time you have one.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn primary" data-action="cloud-sync">Sync now</button>
+      <button class="btn" data-action="cloud-signout">Sign out of this device</button>
+      <button class="btn ghost danger" data-action="cloud-forget">Disconnect</button>
+    </div>`;
+}
+
 function viewPriceBook(){
   const book = Store.data.priceBook;
   const groups = LINE_KINDS.map(k => ({ k, items: book.filter(i => i.kind === k.id) }));
@@ -2165,7 +3552,7 @@ function viewPriceBook(){
     <button class="btn sm accent" data-action="new-price">＋ Add item</button>
   </div>
   ${groups.map(g => `
-    <div class="section-title">${esc(g.k.label)}</div>
+    <div class="section-title">${esc(g.k.label)}${g.items.length ? ` · ${g.items.length}` : ""}</div>
     <div class="card"><table>
       <thead><tr><th>Description</th><th class="num" style="width:140px">Price</th><th style="width:110px"></th></tr></thead>
       <tbody>
@@ -2327,9 +3714,26 @@ function viewData(){
           <div class="row2">
             <div class="field"><label>Company name</label>
               <input class="input" id="set-company" value="${esc(d.settings.company)}"></div>
-            <div class="field"><label>Office phone</label>
-              <input class="input" id="set-phone" value="${esc(d.settings.phone)}"></div>
+            <div class="field"><label>Phone customers call</label>
+              <input class="input" id="set-phone" value="${esc(d.settings.phone)}">
+              <div class="hint">Goes on every document and into your texts.</div></div>
           </div>
+          <div class="row2">
+            <div class="field"><label>Business email</label>
+              <input class="input" id="set-email" type="email" value="${esc(d.settings.email)}"
+                     placeholder="admin@yourdomain.ca"></div>
+            <div class="field"><label>Website</label>
+              <input class="input" id="set-website" value="${esc(d.settings.website)}"
+                     placeholder="yourdomain.ca"></div>
+          </div>
+          <div class="field"><label>Business address <span class="t-sub">(optional)</span></label>
+            <input class="input" id="set-address" value="${esc(d.settings.address)}"
+                   placeholder="Leave blank if you'd rather not print your home address">
+            <div class="hint">Printed on tickets, estimates and signed waivers when filled in.</div></div>
+          <div class="field" style="max-width:260px"><label>GST registration number</label>
+            <input class="input" id="set-gst" value="${esc(d.settings.gst)}" placeholder="123456789 RT0001">
+            <div class="hint">Required on invoices once you're registered, so customers can
+              claim the tax back. Leave blank until then.</div></div>
           <div class="field" style="max-width:220px"><label>Default labor rate ($/hr)</label>
             <input class="input" id="set-rate" type="number" min="0" step="5" value="${esc(d.settings.laborRate)}">
             <div class="hint">Used to price new jobs. Existing jobs keep the rate they were created with.</div>
@@ -2339,11 +3743,22 @@ function viewData(){
       </div>
 
       <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Sync across your devices</h3></div>
+        <div class="card-body">
+          ${cloudCard()}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Backup &amp; restore</h3></div>
         <div class="card-body">
           <p class="t-sub" style="margin-top:0">
-            This prototype stores everything in this browser on this device. Nothing is sent anywhere.
-            Export regularly if you are entering real work, and import the file to move it to another machine.
+            ${Cloud.configured() && Cloud.cfg.refreshToken
+              ? `Your shop syncs to Supabase and keeps its last 30 versions there. A file on your
+                 own disk is still worth having now and then — it's the copy nobody else can reach.`
+              : `This stores everything in this browser on this device. Nothing is sent anywhere.
+                 Export regularly if you are entering real work, and import the file to move it
+                 to another machine.`}
           </p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn primary" data-action="export">⬇ Export JSON backup</button>
@@ -2352,6 +3767,30 @@ function viewData(){
             <button class="btn" data-action="export-est-csv">⬇ Export estimates as CSV</button>
           </div>
           <input type="file" id="import-file" accept="application/json,.json" style="display:none">
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Customer messages</h3></div>
+        <div class="card-body">
+          <p class="t-sub" style="margin-top:0">Four short messages — booked, on my way, running
+            late, finished — and the travel time for each zone. Your phone sends them, from your
+            own number.</p>
+          <button class="btn" data-action="edit-messages">Edit templates &amp; zones</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Going live</h3></div>
+        <div class="card-body">
+          ${d.liveSince
+            ? `<p class="t-sub" style="margin-top:0">Running real jobs since
+                 ${esc(fmtStamp(d.liveSince).split(" · ")[0])}.</p>
+               <button class="btn" data-action="golive">Run setup again</button>`
+            : `<p class="t-sub" style="margin-top:0">Still on the sample shop. When you're ready for
+                 real work, this clears the demo customers and jobs, keeps your price book and waiver
+                 templates, and sets you up as the first technician.</p>
+               <button class="btn accent" data-action="golive">Set up for real jobs →</button>`}
         </div>
       </div>
 
@@ -2381,13 +3820,17 @@ function viewData(){
       <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Next steps</h3></div>
         <div class="card-body t-sub" style="line-height:1.65">
-          This is a working prototype for the office. Natural things to add once the
-          crew has used it for a week:
+          Runs on one browser, on this device. What's still missing, roughly in the
+          order it starts to hurt:
           <ul style="padding-left:18px;margin:8px 0 0">
-            <li>A shared backend so techs and office see the same board</li>
-            <li>A mobile view for the truck</li>
-            <li>Customer text/email confirmations</li>
-            <li>Real invoicing and payment</li>
+            ${Cloud.configured() && Cloud.cfg.refreshToken ? "" : `
+            <li><strong>Somewhere real to keep it</strong> — so a dead laptop isn't a dead
+                business, and the phone and the office see the same jobs.
+                <em>Ready to switch on — see Sync across your devices above</em></li>`}
+            <li><strong>Photos</strong> — the corroded fitting, the model plate, the
+                before-and-after</li>
+            <li>Customer text or email confirmations</li>
+            <li>Sending real invoices, rather than recording that you sent one</li>
           </ul>
         </div>
       </div>
@@ -2489,7 +3932,9 @@ function closeModal(){
   document.body.style.overflow = "";
 }
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && $("#modal-root").innerHTML) closeModal();
+  if (e.key !== "Escape") return;
+  if ($("#modal-root").innerHTML) return closeModal();
+  closeNavSheet();
 });
 
 /* ---------- Job detail ---------- */
@@ -2522,6 +3967,9 @@ function openJob(id){
           <option value="">— Unassigned —</option>
           ${Store.activeTechs().map(t => `<option value="${t.id}"${t.id===j.techId?" selected":""}>${esc(t.name)}</option>`).join("")}
         </select>
+        ${c && String(c.phone||"").replace(/\D/g,"")
+          ? `<a class="btn sm" href="tel:${esc(String(c.phone).replace(/\D/g,""))}">📞 Call ${esc(c.name.split(" ")[0])}</a>` : ""}
+        ${c ? `<button class="btn sm" data-message="${j.id}">💬 Message customer</button>` : ""}
         <button class="btn sm" data-edit-job="${j.id}">Edit details</button>
         <button class="btn sm" data-print-job="${j.id}">🖨 Ticket</button>
       </div>
@@ -2574,6 +4022,16 @@ function openJob(id){
             <td colspan="3" class="t-strong" style="text-align:right">Job total</td>
             <td class="num t-strong">${esc(money(partsTotal + laborTotal))}</td><td></td>
           </tr>
+          <tr>
+            <td colspan="2" class="t-sub" style="text-align:right">
+              What the parts cost <em>you</em> <span class="t-sub">(optional)</span></td>
+            <td class="num"><input class="input" id="mat-cost" type="number" min="0" step="0.01"
+                 value="${j.materialCost ? esc(j.materialCost) : ""}" placeholder="0.00" style="width:90px"></td>
+            <td class="num t-sub">${j.materialCost
+              ? "leaves " + esc(money(partsTotal + laborTotal - j.materialCost))
+              : "for Time &amp; Money"}</td>
+            <td class="num"><button class="btn sm" data-save-matcost="${j.id}">✓</button></td>
+          </tr>
           ${j.quotedTotal != null ? (() => {
             const est = j.estimateId ? Store.estimate(j.estimateId) : null;
             const diff = (partsTotal + laborTotal) - j.quotedTotal;
@@ -2590,6 +4048,9 @@ function openJob(id){
           })() : ""}
         </tbody>
       </table>
+
+      <div class="section-title" style="margin-top:22px">Time on site</div>
+      ${timePanel("job", j)}
 
       <div class="section-title" style="margin-top:22px">Payment</div>
       ${(() => {
@@ -2763,7 +4224,7 @@ function saveJobFromForm(id){
         phone: $("#nc-phone").value.trim(),
         email: "",
         address: $("#nc-address").value.trim(),
-        city: $("#nc-city").value.trim() || "Edmonton",
+        city: $("#nc-city").value.trim() || "Edmonton", zone: "city",
         notes: "", createdAt: Date.now()
       };
       Store.data.customers.push(c);
@@ -2870,6 +4331,9 @@ function openEstimate(id){
       </div>
 
       <div class="dl"><dt>Scope of work</dt><dd style="white-space:pre-wrap">${esc(e.description)||"—"}</dd></div>
+
+      <div class="section-title" style="margin-top:22px">Time quoting</div>
+      ${timePanel("estimate", e)}
 
       <div class="section-title" style="margin-top:22px">Line items</div>
       <table style="border:1px solid var(--line);border-radius:6px">
@@ -3174,7 +4638,7 @@ function doConvert(id){
     const c = {
       id: uid("cus"), name,
       phone: $("#cv-phone").value.trim(), email: $("#cv-email").value.trim(),
-      address: $("#cv-address").value.trim(), city: $("#cv-city").value.trim() || "Edmonton",
+      address: $("#cv-address").value.trim(), city: $("#cv-city").value.trim() || "Edmonton", zone: "city",
       notes: "", createdAt: Date.now()
     };
     Store.data.customers.push(c);
@@ -3590,6 +5054,323 @@ function saveTemplateFromForm(id){
   render();
 }
 
+/* ---------- Time on site, shared by jobs and estimates ---------- */
+function timePanel(kind, rec){
+  const entries = Store.entriesOf(rec).slice().sort((a,b) => a.startedAt - b.startedAt);
+  const live = entries.find(e => !e.endedAt);
+  const total = Store.totalMs(rec);
+  const linked = kind === "job" && rec.estimateId ? Store.estimate(rec.estimateId) : null;
+  const quoteMs = linked ? Store.totalMs(linked) : 0;
+
+  return `
+    <div style="margin-bottom:12px">
+      ${live
+        ? `<button class="btn clock-btn clock-on" data-clock="out:${kind}:${rec.id}">⏹ Clock out — on site ${esc(fmtDur(Date.now() - live.startedAt))}</button>`
+        : `<button class="btn accent clock-btn" data-clock="in:${kind}:${rec.id}">▶ Clock in</button>`}
+    </div>
+
+    ${entries.length ? `<div>
+      ${entries.map(e => `
+        <div class="time-row ${e.endedAt ? "" : "live"}">
+          <span class="when">${esc(fmtStamp(e.startedAt))}${e.endedAt ? ` → ${esc(new Date(e.endedAt).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}))}` : " → running"}</span>
+          ${e.note ? `<span class="t-sub">${esc(e.note)}</span>` : ""}
+          <span class="dur">${esc(fmtDur((e.endedAt || Date.now()) - e.startedAt))}</span>
+          <button class="btn sm ghost" data-edit-time="${kind}:${rec.id}:${e.id}" title="Correct this">✎</button>
+          <button class="btn sm ghost" data-del-time="${kind}:${rec.id}:${e.id}" title="Remove">×</button>
+        </div>`).join("")}
+      <div class="time-sum">
+        <span>${kind === "estimate" ? "Time quoting" : "Time on this job"}</span>
+        <span class="n">${esc(fmtDur(total))}</span>
+      </div>
+      ${quoteMs ? `
+        <div class="time-row"><span class="when">Plus quoting it (EST-${linked.no})</span>
+          <span class="dur">${esc(fmtDur(quoteMs))}</span></div>
+        <div class="time-sum"><span>All in</span>
+          <span class="n">${esc(fmtDur(total + quoteMs))}</span></div>` : ""}
+    </div>` : `<p class="t-sub" style="margin:0">No time logged yet. Hit Clock in when you get there.</p>`}
+
+    <div style="margin-top:10px">
+      <button class="btn sm" data-add-time="${kind}:${rec.id}">＋ Add time by hand</button>
+    </div>`;
+}
+
+/* Correcting a forgotten clock-out, or adding a trip after the fact. */
+function openTimeEdit(kind, recId, entryId){
+  const rec = Store.recordOf(kind, recId);
+  const e = entryId ? Store.entriesOf(rec).find(x => x.id === entryId) : null;
+  const start = e ? e.startedAt : Date.now() - 3600000;
+  const end = e ? (e.endedAt || Date.now()) : Date.now();
+
+  openModal(`
+    <div class="modal-head"><h2>${e ? "Correct this time" : "Add time"}</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      ${e && !e.endedAt ? `<div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
+        This one is still running. Setting an end time stops it.</div>` : ""}
+      <div class="row2">
+        <div class="field"><label>Arrived</label>
+          <input class="input" id="te-start" type="datetime-local" value="${esc(toLocalInput(start))}"></div>
+        <div class="field"><label>Left</label>
+          <input class="input" id="te-end" type="datetime-local" value="${esc(toLocalInput(end))}"></div>
+      </div>
+      <div class="err" id="te-err" style="display:none">The leaving time has to be after the arriving time.</div>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-time="${kind}:${recId}:${entryId || ""}">Save</button>
+    </div>`);
+}
+
+function saveTimeEdit(payload){
+  const [kind, recId, entryId] = payload.split(":");
+  const start = fromLocalInput($("#te-start").value);
+  const end = fromLocalInput($("#te-end").value);
+  if (!start || !end || end <= start){ $("#te-err").style.display = "block"; return; }
+  if (entryId) Store.updateEntry(kind, recId, entryId, start, end);
+  else Store.addEntry(kind, recId, start, end, "");
+  closeModal(); render();
+  if (kind === "estimate") openEstimate(recId); else openJob(recId);
+  toast("Time saved", "ok");
+}
+
+/* ---------- Message the customer ---------- */
+let MsgState = { tplId:"onway", bump:0, jobId:null };
+
+function openMessage(jobId, tplId){
+  const job = Store.job(jobId);
+  if (!job) return;
+  const c = Store.customer(job.customerId);
+  if (!c){ toast("No customer on this job.", "err"); return; }
+  MsgState = { tplId: tplId || "onway", bump: 0, jobId };
+  renderMessageSheet();
+}
+
+function renderMessageSheet(){
+  const job = Store.job(MsgState.jobId);
+  const c = Store.customer(job.customerId);
+  const z = Store.zone(c.zone);
+  const body = Store.renderMessage(MsgState.tplId, job, MsgState.bump);
+  const tel = String(c.phone || "").replace(/\D/g, "");
+  const needsEta = MsgState.tplId === "onway" || MsgState.tplId === "late";
+  const bumpBtn = (m, label) =>
+    `<button class="${MsgState.bump===m?"on":""}" data-msg-bump="${m}">${esc(label)}</button>`;
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">${esc(c.name)} · job #${job.no}</div>
+        <h2>Message the customer</h2></div>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="msg-tabs">
+        ${Store.messages().map(m =>
+          `<button class="${MsgState.tplId===m.id?"on":""}" data-msg-tpl="${esc(m.id)}">${esc(m.label)}</button>`).join("")}
+      </div>
+
+      ${needsEta ? `
+        <div class="msg-eta">
+          <span class="lab">Travel</span>
+          <span class="zone-chip">${esc(z.label)} · ${esc(z.eta)}</span>
+          <div style="flex:1"></div>
+          <span class="lab">Running behind?</span>
+          ${bumpBtn(0,"On time")}${bumpBtn(15,"+15")}${bumpBtn(30,"+30")}
+        </div>` : ""}
+
+      <textarea class="msg-prev" id="msg-body">${esc(body)}</textarea>
+      <div class="msg-meta">
+        <span>Edit it before you send — this is just a starting point.</span>
+        <span id="msg-count">${body.length} characters</span>
+      </div>
+
+      <div class="section-title" style="margin-top:18px">Send it</div>
+      <div class="msg-send">
+        ${tel ? `<a class="btn accent" id="msg-sms" href="#" data-msg-send="text">💬 Text ${esc(fmtPhone(c.phone))}</a>`
+              : `<span class="t-sub">No mobile number on file for ${esc(c.name)}.</span>`}
+        ${c.email ? `<a class="btn" id="msg-mail" href="#" data-msg-send="email">✉ Email</a>` : ""}
+        <button class="btn" data-msg-send="copy">⧉ Copy</button>
+      </div>
+      <p class="t-sub" style="margin:12px 0 0">
+        Your phone sends it, from your own number — so if they reply, it comes to you.
+        On a computer, use Copy.
+      </p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn sm ghost" data-action="edit-messages">Edit templates &amp; zones</button>
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+    </div>`, { wide:true, noFocus:true });
+
+  // Keep the href live as the text is edited, so the phone gets what's on screen.
+  const ta = $("#msg-body");
+  const sync = () => {
+    const txt = ta.value;
+    $("#msg-count").textContent = txt.length + " characters";
+    const sms = $("#msg-sms"), mail = $("#msg-mail");
+    // "?&body=" keeps both iOS and Android happy.
+    if (sms) sms.href = `sms:${tel}?&body=${encodeURIComponent(txt)}`;
+    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
+      `?subject=${encodeURIComponent(Store.data.settings.company + " — job #" + job.no)}` +
+      `&body=${encodeURIComponent(txt)}`;
+  };
+  ta.addEventListener("input", sync);
+  sync();
+}
+
+function logMessageSent(how){
+  const job = Store.job(MsgState.jobId);
+  if (!job) return;
+  const label = Store.message(MsgState.tplId).label;
+  Store.addLog(job, `${how} customer: ${label}${MsgState.bump ? ` (+${MsgState.bump} min)` : ""}`);
+  Store.save();
+}
+
+/* ---------- Edit the templates and the zones ---------- */
+function openMessageSetup(){
+  const st = Store.data.settings;
+  openModal(`
+    <div class="modal-head"><h2>Customer messages</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="field" style="max-width:420px">
+        <label>Name to use in messages</label>
+        <input class="input" id="msg-shortname" value="${esc(st.shortName || Store.tradeName())}"
+               placeholder="Poseidon Plumbing">
+        <div class="hint">What you'd say on the phone. Waivers, estimates and tickets keep the
+          full legal name.</div>
+      </div>
+
+      <div class="section-title">Travel zones</div>
+      <p class="t-sub" style="margin:0 0 12px">Set a zone on each customer; the message uses
+        that zone's travel time. Your real numbers will beat my guesses.</p>
+      ${Store.zones().map((z,i) => `
+        <div class="row2" style="margin-bottom:10px">
+          <div class="field" style="margin-bottom:0"><label>Zone ${i+1} name</label>
+            <input class="input" data-zone-label="${esc(z.id)}" value="${esc(z.label)}"></div>
+          <div class="field" style="margin-bottom:0"><label>Travel time, in words</label>
+            <input class="input" data-zone-eta="${esc(z.id)}" value="${esc(z.eta)}"></div>
+        </div>`).join("")}
+
+      <div class="section-title">Messages</div>
+      ${Store.messages().map(m => `
+        <div class="field">
+          <label>${esc(m.label)}</label>
+          <textarea class="input" data-msg-body="${esc(m.id)}" style="min-height:76px">${esc(m.body)}</textarea>
+        </div>`).join("")}
+
+      <div class="field">
+        <label>Fields you can drop in</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${MSG_FIELDS.map(([f,d]) => `<span class="chip" title="${esc(d)}">${esc(f)}</span>`).join("")}
+        </div>
+      </div>
+      <div class="callout" style="border-left:4px solid var(--amber);background:var(--amber-soft);padding:14px 16px;border-radius:0 6px 6px 0;font-size:13.5px;color:#9c5712">
+        <strong>Keep these to job messages.</strong> Texting a customer about work they booked is
+        fine under CASL. Promotions are a different consent regime — don't reuse this button for them.
+      </div>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-messages>Save</button>
+    </div>`, { wide:true });
+}
+
+function saveMessageSetup(){
+  const st = Store.data.settings;
+  st.shortName = ($("#msg-shortname").value || "").trim();
+  st.zones = Store.zones().map(z => ({
+    id: z.id,
+    label: ($(`[data-zone-label="${z.id}"]`).value || "").trim() || z.label,
+    eta:   ($(`[data-zone-eta="${z.id}"]`).value || "").trim() || z.eta
+  }));
+  st.messages = Store.messages().map(m => ({
+    id: m.id, label: m.label,
+    body: ($(`[data-msg-body="${m.id}"]`).value || "").trim() || m.body
+  }));
+  Store.save(); closeModal(); render();
+  toast("Messages saved", "ok");
+}
+
+/* ---------- Go live: clear the demo and set the shop up ---------- */
+function openGoLive(){
+  const st = Store.data.settings;
+  const d = Store.data;
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">One-time setup</div><h2>Start running real jobs</h2></div>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body">
+      <div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
+        <strong>This clears the sample shop.</strong> The ${d.customers.length} demo customers,
+        ${d.jobs.length} jobs, ${d.estimates.length} estimates and ${d.signedWaivers.length}
+        signed waivers are deleted. Your <strong>price book (${d.priceBook.length} items)</strong>
+        and <strong>waiver templates (${Store.activeTemplates().length})</strong> are kept — edit
+        those, don't retype them. Export a backup first if you want the samples back.
+      </div>
+
+      <div class="row2">
+        <div class="field"><label>Company name *</label>
+          <input class="input" id="gl-company" value="${esc(st.company)}"></div>
+        <div class="field"><label>Phone customers call</label>
+          <input class="input" id="gl-phone" value="${esc(st.phone)}" placeholder="(780) 555-0100"></div>
+      </div>
+
+      <div class="section-title" style="margin-top:6px">You, as the first technician</div>
+      <div class="row3">
+        <div class="field"><label>Your name *</label>
+          <input class="input" id="gl-tech" placeholder="The name that goes on the board"></div>
+        <div class="field"><label>Your mobile</label>
+          <input class="input" id="gl-techphone"></div>
+        <div class="field"><label>Ticket</label>
+          <input class="input" id="gl-skill" value="Journeyman · Gasfitter B"></div>
+      </div>
+      <p class="t-sub" style="margin:0 0 14px">You can add more people later under Technicians.</p>
+
+      <div class="row2">
+        <div class="field"><label>Your hourly rate</label>
+          <input class="input" id="gl-rate" type="number" min="0" step="5" value="${esc(st.laborRate)}">
+          <div class="hint">Prices new jobs. Change it any time — past jobs keep their own rate.</div></div>
+        <div class="field"><label>First job number</label>
+          <input class="input" id="gl-jobno" type="number" min="1" step="1" value="1000">
+          <div class="hint">Job numbering starts one above this. Set it higher if you've already
+            invoiced work by hand.</div></div>
+      </div>
+
+      <div class="err" id="gl-err" style="display:none">Company name and your name are both needed.</div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn danger" data-do-golive>Clear the samples and go live</button>
+    </div>`, { wide:true });
+}
+
+function doGoLive(){
+  const company = $("#gl-company").value.trim();
+  const techName = $("#gl-tech").value.trim();
+  if (!company || !techName){
+    $("#gl-err").style.display = "block";
+    if (!company) $("#gl-company").classList.add("invalid");
+    if (!techName) $("#gl-tech").classList.add("invalid");
+    return;
+  }
+  if (!confirm("Delete the sample customers, jobs, estimates and signed waivers?\n\nThis cannot be undone. Your price book and waiver templates are kept.")) return;
+
+  Store.goLive({
+    company,
+    phone: $("#gl-phone").value.trim(),
+    laborRate: $("#gl-rate").value,
+    startJobNo: $("#gl-jobno").value,
+    techName,
+    techPhone: $("#gl-techphone").value.trim(),
+    techSkill: $("#gl-skill").value.trim()
+  });
+  closeModal();
+  App.view = "today";
+  render();
+  toast("You're live. Take the first call.", "ok");
+}
+
 /* ---------- Price book item ---------- */
 function openPriceForm(id){
   const i = id ? Store.priceItem(id) : null;
@@ -3634,6 +5415,8 @@ function openCustomer(id){
     <div class="modal-head">
       <div><div class="t-sub">Customer</div><h2>${esc(c.name)}</h2></div>
       <div class="spacer"></div>
+      ${String(c.phone||"").replace(/\D/g,"")
+        ? `<a class="btn sm" href="tel:${esc(String(c.phone).replace(/\D/g,""))}">📞 Call</a>` : ""}
       <button class="btn sm" data-edit-customer="${c.id}">Edit</button>
       <button class="x" data-close>×</button>
     </div>
@@ -3644,7 +5427,9 @@ function openCustomer(id){
           <div class="dl"><dt>Email</dt><dd>${esc(c.email)||"—"}</dd></div>
         </div>
         <div>
-          <div class="dl"><dt>Service address</dt><dd>${esc(c.address)||"—"}<br><span class="t-sub">${esc(c.city)}</span></dd></div>
+          <div class="dl"><dt>Service address</dt><dd>${esc(c.address)||"—"}<br>
+            <span class="t-sub">${esc(c.city)}</span>
+            <span class="zone-chip" style="margin-left:6px">${esc(Store.zone(c.zone).label)} · ${esc(Store.zone(c.zone).eta)}</span></dd></div>
           <div class="dl"><dt>Lifetime billed</dt><dd>${esc(money(billed))} · ${js.length} job${js.length===1?"":"s"}</dd></div>
         </div>
       </div>
@@ -3705,6 +5490,12 @@ function openCustomerForm(id){
         <div class="field"><label>Service address</label><input class="input" id="c-address" value="${esc(c?c.address:"")}"></div>
         <div class="field"><label>City</label><input class="input" id="c-city" value="${esc(c?c.city:"Edmonton")}"></div>
       </div>
+      <div class="field" style="max-width:320px"><label>Travel zone</label>
+        <select class="input" id="c-zone">
+          ${Store.zones().map(z => `<option value="${esc(z.id)}"${(c?c.zone:"city")===z.id?" selected":""}>${esc(z.label)} — ${esc(z.eta)}</option>`).join("")}
+        </select>
+        <div class="hint">Sets the travel time in their "on my way" text.</div>
+      </div>
       <div class="field"><label>Site notes</label>
         <textarea class="input" id="c-notes" placeholder="Gate codes, dogs, parking, billing quirks — anything the tech should know.">${esc(c?c.notes:"")}</textarea></div>
     </div>
@@ -3719,7 +5510,8 @@ function saveCustomerFromForm(id){
   if (!name){ $("#c-name").classList.add("invalid"); $("#c-name").focus(); return; }
   const fields = {
     name, phone:$("#c-phone").value.trim(), email:$("#c-email").value.trim(),
-    address:$("#c-address").value.trim(), city:$("#c-city").value.trim(), notes:$("#c-notes").value.trim()
+    address:$("#c-address").value.trim(), city:$("#c-city").value.trim(),
+    zone:$("#c-zone").value, notes:$("#c-notes").value.trim()
   };
   if (id){ Object.assign(Store.customer(id), fields); toast("Customer updated","ok"); }
   else { Store.data.customers.push(Object.assign({id:uid("cus"),createdAt:Date.now()}, fields)); toast("Customer added","ok"); }
@@ -3781,7 +5573,7 @@ function ticketHtml(j){
     <div class="tk-head">
       <div style="flex:1">
         <h1>${esc(s.company)}</h1>
-        <div>${esc(s.phone)}</div>
+        ${letterhead(s)}
       </div>
       <div style="text-align:right">
         <div style="font-size:22px;font-weight:700">Job #${j.no}</div>
@@ -3817,7 +5609,7 @@ function estimateDocHtml(e){
     <div class="ed-head">
       <div style="flex:1">
         <h1>${esc(st.company)}</h1>
-        <div>${esc(st.phone)}</div>
+        ${letterhead(st)}
       </div>
       <div style="text-align:right">
         <div style="font-size:22px;font-weight:700">Estimate</div>
@@ -3897,7 +5689,7 @@ function waiverDocHtml(w){
   return `
   <div class="wvdoc">
     <div class="wv-head">
-      <div style="flex:1"><h1>${esc(st.company)}</h1><div>${esc(st.phone)}</div></div>
+      <div style="flex:1"><h1>${esc(st.company)}</h1>${letterhead(st)}</div>
       <div style="text-align:right">
         <div style="font-size:15px;font-weight:700">${esc(w.title)}</div>
         <div>Ref W-${w.no}</div>
@@ -4020,8 +5812,15 @@ document.addEventListener("click", e => {
   if (hit("[data-close]")) return closeModal();
 
   /* --- navigation --- */
+  if (hit("[data-navsheet]")) return openNavSheet();
+  if (e.target.id === "nav-sheet") return closeNavSheet();
+
   const nav = hit("[data-nav]");
-  if (nav){ App.search = ""; $("#global-search").value = ""; return go(nav.dataset.nav); }
+  if (nav){
+    App.search = ""; $("#global-search").value = "";
+    closeNavSheet();
+    return go(nav.dataset.nav);
+  }
 
   /* --- schedule mode --- */
   const sm = hit("[data-smode]");
@@ -4046,7 +5845,12 @@ document.addEventListener("click", e => {
   if (adv){
     const j = Store.job(adv.dataset.advance);
     const n = NEXT_STATUS[j.status];
-    if (n){ Store.setStatus(j, n); render(); openJob(j.id); toast(`#${j.no} → ${STATUS_LABEL[n]}`, "ok"); }
+    if (!n) return;
+    Store.setStatus(j, n);
+    const inField = App.view === "today";
+    render();
+    if (!inField) openJob(j.id);          // on the field list, stay on the list
+    toast(`#${j.no} → ${STATUS_LABEL[n]}`, "ok");
     return;
   }
   const editJob = hit("[data-edit-job]");
@@ -4074,6 +5878,79 @@ document.addEventListener("click", e => {
     Store.save(); openJob(jid);
     return;
   }
+  /* --- the clock --- */
+  const clock = hit("[data-clock]");
+  if (clock){
+    const [dir, kind, id] = clock.dataset.clock.split(":");
+    const rec = Store.recordOf(kind, id);
+    if (dir === "in"){
+      const was = Store.running();
+      Store.clockIn(kind, id);
+      if (was && was.rec.id !== id)
+        toast(`Clocked out of ${was.kind === "estimate" ? "EST-" + was.rec.no : "#" + was.rec.no} first`, "ok");
+      else toast("Clock running", "ok");
+    } else {
+      Store.clockOut(kind, id);
+      toast(`Clocked out — ${fmtDur(Store.totalMs(rec))} on this one`, "ok");
+    }
+    render();
+    if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
+    return;
+  }
+  const conf = hit("[data-conflict]");
+  if (conf) return resolveConflict(conf.dataset.conflict);
+
+  const tEdit = hit("[data-edit-time]");
+  if (tEdit){ const [k,r,e] = tEdit.dataset.editTime.split(":"); return openTimeEdit(k, r, e); }
+  const tAdd = hit("[data-add-time]");
+  if (tAdd){ const [k,r] = tAdd.dataset.addTime.split(":"); return openTimeEdit(k, r, null); }
+  const tSave = hit("[data-save-time]");
+  if (tSave) return saveTimeEdit(tSave.dataset.saveTime);
+  const tDel = hit("[data-del-time]");
+  if (tDel){
+    const [k, r, e] = tDel.dataset.delTime.split(":");
+    if (!confirm("Remove this time entry?")) return;
+    Store.removeEntry(k, r, e);
+    render();
+    k === "estimate" ? openEstimate(r) : openJob(r);
+    return;
+  }
+
+  /* --- customer messages --- */
+  const mTpl = hit("[data-msg-tpl]");
+  if (mTpl){ MsgState.tplId = mTpl.dataset.msgTpl; MsgState.bump = 0; return renderMessageSheet(); }
+
+  const mBump = hit("[data-msg-bump]");
+  if (mBump){ MsgState.bump = Number(mBump.dataset.msgBump) || 0; return renderMessageSheet(); }
+
+  const mSend = hit("[data-msg-send]");
+  if (mSend){
+    const how = mSend.dataset.msgSend;
+    if (how === "copy"){
+      const ta = $("#msg-body");
+      ta.select();
+      const done = () => { logMessageSent("Copied message for"); toast("Copied — paste it wherever", "ok"); };
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(ta.value).then(done, () => {
+          try { document.execCommand("copy"); done(); } catch(_){ toast("Press Ctrl/Cmd+C to copy", "err"); }
+        });
+      } else {
+        try { document.execCommand("copy"); done(); } catch(_){ toast("Press Ctrl/Cmd+C to copy", "err"); }
+      }
+      return;
+    }
+    // The anchor's own href does the opening; just record that it happened.
+    logMessageSent(how === "text" ? "Texted" : "Emailed");
+    return;
+  }
+
+  const msgBtn = hit("[data-message]");
+  if (msgBtn){
+    const [jid, tpl] = msgBtn.dataset.message.split(":");
+    return openMessage(jid, tpl || null);
+  }
+  if (hit("[data-save-messages]")) return saveMessageSetup();
+
   const savePay = hit("[data-save-pay]");
   if (savePay){
     const j = Store.job(savePay.dataset.savePay);
@@ -4109,6 +5986,14 @@ document.addEventListener("click", e => {
     Store.save(); openJob(j.id); toast("Labor saved", "ok");
     return;
   }
+  const saveMat = hit("[data-save-matcost]");
+  if (saveMat){
+    const j = Store.job(saveMat.dataset.saveMatcost);
+    j.materialCost = Number($("#mat-cost").value) || 0;
+    Store.save(); openJob(j.id); toast("Parts cost saved", "ok");
+    return;
+  }
+
   const addNote = hit("[data-add-note]");
   if (addNote){
     const j = Store.job(addNote.dataset.addNote);
@@ -4126,6 +6011,9 @@ document.addEventListener("click", e => {
   }
 
   /* --- estimate actions --- */
+  const mRange = hit("[data-money-range]");
+  if (mRange){ App.moneyRange = Number(mRange.dataset.moneyRange); return render(); }
+
   const estF = hit("[data-est-filter]");
   if (estF){ App.estFilter = estF.dataset.estFilter; return render(); }
 
@@ -4218,6 +6106,8 @@ document.addEventListener("click", e => {
     t.archived = true; Store.save(); closeModal(); render(); toast("Template deleted");
     return;
   }
+  if (hit("[data-do-golive]")) return doGoLive();
+
   const saveT = hit("[data-save-template]");
   if (saveT) return saveTemplateFromForm(saveT.dataset.saveTemplate || null);
 
@@ -4307,6 +6197,16 @@ document.addEventListener("click", e => {
     case "new-price":    openPriceForm(null); break;
     case "export-est-csv": exportEstimatesCsv(); break;
     case "new-template":  openTemplateForm(null); break;
+    case "golive":        openGoLive(); break;
+    case "resync-demo": {
+      const from = Store.data.seededOn || Store.inferredSampleDay();
+      Store.shiftDemoDates(daysBetween(from, todayStr()));
+      Store.data.demo = true;          // so it re-anchors by itself from now on
+      Store.save(); render();
+      toast("Sample moved to today", "ok");
+      break;
+    }
+    case "edit-messages": openMessageSetup(); break;
     case "export-waivers": exportWaiversCsv(); break;
     case "new-customer": openCustomerForm(null); break;
     case "new-tech":     openTechForm(null); break;
@@ -4318,6 +6218,74 @@ document.addEventListener("click", e => {
       printJobs(Store.data.jobs.filter(j => j.scheduledDate === todayStr() && isOpen(j)), "today"); break;
     case "print-board":
       printJobs(Store.data.jobs.filter(j => j.scheduledDate === App.date && isOpen(j)), "this day"); break;
+    case "cloud-save": {
+      const url = $("#cl-url").value.trim().replace(/\/+$/, "");
+      const key = $("#cl-key").value.trim();
+      const err = $("#cl-err");
+      const fail = m => { err.textContent = m; err.style.display = "block"; };
+      if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(url)) return fail("That doesn't look like a project URL. It should start https:// and end .supabase.co");
+      if (!key) return fail("Paste the publishable key too.");
+      if (/^sb_secret_/.test(key) || /service_role/.test(key))
+        return fail("That's the secret key — it must never go in a browser. Use the publishable one.");
+      Cloud.cfg = { url, key, email:"", deviceId: Cloud.newDeviceId() };
+      Cloud.saveCfg();
+      Cloud.set("signed-out", "now sign in");
+      render();
+      break;
+    }
+    case "cloud-signin": {
+      const email = $("#cl-email").value.trim();
+      const pass  = $("#cl-pass").value;
+      const err = $("#cl-err");
+      err.style.display = "none";
+      if (!email || !pass){ err.textContent = "Email and password, please."; err.style.display = "block"; break; }
+      const btn = hit("[data-action]");
+      if (btn){ btn.disabled = true; btn.textContent = "Signing in…"; }
+      Cloud.signingIn = true;
+      Cloud.cfg.email = email; Cloud.saveCfg();   // so a later render keeps it
+      Cloud.set("syncing", "signing in…");
+
+      Cloud.signIn(email, pass)
+        .then(() => Cloud.syncNow())
+        .then(() => {
+          Cloud.signingIn = false;
+          render();
+          toast("Signed in — this shop is syncing", "ok");
+        })
+        .catch(e => {
+          // Leave the form exactly as typed; only the message changes.
+          Cloud.signingIn = false;
+          Cloud.state = "signed-out"; Cloud.detail = "";
+          if (btn){ btn.disabled = false; btn.textContent = "Sign in"; }
+          const el = $("#cl-err");
+          if (el){
+            el.textContent =
+              e.offline && e.framed
+                ? "This copy of the app can't reach the internet. A preview link runs in a "
+                  + "sandbox that blocks outside connections — open the app from its own web "
+                  + "address and sign in there."
+              : e.offline
+                ? "Couldn't reach the project — check the URL and your connection."
+              : /invalid/i.test(e.message || "")
+                ? "Email or password not accepted. If you just created this user, check "
+                  + "\"Auto Confirm User\" was ticked in Supabase."
+              : (e.message || "Sign in failed.");
+            el.style.display = "block";
+          }
+        });
+      break;
+    }
+    case "cloud-sync": Cloud.syncNow().then(render); break;
+    case "cloud-signout":
+      if (confirm("Sign out on this device? The shop stays here, it just stops syncing.")){
+        Cloud.signOut(); render();
+      }
+      break;
+    case "cloud-forget":
+      if (confirm("Disconnect from this project? Nothing on the server is deleted and this device keeps its copy.")){
+        Cloud.disconnect(); render();
+      }
+      break;
     case "export":     exportJson(); break;
     case "export-csv": exportCsv(); break;
     case "import":     $("#import-file").click(); break;
@@ -4325,6 +6293,10 @@ document.addEventListener("click", e => {
       const s = Store.data.settings;
       s.company = $("#set-company").value.trim() || "Poseidon Plumbing & Gasfitting Ltd.";
       s.phone   = $("#set-phone").value.trim();
+      s.email   = $("#set-email").value.trim();
+      s.website = $("#set-website").value.trim().replace(/^https?:\/\//, "");
+      s.address = $("#set-address").value.trim();
+      s.gst     = $("#set-gst").value.trim();
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");
       break;
@@ -4406,8 +6378,24 @@ $("#btn-new-estimate").addEventListener("click", () => openEstimateForm(null));
    ============================================================ */
 Store.load();
 App.date = todayStr();
+Cloud.loadCfg();
 render();
-$("#storage-note").textContent = `${Store.data.jobs.length} jobs · saved on this device`;
+renderSync();
+function renderStorageNote(){
+  const n = Store.data.jobs.length;
+  const synced = Cloud.configured() && Cloud.cfg.refreshToken;
+  $("#storage-note").textContent = `${n} job${n===1?"":"s"} · ${synced ? "synced" : "saved on this device"}`;
+}
+renderStorageNote();
+Cloud.onChange(renderStorageNote);
+
+Cloud.boot();
+
+/* Coming back to the app is the moment another device's work should land. */
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") Cloud.syncNow({ quiet:true });
+});
+window.addEventListener("online", () => Cloud.syncNow({ quiet:true }));
 </script>
 </body>
 </html>

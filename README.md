@@ -3,6 +3,15 @@
 A dispatch board for the office: take service calls, put jobs on the schedule,
 assign technicians, and track each job from the phone call to a signed ticket.
 
+## Going live
+
+The app ships loaded with a sample shop so it demos well. **Data & Setup →
+Set up for real jobs** clears it: the demo customers, jobs, estimates and signed
+waivers go, your **price book and waiver templates stay** (edit those, don't
+retype them), and you're set up as the first technician with your own rate. Job
+numbering can start wherever you like, so it can continue from work you've
+already invoiced by hand.
+
 ## Brand colours
 
 Service area is Edmonton, Alberta — the sample customers, phone numbers and
@@ -26,6 +35,29 @@ connection required.
 
 **Dashboard** — today at a glance: job counts, open emergencies, anything still
 without a technician, and the day laid out tech by tech.
+
+**Today** — the field view, and where the app opens. Your run for the day as a
+list of stops: arrival window, customer, address, what's wrong, and the site
+notes that matter before you knock. Tap to call, tap for directions, sign a
+waiver, and move the job along with one button that says what actually happens
+next — *On my way*, *I'm here*, *Mark done*. Anything still owed from earlier
+in the week sits at the bottom. On a phone the sidebar becomes a bottom bar and
+everything else lives behind **More**.
+
+**Customer messages** — four short texts: *Booked*, *On my way*, *Running late*,
+*Finished*. The app writes the message and hands it to your phone, so it sends
+from **your own number** and a reply comes back to you. No texting service, no
+monthly fee, nothing to break.
+
+Travel time comes from a **zone** on the customer record — Edmonton, Greater
+Edmonton, Out of area — so the message states one clean time instead of hedging.
+Running behind? Tap **+15** or **+30** before you send and the wording follows
+("about 30 minutes" becomes "about an hour"). Every message is editable before
+it goes, and there's a Copy button for desktop or for pasting elsewhere.
+
+Messages use a short trading name; waivers, estimates and tickets keep the full
+legal name. Templates, zone names and travel times are all editable under
+**Data & Setup → Customer messages**.
 
 **Schedule** — three views of the same work, switched from the toolbar:
 
@@ -98,14 +130,82 @@ Deactivating a tech takes their column off the board without touching their jobs
 problem, site notes, room to write up the work, and a signature line. Print the
 whole day from the dashboard or any single job from its detail view.
 
+**Clock in / clock out** — a button on every stop on Today, and on every job
+and estimate record. Hit it when you get there, hit it when you leave. A green
+bar sits across the top of the app the whole time it's running so you can't
+forget it's going; if it's been running more than eight hours it turns amber and
+asks whether you forgot to clock out.
+
+Only one clock runs at a time — starting one stops the other and writes a line
+saying so. Entries are listed on the record and every one can be corrected or
+deleted, because forgetting to clock out is the normal failure mode, not the
+exception. There's an **Add time by hand** button for the trip you didn't clock
+at all.
+
+Multiple trips to the same job stack up: you see each one and a total. Time
+spent quoting an estimate stays on the estimate, and if that estimate becomes a
+job, the job shows **on site**, **plus quoting it**, and an **all in** total.
+
+**Time & Money** — what the clock is for. Pick a window (30 days, 3 months, 6
+months, 1 year, all) and it shows, per type of work: how many you did, hours
+spent, average time per job, what you billed, and **what you actually earn an
+hour** — coloured green, amber or red against the target rate in Data & Setup.
+Worst rate first, because that's the row that needs the price change. Under the
+table it tells you in dollars what the thinnest work would have to charge to hit
+your target.
+
+It also totals the hours you spend quoting, and how many of those went into
+quotes you lost — priced at your own rate, because that's real money.
+
+Two honest limits, both of which the view states on screen:
+
+- Under five finished jobs it says so and tells you not to re-price off that
+  little. Early numbers are noise.
+- The hourly figure is gross until you tell it what parts cost you. A water
+  heater will always look like a fantastic hour while the tank's price is
+  sitting in the billed column. There's an optional **"What the parts cost
+  you"** box on each job; fill it in and the table switches to what you kept.
+  Even then it isn't profit — fuel, insurance, the truck and unbilled hours all
+  still come out of it.
+
 **Search** — the box at the top finds jobs, estimates and customers by name, address,
 email, job number, job type, description, or phone number (digits only work
 fine, so `5550231` matches `(435) 555-0231`).
 
+## Sync across your devices
+
+Off by default. The app works fine without it — this only matters once you're
+entering real work.
+
+Connect a free Supabase project (**Data & Setup → Sync across your devices**)
+and every device you sign in on keeps the same shop, backed up off the phone.
+Full setup is in [SUPABASE.md](SUPABASE.md); it takes about ten minutes once,
+and the SQL to paste in is [supabase-setup.sql](supabase-setup.sql).
+
+How it behaves:
+
+- Changes go up a couple of seconds after you stop typing. Coming back to the
+  app pulls down anything another device did.
+- **It works with no signal.** Edits are kept on the device and go up when
+  you're back in range. Nothing is lost in a basement.
+- **If two devices changed the same shop, it stops and asks.** It never picks
+  for you and never silently overwrites. Whichever copy you don't keep is
+  downloaded first, so it's always recoverable.
+- The server keeps the **last 30 versions** automatically.
+
+Your keys are typed into the app on your own devices and stored there. They are
+not in this repo and not in the published link, so nobody holding that link can
+reach your data. Row-level security ties every row to your login, so even the
+publishable key is useless to anyone without your password.
+
+This is sync, not multi-user — everyone signing in with that one login shares
+one shop. The day you hire someone, this needs revisiting.
+
 ## Where the data lives
 
-In this browser, on this device, in `localStorage` — nothing is uploaded
-anywhere. Two consequences worth knowing:
+In this browser, on this device, in `localStorage`. With sync switched on there
+is also a copy in your own Supabase project; with it off, nothing is uploaded
+anywhere. Two consequences worth knowing when it's off:
 
 - Each computer has its own separate copy. The office machine and a laptop will
   not see the same board.
@@ -130,6 +230,17 @@ Under Data & Setup: company name and office phone (both appear on printed
 tickets) and the default labor rate used to price new jobs. Existing jobs keep
 whatever rate they were created with, so changing the rate never rewrites
 history.
+
+Name, phone, business email, website, business address and GST registration
+number. Everything except the name and phone is optional, and each one prints
+on dispatch tickets, estimates and signed waivers only once it's filled in — a
+shop with no website yet doesn't print an empty line.
+
+The GST number belongs there once you're registered: an invoice has to show it
+before a customer can claim the tax back. Leave the business address blank if
+you'd rather not print your home address on documents.
+
+Waiver bodies can merge in `{{company_email}}` alongside `{{company_phone}}`.
 
 ## Status flow
 
