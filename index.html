@@ -106,11 +106,17 @@ nav button .count.alert{background:var(--amber);color:#fff}
 .nav-sheet.open{
   display:flex;position:fixed;inset:0;z-index:70;background:rgba(10,42,66,.5);
   align-items:flex-end;
+  /* without this a drag on the sheet scrolls the page underneath it */
+  overscroll-behavior:contain;touch-action:none;
 }
 .nav-sheet .sheet{
   background:#fff;width:100%;border-radius:14px 14px 0 0;padding:10px 10px
   calc(14px + env(safe-area-inset-bottom,0px));max-height:76vh;overflow:auto;
+  overscroll-behavior:contain;touch-action:pan-y;
+  will-change:transform;
 }
+.nav-sheet .sheet.settling{transition:transform .2s ease-out}
+@media (prefers-reduced-motion:reduce){.nav-sheet .sheet.settling{transition:none}}
 .nav-sheet .sheet h4{
   font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
   padding:12px 12px 6px;margin:0;
@@ -121,7 +127,12 @@ nav button .count.alert{background:var(--amber);color:#fff}
 }
 .nav-sheet .sheet button:hover{background:var(--bg)}
 .nav-sheet .sheet button .ico{width:22px;text-align:center;font-size:17px}
-.nav-sheet .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:6px auto 2px}
+.nav-sheet .grabzone{
+  padding:10px 0 8px;margin:-10px -10px 0;cursor:grab;touch-action:none;
+  display:block;width:calc(100% + 20px);border:0;background:none;
+}
+.nav-sheet .grabzone:active{cursor:grabbing}
+.nav-sheet .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto}
 
 /* ---------- Today: the field view ---------- */
 .today-head{
@@ -1038,7 +1049,21 @@ const Cloud = {
     try { this.cfg = JSON.parse(localStorage.getItem(CLOUD_KEY) || "null"); }
     catch(e){ this.cfg = null; }
     if (this.cfg && !this.cfg.deviceId) this.cfg.deviceId = this.newDeviceId();
+    // Changes this device made but never managed to send, carried across a
+    // restart. Without it, closing the app seconds after an edit meant the
+    // next open pulled the server's older copy over the top of that edit.
+    this.dirty = !!(this.cfg && this.cfg.unsent);
+    if (this.cfg && this.cfg.baseRev) this.baseRev = this.cfg.baseRev;
     this.state = this.cfg ? "signed-out" : "off";
+  },
+
+  /* Both halves of "what this device owes the server" are written down. */
+  noteUnsent(v){
+    this.dirty = v;
+    if (!this.cfg) return;
+    this.cfg.unsent = v;
+    this.cfg.baseRev = this.baseRev;
+    this.saveCfg();
   },
   saveCfg(){
     try { localStorage.setItem(CLOUD_KEY, JSON.stringify(this.cfg)); } catch(e){}
@@ -1116,7 +1141,7 @@ const Cloud = {
   },
 
   signOut(){
-    this.token = null; this.tokenExp = 0; this.uid = null; this.baseRev = 0;
+    this.token = null; this.tokenExp = 0; this.uid = null; this.baseRev = 0; this.dirty = false;
     if (this.cfg){ delete this.cfg.refreshToken; this.saveCfg(); }
     this.set("signed-out");
   },
@@ -1170,7 +1195,7 @@ const Cloud = {
 
     Store.adopt(row.data);
     this.baseRev = row.rev;
-    this.dirty = false;
+    this.noteUnsent(false);
     return { pulled:true, rev: row.rev };
   },
 
@@ -1180,7 +1205,7 @@ const Cloud = {
 
     if (!this.baseRev){
       const row = await this.fetchRow();
-      if (!row){ await this.createRow(); this.dirty = false; return { created:true }; }
+      if (!row){ await this.createRow(); this.noteUnsent(false); return { created:true }; }
       this.baseRev = row.rev;
     }
     if (force){
@@ -1193,14 +1218,14 @@ const Cloud = {
       const row = await this.fetchRow();
       return { conflict:true, remote:row };
     }
-    this.dirty = false;
+    this.noteUnsent(false);
     return { pushed:true, rev: this.baseRev };
   },
 
   /* Called from Store.save(). Batches a burst of edits into one write. */
   markDirty(){
     if (!this.configured() || !this.cfg.refreshToken) return;
-    this.dirty = true;
+    this.noteUnsent(true);
     clearTimeout(this.pushTimer);
     this.pushTimer = setTimeout(() => this.syncNow({ quiet:true }), 2500);
     if (this.state === "synced") this.set("syncing", "saving…");
@@ -1319,7 +1344,7 @@ const Store = {
     this.data = data;
     this.backfill();
     this.saveLocal();
-    if (typeof render === "function") render();
+    if (typeof renderQuiet === "function") renderQuiet();
   },
 
   saveLocal(){
@@ -2341,7 +2366,7 @@ function openNavSheet(){
   ];
   const sheet = $("#nav-sheet");
   sheet.innerHTML = `<div class="sheet">
-    <div class="grab"></div>
+    <button class="grabzone" data-action="close-sheet" aria-label="Close menu"><span class="grab"></span></button>
     ${groups.map(([label, ids]) => `<h4>${esc(label)}</h4>` + ids.map(id => {
       const v = VIEWS.find(x => x.id === id);
       return `<button data-nav="${id}"><span class="ico">${v.icon}</span>${esc(v.label)}</button>`;
@@ -2349,12 +2374,57 @@ function openNavSheet(){
   </div>`;
   sheet.hidden = false;
   sheet.classList.add("open");
+  wireSheetDrag(sheet);
 }
 function closeNavSheet(){
   const sheet = $("#nav-sheet");
   if (!sheet) return;
   sheet.classList.remove("open");
   sheet.hidden = true;
+  const inner = sheet.querySelector(".sheet");
+  if (inner){ inner.style.transform = ""; inner.classList.remove("settling"); }
+}
+
+/* Drag the handle down to dismiss. The handle looked draggable long before
+   it was, which is worse than not having one. */
+function wireSheetDrag(sheet){
+  const inner = sheet.querySelector(".sheet");
+  const grab = sheet.querySelector(".grabzone");
+  if (!inner || !grab) return;
+  let startY = null, dy = 0;
+
+  const move = e => {
+    if (startY === null) return;
+    dy = Math.max(0, e.clientY - startY);
+    inner.style.transform = `translateY(${dy}px)`;
+  };
+  const end = () => {
+    if (startY === null) return;
+    startY = null;
+    inner.classList.add("settling");
+    // a drag that ends also fires a click; the handle is a close button, so
+    // without this a short drag would spring back and then close anyway
+    if (dy > 4){
+      grab.addEventListener("click", ev => {
+        ev.stopPropagation(); ev.preventDefault();
+      }, { capture:true, once:true });
+    }
+    if (dy > 70){ closeNavSheet(); }
+    else { inner.style.transform = "translateY(0)"; }
+    setTimeout(() => inner.classList.remove("settling"), 220);
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+  };
+
+  grab.addEventListener("pointerdown", e => {
+    startY = e.clientY; dy = 0;
+    inner.classList.remove("settling");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    e.preventDefault();
+  });
 }
 
 function go(view){
@@ -2433,6 +2503,30 @@ const SYNC_WORDS = {
   "error":      d => d || "Sync problem"
 };
 
+/* Is somebody part-way through typing into the view render() would rebuild?
+   On a phone the sync state changes constantly — the signal flickers, the
+   keyboard opens, the app is switched away from — and every one of those
+   used to wipe whatever was half-typed and drop focus. */
+function viewHasLiveInput(){
+  const el = document.activeElement;
+  if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return false;
+  return !!el.closest("#view");
+}
+
+/* A render skipped for that reason is owed, and gets paid once the field is
+   let go of, so the view doesn't sit showing stale data forever. Anything
+   the user did not just ask for goes through here rather than render(). */
+let renderOwed = false;
+function renderQuiet(){
+  if (viewHasLiveInput()){ renderOwed = true; return; }
+  render();
+}
+document.addEventListener("focusout", () => {
+  setTimeout(() => {
+    if (renderOwed && !viewHasLiveInput()){ renderOwed = false; render(); }
+  }, 80);
+});
+
 function renderSync(){
   const pill = $("#sync-pill"), txt = $("#sync-text");
   if (!pill) return;
@@ -2440,9 +2534,8 @@ function renderSync(){
   pill.hidden = false;
   pill.className = "sync " + Cloud.state;
   txt.textContent = SYNC_WORDS[Cloud.state](Cloud.detail);
-  // Re-rendering Data & Setup rebuilds the sign-in form from scratch, which
-  // throws away whatever is half-typed in it. Hold still while it's in use.
-  if (App.view === "data" && !Cloud.signingIn) render();
+  if (App.view !== "data" || Cloud.signingIn) return;
+  renderQuiet();
 }
 
 /* Two devices changed the same shop. Never pick for him, and never throw
@@ -6307,6 +6400,7 @@ document.addEventListener("click", e => {
         Cloud.disconnect(); render();
       }
       break;
+    case "close-sheet": closeNavSheet(); break;
     case "export":     exportJson(); break;
     case "export-csv": exportCsv(); break;
     case "import":     $("#import-file").click(); break;
