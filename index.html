@@ -581,6 +581,30 @@ textarea.input{resize:vertical;min-height:76px}
 .toolbar select,.toolbar input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
 .filter-note{font-size:12.5px;color:var(--muted)}
 
+/* ---------- Invoice preview ----------
+   Deliberately the same rules as the print stylesheet, so what he checks on
+   screen is what comes out of the PDF. */
+.inv-preview{background:#fff;color:#111;padding:22px 20px;border-radius:8px;font-size:12.5px;line-height:1.5}
+.inv-preview h1{font-size:20px;margin:0 0 2px}
+.inv-preview .inv-head{border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:16px;display:flex;gap:12px}
+.inv-preview .doc-logo{width:54px;height:54px;flex:0 0 54px;border-radius:50%;background:var(--logo) center/cover no-repeat}
+.inv-preview .inv-meta{width:100%;border-collapse:collapse;margin-bottom:14px}
+.inv-preview .inv-meta td{padding:5px 4px;border-bottom:1px solid #e3e3e3;vertical-align:top}
+.inv-preview .inv-desc{margin:0 0 14px}
+.inv-preview .inv-lines{width:100%;border-collapse:collapse;margin-top:6px}
+.inv-preview .inv-lines th,.inv-preview .inv-lines td{border-bottom:1px solid #ddd;padding:7px 4px}
+.inv-preview .inv-lines th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#555}
+.inv-preview .inv-lines .num{text-align:right;font-variant-numeric:tabular-nums}
+.inv-preview .inv-lines tfoot td{border-bottom:0;padding-top:7px}
+.inv-preview .inv-lines tr.tot td{font-weight:700;font-size:15px;border-top:2px solid #111}
+.inv-preview .inv-pay{margin:16px 0 0;padding:9px 11px;border:1px solid #bbb;word-break:break-all}
+.inv-preview .inv-sec{font-weight:700;margin:20px 0 8px;border-bottom:1px solid #111;padding-bottom:3px}
+.inv-preview .inv-grid{display:flex;gap:12px;flex-wrap:wrap}
+.inv-preview .inv-grid figure{margin:0;width:46%;min-width:120px}
+.inv-preview .inv-grid img{width:100%;height:auto;border:1px solid #bbb;display:block}
+.inv-preview .inv-grid figcaption{font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:3px;color:#555}
+.inv-preview .inv-note{margin-top:20px;font-size:11.5px;color:#444}
+
 /* ---------- Waiting-to-sync strip ---------- */
 .waiting{
   display:flex;align-items:flex-start;gap:9px;margin-bottom:14px;padding:11px 13px;
@@ -777,6 +801,25 @@ textarea.input{resize:vertical;min-height:76px}
   .wvdoc li{margin-bottom:5px}
   .wvdoc .wv-sig{margin-top:22px;border-top:2px solid #000;padding-top:12px;display:flex;gap:30px;align-items:flex-end}
   .wvdoc .wv-sig img{max-height:70px;border-bottom:1px solid #000}
+  .invdoc{page-break-after:always;padding:28px 4px;font-size:12.5px}
+  .invdoc h1{font-size:20px}
+  .invdoc .inv-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px;display:flex}
+  .invdoc .inv-meta{width:100%;border-collapse:collapse;margin-bottom:14px}
+  .invdoc .inv-meta td{padding:4px 4px;border-bottom:1px solid #ddd;vertical-align:top}
+  .invdoc .inv-desc{margin:0 0 14px;line-height:1.55}
+  .invdoc .inv-lines{width:100%;border-collapse:collapse;margin-top:6px}
+  .invdoc .inv-lines th,.invdoc .inv-lines td{border-bottom:1px solid #ccc;padding:6px 4px}
+  .invdoc .inv-lines th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  .invdoc .inv-lines .num{text-align:right}
+  .invdoc .inv-lines tfoot td{border-bottom:0;padding-top:7px}
+  .invdoc .inv-lines tr.tot td{font-weight:700;font-size:15px;border-top:2px solid #000}
+  .invdoc .inv-pay{margin:16px 0 0;padding:9px 11px;border:1px solid #999;word-break:break-all}
+  .invdoc .inv-sec{font-weight:700;margin:22px 0 8px;border-bottom:1px solid #000;padding-bottom:3px}
+  .invdoc .inv-grid{display:flex;gap:12px;flex-wrap:wrap}
+  .invdoc .inv-grid figure{margin:0;width:46%}
+  .invdoc .inv-grid img{width:100%;height:auto;border:1px solid #999}
+  .invdoc .inv-grid figcaption{font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding-top:3px}
+  .invdoc .inv-note{margin-top:22px;font-size:11.5px;color:#333;line-height:1.6}
   .estdoc{page-break-after:always;padding:28px 4px}
   .estdoc h1{font-size:20px}
   .estdoc .ed-head{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px;display:flex}
@@ -1580,11 +1623,14 @@ const Store = {
       } catch(e){ console.warn("Saved data was unreadable; starting fresh.", e); }
     }
     this.data = seedData();
+    this.backfill();        // a new shop needs the same defaults an old one gets
     this.save();
   },
 
   /* Everything a shop needs to have, whatever version it was written by and
-     wherever it came from — this device, a backup file, or another device. */
+     wherever it came from — this device, a backup file, or another device.
+     Called for a fresh seed too: anything added here after seedData() was
+     written would otherwise never exist on a new device. */
   backfill(){
     this.data.techs     = this.data.techs     || [];
     this.data.customers = this.data.customers || [];
@@ -1602,6 +1648,12 @@ const Store = {
     ["email","website","address","gst"].forEach(k => {
       if (this.data.settings[k] == null) this.data.settings[k] = "";
     });
+    // Added with invoicing. GST only ever applies when a number is on file.
+    if (this.data.settings.gstRate == null) this.data.settings.gstRate = 5;
+    if (this.data.settings.invoiceTerms == null) this.data.settings.invoiceTerms = 15;
+    if (this.data.settings.invoiceNote == null)
+      this.data.settings.invoiceNote = "Thanks very much for the work.";
+    this.data.counterInv = this.data.counterInv || 1000;
     this.data.settings.zones    = this.data.settings.zones    || defaultZones();
     this.data.settings.messages = this.data.settings.messages || defaultMessages();
     this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
@@ -1738,6 +1790,7 @@ const Store = {
       waiverTemplates: templates,
       liveSince: Date.now()
     };
+    this.backfill();
     this.save();
   },
 
@@ -2152,7 +2205,7 @@ const Store = {
   /* Payment tracking. Deliberately manual: Stripe (or whoever) stays the system
      of record, this just indexes it so the office can see what's outstanding. */
   balance(job){
-    return Math.max(0, this.jobTotal(job) - (Number(job.payment && job.payment.amountPaid) || 0));
+    return Math.max(0, this.invoiceTotal(job) - (Number(job.payment && job.payment.amountPaid) || 0));
   },
   payState(job){
     const pay = job.payment || blankPayment();
@@ -2186,6 +2239,36 @@ const Store = {
   },
 
   /* Waivers — templates, and the frozen record of what someone actually signed. */
+  /* An invoice number is assigned once and then never moves, because it has
+     been sent to somebody and may be sitting in their books. */
+  invoiceNoFor(job){
+    if (!job.invoiceNo){
+      this.data.counterInv = (this.data.counterInv || 1000) + 1;
+      job.invoiceNo = this.data.counterInv;
+      job.invoicedOn = job.invoicedOn || todayStr();
+      this.save();
+    }
+    return job.invoiceNo;
+  },
+
+  /* Tax appears only once there is a registration number to print beside it.
+     Charging GST without being registered is not a formatting mistake. */
+  taxRate(){
+    const st = this.data.settings;
+    return st.gst ? (Number(st.gstRate) || 0) / 100 : 0;
+  },
+  taxOn(job){ return Math.round(this.jobTotal(job) * this.taxRate() * 100) / 100; },
+
+  /* What he earns is jobTotal and stays pre-tax, because GST is not revenue
+     and Time & Money would lie if it counted. What the customer owes is this. */
+  invoiceTotal(job){ return Math.round((this.jobTotal(job) + this.taxOn(job)) * 100) / 100; },
+
+  invoiceDue(job){
+    const days = Number(this.data.settings.invoiceTerms);
+    if (!days || !job.invoicedOn) return null;
+    return addDays(job.invoicedOn, days);
+  },
+
   nextWaiverNo(){
     this.data.counterWaiver = (this.data.counterWaiver || 5000) + 1;
     return this.data.counterWaiver;
@@ -4380,6 +4463,18 @@ function viewData(){
             <input class="input" id="set-address" value="${esc(d.settings.address)}"
                    placeholder="Leave blank if you'd rather not print your home address">
             <div class="hint">Printed on tickets, estimates and signed waivers when filled in.</div></div>
+          <div class="row3">
+            <div class="field"><label>GST rate (%)</label>
+              <input class="input" id="set-gstrate" type="number" min="0" step="0.5"
+                     value="${esc(d.settings.gstRate)}">
+              <div class="hint">5% in Alberta. Only charged once a number is on file below.</div></div>
+            <div class="field"><label>Payment due in (days)</label>
+              <input class="input" id="set-terms" type="number" min="0" step="1"
+                     value="${esc(d.settings.invoiceTerms)}"></div>
+            <div class="field"><label>Note on invoices</label>
+              <input class="input" id="set-invnote" value="${esc(d.settings.invoiceNote)}"
+                     placeholder="Thanks very much for the work."></div>
+          </div>
           <div class="field" style="max-width:260px"><label>GST registration number</label>
             <input class="input" id="set-gst" value="${esc(d.settings.gst)}" placeholder="123456789 RT0001">
             <div class="hint">Required on invoices once you're registered, so customers can
@@ -4626,6 +4721,7 @@ function openJob(id){
         ${c ? `<button class="btn sm" data-message="${j.id}">💬 Message customer</button>` : ""}
         <button class="btn sm" data-edit-job="${j.id}">Edit details</button>
         <button class="btn sm" data-print-job="${j.id}">🖨 Ticket</button>
+        <button class="btn sm primary" data-invoice="${j.id}">🧾 Invoice</button>
       </div>
 
       <div class="detail-grid">
@@ -5751,6 +5847,50 @@ function waitingStrip(){
   </div>`;
 }
 
+/* Show him the customer's copy before it goes anywhere. */
+async function previewInvoice(id){
+  const j = Store.job(id);
+  if (!j) return;
+  const missing = [];
+  if (!Store.jobTotal(j)) missing.push("there are no line items or labour on it yet");
+  if (!Store.customer(j.customerId)) missing.push("it isn't attached to a customer");
+
+  const body = missing.length ? "" : await invoiceDocHtml(j);
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">What the customer sees</div>
+        <h2>Invoice${j.invoiceNo ? " INV-" + esc(j.invoiceNo) : ""}</h2></div>
+      <div class="spacer"></div><button class="x" data-close>&times;</button>
+    </div>
+    <div class="modal-body" style="background:var(--sunk)">
+      ${missing.length
+        ? `<div class="legal-note" style="margin:0">
+             <strong>Not ready to invoice:</strong> ${esc(missing.join(", and "))}.
+             Fill that in on the job and come back.
+           </div>`
+        : `<div class="inv-preview">${body}</div>`}
+    </div>
+    <div class="modal-foot">
+      ${missing.length ? "" : `
+        <button class="btn primary" data-inv-print="${j.id}">Save as PDF / Print</button>
+        <span class="t-sub">Share &rarr; Save to Files, then text or email it</span>`}
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+    </div>`, { wide:true, noFocus:true });
+}
+
+async function printInvoice(id){
+  const j = Store.job(id);
+  if (!j) return;
+  $("#print-area").innerHTML = await invoiceDocHtml(j);
+  // give the photos a moment to decode, or they print as empty boxes
+  const imgs = $$("#print-area img");
+  await Promise.all(imgs.map(i => i.complete ? null : new Promise(r => {
+    i.onload = r; i.onerror = r; setTimeout(r, 1500);
+  })));
+  window.print();
+}
+
 /* ---------- Photos, shared by jobs and estimates ----------
    Thumbnails fill in after the panel draws, because reading a blob out of
    IndexedDB is asynchronous and the record should not wait on it. */
@@ -6531,6 +6671,129 @@ function ticketHtml(j){
   </div>`;
 }
 
+/* The invoice. Everything the customer should see about the job in one
+   document: what was wrong, what was done, what it cost, the before and
+   after, and what they signed. Photo sources are resolved before it is
+   built, because an <img> that is still loading prints as a blank box. */
+async function invoiceDocHtml(j){
+  const st = Store.data.settings;
+  const c = Store.customer(j.customerId);
+  const parts = j.parts || [];
+  const partsTotal = parts.reduce((s,p) => s + (Number(p.qty)||0)*(Number(p.price)||0), 0);
+  const laborTotal = (Number(j.laborHours)||0) * (Number(j.laborRate)||0);
+  const sub = Store.jobTotal(j);
+  const tax = Store.taxOn(j);
+  const total = Store.invoiceTotal(j);
+  const paid = Number(j.payment && j.payment.amountPaid) || 0;
+  const due = Math.max(0, total - paid);
+  const no = Store.invoiceNoFor(j);
+  const dueDate = Store.invoiceDue(j);
+
+  // only the labelled ones — a photo of a model plate is for him, not them
+  const shots = Store.photosOf(j).filter(p => p.tag);
+  const withUrls = [];
+  for (const p of shots){
+    let url = await Photos.localUrl(p.id);
+    if (!url && p.up && Cloud.configured() && Cloud.cfg.refreshToken){
+      try { url = await Cloud.signPhoto(p.path, 3600); } catch(e){ url = null; }
+    }
+    if (url) withUrls.push({ p, url });
+  }
+  const signed = Store.signedForJob(j.id);
+
+  return `
+  <div class="invdoc">
+    <div class="inv-head">
+      <div class="doc-logo" aria-hidden="true"></div>
+      <div style="flex:1">
+        <h1>${esc(st.company)}</h1>
+        ${letterhead(st)}
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:24px;font-weight:700;letter-spacing:-.01em">INVOICE</div>
+        <div>INV-${esc(no)}</div>
+        <div>${esc(fmtDate(j.invoicedOn, { month:"long", day:"numeric", year:"numeric" }))}</div>
+      </div>
+    </div>
+
+    <table class="inv-meta">
+      <tr>
+        <td style="width:50%" valign="top">
+          <strong>Billed to</strong><br>
+          ${esc(c ? c.name : "—")}<br>
+          ${c && c.address ? esc(c.address) + "<br>" : ""}
+          ${c && c.city ? esc(c.city) + "<br>" : ""}
+          ${c && c.phone ? esc(fmtPhone(c.phone)) : ""}
+        </td>
+        <td valign="top">
+          <strong>Work done</strong><br>
+          ${esc(j.type)} &middot; Job #${esc(j.no)}<br>
+          ${j.scheduledDate ? esc(fmtDateLong(j.scheduledDate)) : ""}<br>
+          ${dueDate ? `<strong>Payment due ${esc(fmtDate(dueDate, { month:"long", day:"numeric" }))}</strong>` : ""}
+        </td>
+      </tr>
+    </table>
+
+    ${j.description ? `<p class="inv-desc"><strong>What was wrong:</strong> ${esc(j.description)}</p>` : ""}
+
+    <table class="inv-lines">
+      <thead><tr>
+        <th>Description</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th>
+      </tr></thead>
+      <tbody>
+        ${parts.map(pt => `<tr>
+          <td>${esc(pt.desc)}</td>
+          <td class="num">${esc(pt.qty)}</td>
+          <td class="num">${esc(money(pt.price))}</td>
+          <td class="num">${esc(money((Number(pt.qty)||0)*(Number(pt.price)||0)))}</td>
+        </tr>`).join("")}
+        ${laborTotal ? `<tr>
+          <td>Labour</td>
+          <td class="num">${esc(j.laborHours)} hr</td>
+          <td class="num">${esc(money(j.laborRate))}</td>
+          <td class="num">${esc(money(laborTotal))}</td>
+        </tr>` : ""}
+      </tbody>
+      <tfoot>
+        <tr><td colspan="3" class="num">Subtotal</td><td class="num">${esc(money(sub))}</td></tr>
+        ${tax ? `<tr><td colspan="3" class="num">GST ${esc(Number(st.gstRate))}%</td>
+                     <td class="num">${esc(money(tax))}</td></tr>` : ""}
+        <tr class="tot"><td colspan="3" class="num">Total</td><td class="num">${esc(money(total))}</td></tr>
+        ${paid ? `<tr><td colspan="3" class="num">Received</td><td class="num">−${esc(money(paid))}</td></tr>
+                  <tr class="tot"><td colspan="3" class="num">Balance due</td>
+                      <td class="num">${esc(money(due))}</td></tr>` : ""}
+      </tfoot>
+    </table>
+
+    ${j.payment && j.payment.url ? `
+      <p class="inv-pay"><strong>To pay:</strong> ${esc(j.payment.url)}</p>` : ""}
+
+    ${withUrls.length ? `
+      <div class="inv-shots">
+        <div class="inv-sec">The work</div>
+        <div class="inv-grid">
+          ${withUrls.map(({p,url}) => `
+            <figure>
+              <img src="${esc(url)}" alt="${esc(p.tag)}">
+              <figcaption>${esc(p.tag)}</figcaption>
+            </figure>`).join("")}
+        </div>
+      </div>` : ""}
+
+    ${signed.length ? `
+      <div class="inv-sec">Signed on this job</div>
+      <table class="inv-meta">
+        ${signed.map(w => `<tr>
+          <td>${esc(w.title)}</td>
+          <td style="width:42%">${esc(w.signerName)} &middot; ${esc(fmtStamp(w.signedAt))}</td>
+        </tr>`).join("")}
+      </table>` : ""}
+
+    ${st.invoiceNote ? `<p class="inv-note">${esc(st.invoiceNote)}</p>` : ""}
+    ${st.gst ? "" : `<!-- no GST number on file, so no tax has been charged -->`}
+  </div>`;
+}
+
 /* A customer-facing estimate — this is the page they get handed or emailed. */
 function estimateDocHtml(e){
   const c = Store.estContact(e);
@@ -6832,6 +7095,12 @@ document.addEventListener("click", e => {
     if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
     return;
   }
+  const inv = hit("[data-invoice]");
+  if (inv) return previewInvoice(inv.dataset.invoice);
+
+  const invPrint = hit("[data-inv-print]");
+  if (invPrint) return printInvoice(invPrint.dataset.invPrint);
+
   const phOpen = hit("[data-ph-open]");
   if (phOpen) return openPhoto(phOpen.dataset.phOpen);
 
@@ -7309,6 +7578,9 @@ document.addEventListener("click", e => {
       s.website = $("#set-website").value.trim().replace(/^https?:\/\//, "");
       s.address = $("#set-address").value.trim();
       s.gst     = $("#set-gst").value.trim();
+      s.gstRate = Number($("#set-gstrate").value) || 0;
+      s.invoiceTerms = Math.max(0, Number($("#set-terms").value) || 0);
+      s.invoiceNote  = $("#set-invnote").value.trim();
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");
       break;
