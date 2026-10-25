@@ -581,6 +581,37 @@ textarea.input{resize:vertical;min-height:76px}
 .toolbar select,.toolbar input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
 .filter-note{font-size:12.5px;color:var(--muted)}
 
+/* ---------- Photos ---------- */
+.ph-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ph-take,.ph-pick{cursor:pointer;margin:0}
+.ph-wait{font-size:12.5px;color:var(--amber);font-weight:600}
+.ph.busy{opacity:.55;pointer-events:none}
+.ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:9px;margin-top:12px}
+.ph-cell{
+  position:relative;margin:0;aspect-ratio:1;border-radius:9px;overflow:hidden;
+  border:1px solid var(--line);background:var(--sunk);cursor:pointer;
+}
+.ph-cell:hover{border-color:var(--blue)}
+.ph-img{width:100%;height:100%;background:var(--sunk) center/cover no-repeat;
+  display:grid;place-items:center;color:var(--muted-2);font-size:20px}
+.ph-img.ph-missing{font-size:15px}
+.ph-tag{
+  position:absolute;left:0;right:0;bottom:0;padding:3px 6px;font-size:10.5px;
+  font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#fff;
+  background:linear-gradient(transparent,rgba(8,20,32,.82));text-align:center;
+}
+.ph-cell.tag-before .ph-tag{background:linear-gradient(transparent,rgba(164,90,20,.9))}
+.ph-cell.tag-after  .ph-tag{background:linear-gradient(transparent,rgba(20,110,62,.9))}
+.ph-up{
+  position:absolute;top:5px;right:5px;width:18px;height:18px;border-radius:50%;
+  background:var(--amber);color:#fff;font-size:11px;line-height:18px;text-align:center;
+  font-weight:700;
+}
+@media (max-width:560px){
+  .ph-grid{grid-template-columns:repeat(3,1fr)}
+  .ph-actions .btn{flex:1;justify-content:center}
+}
+
 /* ---------- Materials ---------- */
 .mat-add{display:flex;gap:8px;margin-bottom:4px}
 .mat-add .input:first-child{flex:1;min-width:0}
@@ -676,7 +707,11 @@ textarea.input{resize:vertical;min-height:76px}
     max-width:100%;max-height:100vh;max-height:100dvh;
     border-radius:13px 13px 0 0;display:flex;flex-direction:column;
   }
-  .modal-head{flex:0 0 auto}
+  .modal-head{flex:0 0 auto;flex-wrap:wrap;row-gap:8px}
+  /* the title block was being squeezed beside the status badges, which broke
+     a customer's name one word per line. Give it the row to itself. */
+  .modal-head > div:first-child{flex:1 0 100%;min-width:0}
+  .modal-head h2{font-size:17px;line-height:1.25;overflow-wrap:anywhere}
   .modal-body{flex:1 1 auto;min-height:0;max-height:none;padding:15px}
   .modal-foot{flex:0 0 auto;border-radius:0}
   .modal-head,.modal-foot{padding:13px 15px}
@@ -1053,6 +1088,98 @@ function toast(msg, kind){
 }
 
 /* ============================================================
+   Photos
+
+   Local first, always. A photo is written to this device the instant it is
+   taken and shown from there; uploading happens afterwards when there is a
+   signal to do it with. A basement, a dead zone or a mistake in the upload
+   code costs you sync — never the photograph.
+
+   The blobs live in IndexedDB, not localStorage, which tops out around five
+   megabytes and would be full after two pictures. The shop record keeps
+   only names and sizes, so the thing that syncs stays small.
+   ============================================================ */
+const PHOTO_DB = "pcp.photos", PHOTO_STORE = "blobs";
+
+const Photos = {
+  _db: null,
+  _urls: new Map(),      // id -> object URL, so we don't leak one per render
+
+  open(){
+    if (this._db) return Promise.resolve(this._db);
+    return new Promise((res, rej) => {
+      let rq;
+      try { rq = indexedDB.open(PHOTO_DB, 1); }
+      catch(e){ return rej(e); }
+      rq.onupgradeneeded = () => {
+        const db = rq.result;
+        if (!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE);
+      };
+      rq.onsuccess = () => { this._db = rq.result; res(this._db); };
+      rq.onerror = () => rej(rq.error);
+    });
+  },
+
+  async _tx(mode, fn){
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(PHOTO_STORE, mode);
+      const rq = fn(tx.objectStore(PHOTO_STORE));
+      tx.oncomplete = () => res(rq ? rq.result : undefined);
+      tx.onerror = () => rej(tx.error);
+      tx.onabort = () => rej(tx.error);
+    });
+  },
+
+  put(id, blob){ return this._tx("readwrite", st => st.put(blob, id)); },
+  get(id){ return this._tx("readonly", st => st.get(id)); },
+  del(id){
+    const u = this._urls.get(id);
+    if (u){ URL.revokeObjectURL(u); this._urls.delete(id); }
+    return this._tx("readwrite", st => st.delete(id));
+  },
+  keys(){ return this._tx("readonly", st => st.getAllKeys()); },
+
+  /* A stable object URL per photo, so re-rendering a panel doesn't mint a
+     new one each time and quietly eat memory all afternoon. */
+  async localUrl(id){
+    if (this._urls.has(id)) return this._urls.get(id);
+    let blob = null;
+    try { blob = await this.get(id); } catch(e){ return null; }
+    if (!blob) return null;
+    const u = URL.createObjectURL(blob);
+    this._urls.set(id, u);
+    return u;
+  },
+
+  /* Phone photos run 3-5 MB. At the size anyone actually looks at one on a
+     job record, 1600px of JPEG is indistinguishable and a tenth the weight,
+     which is the difference between 3,000 photos on the free tier and 300. */
+  async shrink(file, max, quality){
+    max = max || 1600; quality = quality || 0.72;
+    let bmp = null;
+    try {
+      // from-image keeps a portrait photo the right way up
+      bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch(e){
+      try { bmp = await createImageBitmap(file); } catch(e2){ bmp = null; }
+    }
+    if (!bmp) return { blob: file, w: 0, h: 0 };
+
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(bmp, 0, 0, w, h);
+    bmp.close && bmp.close();
+
+    const blob = await new Promise(r => cv.toBlob(r, "image/jpeg", quality));
+    return { blob: blob || file, w, h };
+  }
+};
+
+/* ============================================================
    Cloud — optional Supabase sync
 
    Talks to Supabase's plain REST endpoints with fetch. No SDK, so the app
@@ -1222,7 +1349,91 @@ const Cloud = {
     return true;
   },
 
-  /* --- materials: the van list, never the customer's --- */
+  /* --- photo storage ---
+     A separate API from the database, and a separate failure mode: a photo
+     that will not upload is still safe on the device, so this is allowed to
+     fail quietly and try again later. */
+  PHOTO_BUCKET: "job-photos",
+
+  async uploadPhoto(path, blob){
+    await this.ensureToken();
+    let res;
+    try {
+      res = await fetch(
+        `${this.base()}/storage/v1/object/${this.PHOTO_BUCKET}/${path}`, {
+          method: "POST",
+          headers: {
+            "apikey": this.cfg.key,
+            "Authorization": "Bearer " + this.token,
+            "Content-Type": blob.type || "image/jpeg",
+            "x-upsert": "true"
+          },
+          body: blob
+        });
+    } catch(e){
+      const err = new Error("offline"); err.offline = true; throw err;
+    }
+    if (!res.ok){
+      let msg = "HTTP " + res.status;
+      try { const j = await res.json(); msg = j.message || j.error || msg; } catch(e){}
+      const err = new Error(msg); err.status = res.status; throw err;
+    }
+    return true;
+  },
+
+  /* Short-lived link, for looking at a photo taken on the other device. */
+  async signPhoto(path, seconds){
+    await this.ensureToken();
+    const r = await this.call(
+      `/storage/v1/object/sign/${this.PHOTO_BUCKET}/${path}`,
+      { method:"POST", body:{ expiresIn: seconds || 600 } });
+    const signed = r && (r.signedURL || r.signedUrl);
+    if (!signed) throw new Error("no signed url returned");
+    return this.base() + "/storage/v1" + (signed.startsWith("/") ? signed : "/" + signed);
+  },
+
+  async deletePhoto(path){
+    await this.ensureToken();
+    return this.call(`/storage/v1/object/${this.PHOTO_BUCKET}/${path}`, { method:"DELETE" });
+  },
+
+  /* Works through what this device still owes, one at a time so a slow
+     connection doesn't fire twenty uploads at once. Stops at the first sign
+     the network is gone and leaves the rest for next time. */
+  photoBusy: false,
+  async flushPhotos(){
+    if (this.photoBusy) return 0;
+    if (!this.configured() || !this.cfg.refreshToken) return 0;
+    const queue = Store.pendingPhotos();
+    if (!queue.length) return 0;
+
+    this.photoBusy = true;
+    let sent = 0;
+    try {
+      for (const { kind, rec, photo } of queue){
+        let blob = null;
+        try { blob = await Photos.get(photo.id); } catch(e){}
+        if (!blob){
+          // nothing on this device to send — it came from the other one
+          Store.setPhoto(kind, rec.id, photo.id, { up: true });
+          continue;
+        }
+        try {
+          await this.uploadPhoto(photo.path, blob);
+          Store.setPhoto(kind, rec.id, photo.id, { up: true, lastError: null });
+          sent++;
+        } catch(err){
+          if (err.offline || err.status === 401) break;   // try again later
+          Store.setPhoto(kind, rec.id, photo.id, { lastError: err.message || "upload failed" });
+        }
+      }
+    } finally {
+      this.photoBusy = false;
+    }
+    if (sent) this.emit();
+    return sent;
+  },
+
   async pull(opts){
     const force = opts && opts.force;
     await this.ensureToken();
@@ -1285,6 +1496,8 @@ const Cloud = {
         return;
       }
       this.set("synced", "just now");
+      // photographs go up behind the record, never in front of it
+      this.flushPhotos().then(n => { if (n) this.markDirty(); });
     } catch(err){
       if (err.offline){ this.set("error", "no connection — saved on this device"); return; }
       if (err.status === 401 || /refresh|jwt|token/i.test(err.message || "")){
@@ -1363,6 +1576,8 @@ const Store = {
     // Added after a Home Depot run: what to bring, kept off the customer's copy.
     this.data.jobs.forEach(j => { if (!j.materials) j.materials = []; });
     this.data.estimates.forEach(e => { if (!e.materials) e.materials = []; });
+    this.data.jobs.forEach(j => { if (!j.photos) j.photos = []; });
+    this.data.estimates.forEach(e => { if (!e.photos) e.photos = []; });
     // A demo should always demo. Real work is never moved.
     if (this.data.demo && !this.data.liveSince && this.data.seededOn
         && this.data.seededOn !== todayStr()){
@@ -1597,6 +1812,64 @@ const Store = {
   /* What's left after the parts bill — blank means he hasn't told us, so we
      can't deduct anything and the hourly figure reads high. */
   jobNet(job){ return this.jobTotal(job) - (Number(job.materialCost) || 0); },
+
+  /* ---------- Photos ----------
+     The record keeps names and sizes only. The picture itself is on the
+     device and, once there's a signal, in the project's storage bucket. */
+  photosOf(rec){ return (rec && rec.photos) || []; },
+
+  addPhoto(kind, id, meta){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return null;
+    rec.photos = rec.photos || [];
+    const p = Object.assign({
+      id: uid("ph"), tag: "", caption: "", takenAt: Date.now(),
+      up: false, from: kind
+    }, meta || {});
+    p.path = `${kind}/${rec.id}/${p.id}.jpg`;
+    rec.photos.push(p);
+    this.save();
+    return p;
+  },
+
+  setPhoto(kind, id, pid, patch){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return;
+    const p = (rec.photos || []).find(x => x.id === pid);
+    if (!p) return;
+    Object.assign(p, patch);
+    this.save();
+  },
+
+  removePhoto(kind, id, pid){
+    const rec = this.recordOf(kind, id);
+    if (!rec) return null;
+    const p = (rec.photos || []).find(x => x.id === pid);
+    rec.photos = (rec.photos || []).filter(x => x.id !== pid);
+    this.save();
+    return p;
+  },
+
+  findPhoto(pid){
+    for (const kind of ["job","estimate"]){
+      const list = kind === "job" ? this.data.jobs : this.data.estimates;
+      for (const rec of list){
+        const p = (rec.photos || []).find(x => x.id === pid);
+        if (p) return { kind, rec, photo: p };
+      }
+    }
+    return null;
+  },
+
+  /* Everything this device has taken but not yet managed to send. */
+  pendingPhotos(){
+    const out = [];
+    const scan = (kind, list) => list.forEach(rec =>
+      (rec.photos || []).forEach(p => { if (!p.up) out.push({ kind, rec, photo: p }); }));
+    scan("job", this.data.jobs);
+    scan("estimate", this.data.estimates);
+    return out;
+  },
 
   /* ---------- Materials ----------
      A running list of what the job needs, private to the shop. Not line
@@ -4216,6 +4489,8 @@ function openModal(html, opts){
   const first = $(".modal input:not([type=hidden]), .modal select, .modal textarea", root);
   if (first && !opts.noFocus) setTimeout(() => first.focus(), 30);
   document.body.style.overflow = "hidden";
+  // a record can open with photo cells in it; the pictures arrive after
+  if (typeof fillPhotos === "function") fillPhotos(root);
 }
 function closeModal(){
   $("#modal-root").innerHTML = "";
@@ -4338,6 +4613,9 @@ function openJob(id){
           })() : ""}
         </tbody>
       </table>
+
+      <div class="section-title" style="margin-top:22px">Photos</div>
+      ${photosPanel("job", j)}
 
       <div class="section-title" style="margin-top:22px">Materials
         <span class="t-sub" style="text-transform:none;letter-spacing:0">— your list, not the customer's</span></div>
@@ -4625,6 +4903,9 @@ function openEstimate(id){
       </div>
 
       <div class="dl"><dt>Scope of work</dt><dd style="white-space:pre-wrap">${esc(e.description)||"—"}</dd></div>
+
+      <div class="section-title" style="margin-top:22px">Photos</div>
+      ${photosPanel("estimate", e)}
 
       <div class="section-title" style="margin-top:22px">Materials
         <span class="t-sub" style="text-transform:none;letter-spacing:0">— your list, not the customer's</span></div>
@@ -5350,6 +5631,141 @@ function saveTemplateFromForm(id){
   Store.save(); closeModal();
   App.view = "waivers"; App.waiverTab = "templates";
   render();
+}
+
+/* ---------- Photos, shared by jobs and estimates ----------
+   Thumbnails fill in after the panel draws, because reading a blob out of
+   IndexedDB is asynchronous and the record should not wait on it. */
+function photosPanel(kind, rec){
+  const list = Store.photosOf(rec);
+  const waiting = list.filter(p => !p.up).length;
+  const isJob = kind === "job";
+
+  return `
+  <div class="ph" data-ph-host="${kind}:${rec.id}">
+    <div class="ph-actions">
+      <label class="btn accent ph-take">
+        📷 ${isJob ? "Add a photo" : "Photograph it"}
+        <input type="file" accept="image/*" capture="environment" multiple
+               data-ph-file="${kind}:${rec.id}" hidden>
+      </label>
+      <label class="btn ph-pick">
+        From the library
+        <input type="file" accept="image/*" multiple
+               data-ph-file="${kind}:${rec.id}" hidden>
+      </label>
+      ${waiting ? `<span class="ph-wait">${waiting} waiting to upload</span>` : ""}
+    </div>
+
+    ${list.length ? `
+      <div class="ph-grid">
+        ${list.map(p => `
+          <figure class="ph-cell${p.tag ? " tag-" + p.tag : ""}" data-ph-open="${p.id}">
+            <div class="ph-img" data-ph-img="${p.id}"></div>
+            ${p.tag ? `<figcaption class="ph-tag">${esc(p.tag)}</figcaption>` : ""}
+            ${!p.up ? `<span class="ph-up" title="${esc(p.lastError || "Waiting for a signal")}">↑</span>` : ""}
+          </figure>`).join("")}
+      </div>`
+    : `<p class="t-sub" style="margin:10px 0 0">
+         ${isJob
+           ? "A before and an after is worth more than a paragraph of notes, and takes ten seconds."
+           : "One or two now saves you trying to picture it again at nine tonight."}
+       </p>`}
+  </div>`;
+}
+
+/* The record draws first and the pictures arrive after. */
+async function fillPhotos(root){
+  const cells = $$("[data-ph-img]", root || document);
+  for (const el of cells){
+    if (el.dataset.filled) continue;
+    const id = el.dataset.phImg;
+    let url = await Photos.localUrl(id);
+    if (!url){
+      const found = Store.findPhoto(id);
+      if (found && found.photo.up && Cloud.configured() && Cloud.cfg.refreshToken){
+        try { url = await Cloud.signPhoto(found.photo.path); } catch(e){ url = null; }
+      }
+    }
+    if (url){
+      el.style.backgroundImage = `url("${url}")`;
+      el.dataset.filled = "1";
+    } else {
+      el.classList.add("ph-missing");
+      el.textContent = "—";
+      el.dataset.filled = "1";
+    }
+  }
+}
+
+function refreshPhotos(kind, id){
+  const rec = Store.recordOf(kind, id);
+  const host = $(`[data-ph-host="${kind}:${id}"]`);
+  if (!rec || !host) return;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = photosPanel(kind, rec);
+  const fresh = wrap.firstElementChild;
+  host.replaceWith(fresh);
+  fillPhotos(fresh);
+}
+
+/* Taking several at once is normal — a before, a model plate, a close-up. */
+async function takePhotos(kind, id, files){
+  const rec = Store.recordOf(kind, id);
+  if (!rec || !files || !files.length) return;
+  const host = $(`[data-ph-host="${kind}:${id}"]`);
+  if (host) host.classList.add("busy");
+
+  let added = 0, failed = 0;
+  for (const file of Array.from(files)){
+    if (!/^image\//.test(file.type || "")){ failed++; continue; }
+    try {
+      const { blob, w, h } = await Photos.shrink(file);
+      const meta = Store.addPhoto(kind, id, { w, h, size: blob.size, name: file.name || "" });
+      await Photos.put(meta.id, blob);
+      added++;
+    } catch(e){ failed++; }
+  }
+
+  if (host) host.classList.remove("busy");
+  refreshPhotos(kind, id);
+  if (added) toast(added === 1 ? "Photo saved" : added + " photos saved", "ok");
+  if (failed) toast(failed + " couldn't be read", "err");
+  if (added) Cloud.flushPhotos().then(n => { if (n) Cloud.markDirty(); });
+}
+
+async function openPhoto(pid){
+  const found = Store.findPhoto(pid);
+  if (!found) return;
+  const { kind, rec, photo } = found;
+  let url = await Photos.localUrl(pid);
+  if (!url && photo.up && Cloud.configured() && Cloud.cfg.refreshToken){
+    try { url = await Cloud.signPhoto(photo.path); } catch(e){ url = null; }
+  }
+  const tagBtn = (t, label) =>
+    `<button class="btn sm ${photo.tag === t ? "primary" : ""}"
+       data-ph-tag="${kind}:${rec.id}:${pid}:${t}">${esc(label)}</button>`;
+
+  openModal(`
+    <div class="modal-head">
+      <h2>${esc(kind === "job" ? `#${rec.no}` : `EST-${rec.no}`)} · photo</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button>
+    </div>
+    <div class="modal-body" style="padding:0;background:#0b1620">
+      ${url ? `<img src="${esc(url)}" alt="${esc(photo.caption || "Job photo")}"
+                    style="display:block;width:100%;height:auto;max-height:70vh;object-fit:contain">`
+            : `<div class="empty" style="color:#8aa6bd;padding:60px 20px">
+                 This photo isn't on this device, and couldn't be fetched.
+                 ${photo.up ? "Check your connection." : "It hasn't uploaded yet."}
+               </div>`}
+    </div>
+    <div class="modal-foot" style="flex-wrap:wrap;gap:8px">
+      ${kind === "job" ? `${tagBtn("before","Before")}${tagBtn("after","After")}${tagBtn("","No label")}` : ""}
+      <div class="spacer"></div>
+      <span class="t-sub">${esc(fmtStamp(photo.takenAt))}${
+        photo.size ? " · " + Math.round(photo.size/1024) + " KB" : ""}</span>
+      <button class="btn danger sm" data-ph-del="${kind}:${rec.id}:${pid}">Delete</button>
+    </div>`, { wide:true });
 }
 
 /* ---------- Materials, shared by jobs and estimates ----------
@@ -6285,6 +6701,32 @@ document.addEventListener("click", e => {
     if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
     return;
   }
+  const phOpen = hit("[data-ph-open]");
+  if (phOpen) return openPhoto(phOpen.dataset.phOpen);
+
+  const phTag = hit("[data-ph-tag]");
+  if (phTag){
+    const [k,id,pid,tag] = phTag.dataset.phTag.split(":");
+    Store.setPhoto(k, id, pid, { tag: tag || "" });
+    closeModal();
+    refreshPhotos(k, id);
+    return;
+  }
+
+  const phDel = hit("[data-ph-del]");
+  if (phDel){
+    const [k,id,pid] = phDel.dataset.phDel.split(":");
+    if (!confirm("Delete this photo? It goes from this device and from the cloud.")) return;
+    const p = Store.removePhoto(k, id, pid);
+    Photos.del(pid);
+    if (p && p.up && Cloud.configured() && Cloud.cfg.refreshToken){
+      Cloud.deletePhoto(p.path).catch(() => {});
+    }
+    closeModal();
+    refreshPhotos(k, id);
+    return;
+  }
+
   const mGo = hit("[data-mat-go]");
   if (mGo){ const [k,id] = mGo.dataset.matGo.split(":"); return addMaterialFromForm(k, id); }
 
@@ -6806,6 +7248,15 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("change", e => {
+  const f = e.target.closest("[data-ph-file]");
+  if (f){
+    const [k,id] = f.dataset.phFile.split(":");
+    const files = f.files;
+    f.value = "";                 // so the same photo can be picked twice
+    takePhotos(k, id, files);
+    return;
+  }
+
   const c = e.target.closest("[data-mat-cost]");
   if (!c) return;
   const [k,id,mid] = c.dataset.matCost.split(":");

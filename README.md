@@ -130,6 +130,29 @@ Deactivating a tech takes their column off the board without touching their jobs
 problem, site notes, room to write up the work, and a signature line. Print the
 whole day from the dashboard or any single job from its detail view.
 
+**Photos** — on estimates and on jobs. One or two while quoting so you aren't
+reconstructing a basement from memory at nine at night; a before and an after
+on the job, which is worth more than a paragraph of notes and takes ten
+seconds. They never appear on anything the customer is given.
+
+Photos do **not** go in the shop record — one phone photo is bigger than the
+rest of the shop put together. They go to a private Supabase Storage bucket,
+and the record keeps only the name. Setup is one more SQL file,
+[supabase-photos.sql](supabase-photos.sql), run the same way as the first.
+
+It is local-first on purpose. The picture is written to the device the instant
+it is taken and shown from there, and uploading happens afterwards when there
+is a signal for it. A basement costs you sync, never the photograph — a tile
+shows ↑ until it has gone up, and the queue clears itself on the next
+connection.
+
+Each one is shrunk to 1600px of JPEG before anything else happens, which is
+indistinguishable at the size anyone looks at it and about a tenth the weight:
+roughly 3,000 photos inside the free tier rather than 300. The bucket is
+private, so nothing in it is reachable by a URL alone — every view is signed
+for a few minutes, for you, after you have signed in. These are photographs of
+customers' homes.
+
 **Materials and Pick Up** — the private van list. On an estimate and on a
 job there's a **Materials** section: one box, type a part, Enter, type the
 next. It never appears on a printed estimate, ticket or waiver — this is what
