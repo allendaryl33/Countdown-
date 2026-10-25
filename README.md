@@ -130,6 +130,27 @@ Deactivating a tech takes their column off the board without touching their jobs
 problem, site notes, room to write up the work, and a signature line. Print the
 whole day from the dashboard or any single job from its detail view.
 
+**Invoices** — your own, not a retyped copy of one. The **Invoice** button on a
+job opens a preview of exactly what the customer will see: letterhead and logo,
+who it's billed to, what was wrong, line items, labour, subtotal, GST, total
+and the due date. Underneath that, the before-and-after photos and a list of
+what they signed. **Save as PDF / Print**, then Share → Save to Files and send
+it however you like.
+
+Only labelled photos go on it. An unlabelled one — a model plate, a part number
+— stays yours.
+
+The invoice number is assigned the first time you open the preview and never
+changes afterwards, because by then it may be in somebody else's books. A job
+with no line items is refused rather than sent blank, and doesn't waste a
+number.
+
+**GST only appears once there is a registration number in settings.** Charging
+it before you're registered isn't a formatting mistake, so the document simply
+doesn't have a tax line until you fill that field in. What you *earn* stays
+pre-tax everywhere in Time & Money, because GST isn't revenue; what the
+customer *owes* includes it.
+
 **Photos** — on estimates and on jobs. One or two while quoting so you aren't
 reconstructing a basement from memory at nine at night; a before and an after
 on the job, which is worth more than a paragraph of notes and takes ten
