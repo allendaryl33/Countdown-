@@ -582,6 +582,16 @@ textarea.input{resize:vertical;min-height:76px}
 .filter-note{font-size:12.5px;color:var(--muted)}
 
 /* ---------- Photos ---------- */
+.ph-label{padding:13px 16px;border-top:1px solid var(--line);background:var(--sunk)}
+.ph-quick{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+.ph-custom{display:flex;gap:8px}
+.ph-custom .input{flex:1;min-width:0}
+.ph-custom .btn{flex:0 0 auto}
+@media (max-width:480px){
+  .ph-custom{flex-wrap:wrap}
+  .ph-custom .input{flex-basis:100%}
+  .ph-custom .btn{flex:1;justify-content:center}
+}
 .ph-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .ph-take,.ph-pick{cursor:pointer;margin:0;position:relative;overflow:hidden}
 /* visually gone rather than display:none — some mobile browsers refuse to
@@ -1843,6 +1853,7 @@ const Store = {
     }, meta || {});
     p.path = `${kind}/${rec.id}/${p.id}.jpg`;
     rec.photos.push(p);
+    this.logOn(kind, rec, "Photo added");
     this.save();
     return p;
   },
@@ -1852,7 +1863,11 @@ const Store = {
     if (!rec) return;
     const p = (rec.photos || []).find(x => x.id === pid);
     if (!p) return;
+    const hadTag = p.tag || "";
     Object.assign(p, patch);
+    if (patch && "tag" in patch && patch.tag !== hadTag){
+      this.logOn(kind, rec, patch.tag ? `Photo labelled "${patch.tag}"` : "Photo label removed");
+    }
     this.save();
   },
 
@@ -1861,6 +1876,7 @@ const Store = {
     if (!rec) return null;
     const p = (rec.photos || []).find(x => x.id === pid);
     rec.photos = (rec.photos || []).filter(x => x.id !== pid);
+    this.logOn(kind, rec, "Photo deleted" + (p && p.tag ? ` (${p.tag})` : ""));
     this.save();
     return p;
   },
@@ -5675,7 +5691,8 @@ function photosPanel(kind, rec){
     ${list.length ? `
       <div class="ph-grid">
         ${list.map(p => `
-          <figure class="ph-cell${p.tag ? " tag-" + p.tag : ""}" data-ph-open="${p.id}">
+          <figure class="ph-cell${p.tag === "before" || p.tag === "after" ? " tag-" + p.tag : ""}"
+                  data-ph-open="${p.id}">
             <div class="ph-img" data-ph-img="${p.id}"></div>
             ${p.tag ? `<figcaption class="ph-tag">${esc(p.tag)}</figcaption>` : ""}
             ${!p.up ? `<span class="ph-up" title="${esc(p.lastError || "Waiting for a signal")}">↑</span>` : ""}
@@ -5774,13 +5791,25 @@ async function openPhoto(pid){
                  ${photo.up ? "Check your connection." : "It hasn't uploaded yet."}
                </div>`}
     </div>
+    <div class="ph-label">
+      <div class="ph-quick">
+        ${kind === "job" ? `${tagBtn("before","Before")}${tagBtn("after","After")}` : ""}
+        ${tagBtn("","No label")}
+      </div>
+      <div class="ph-custom">
+        <input class="input" id="ph-tag-text" maxlength="28" placeholder="or write your own — toilet, main stack, meter…"
+               value="${esc(photo.tag === "before" || photo.tag === "after" ? "" : (photo.tag || ""))}"
+               data-ph-tagbox="${kind}:${rec.id}:${pid}">
+        <button class="btn" data-ph-tagsave="${kind}:${rec.id}:${pid}">Save label</button>
+      </div>
+    </div>
     <div class="modal-foot" style="flex-wrap:wrap;gap:8px">
-      ${kind === "job" ? `${tagBtn("before","Before")}${tagBtn("after","After")}${tagBtn("","No label")}` : ""}
+      ${url ? `<a class="btn sm" href="${esc(url)}" download="poseidon-${esc(kind)}-${esc(rec.no)}-${esc(pid)}.jpg">⬇ Save to phone</a>` : ""}
       <div class="spacer"></div>
       <span class="t-sub">${esc(fmtStamp(photo.takenAt))}${
         photo.size ? " · " + Math.round(photo.size/1024) + " KB" : ""}</span>
       <button class="btn danger sm" data-ph-del="${kind}:${rec.id}:${pid}">Delete</button>
-    </div>`, { wide:true });
+    </div>`, { wide:true, noFocus:true });
 }
 
 /* ---------- Materials, shared by jobs and estimates ----------
@@ -6723,6 +6752,16 @@ document.addEventListener("click", e => {
   if (phTag){
     const [k,id,pid,tag] = phTag.dataset.phTag.split(":");
     Store.setPhoto(k, id, pid, { tag: tag || "" });
+    closeModal();
+    refreshPhotos(k, id);
+    return;
+  }
+
+  const phTagSave = hit("[data-ph-tagsave]");
+  if (phTagSave){
+    const [k,id,pid] = phTagSave.dataset.phTagsave.split(":");
+    const box = $("#ph-tag-text");
+    Store.setPhoto(k, id, pid, { tag: box ? box.value.trim() : "" });
     closeModal();
     refreshPhotos(k, id);
     return;
