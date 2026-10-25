@@ -145,6 +145,12 @@ Label each one Before, After, or anything you type — "main stack", "meter",
 the phone, or delete it. Adding, labelling and deleting all show up in the
 job's log alongside clocking in and out.
 
+Location data never makes it in. Every photo is re-encoded through a canvas
+before it is stored, which drops the EXIF block the camera attaches — GPS
+included. A library photo iOS describes as having "Location Is Included"
+arrives here with none, so customers' home coordinates are not sitting in the
+cloud. There's a test that builds a genuinely geotagged JPEG and checks.
+
 **A photo taken through the app does not go into your camera roll.** That is
 how iOS works and a web page cannot change it: the picture is handed to the
 app, not to Photos. If you want a copy in your library, either use **Save to
