@@ -583,7 +583,13 @@ textarea.input{resize:vertical;min-height:76px}
 
 /* ---------- Photos ---------- */
 .ph-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.ph-take,.ph-pick{cursor:pointer;margin:0}
+.ph-take,.ph-pick{cursor:pointer;margin:0;position:relative;overflow:hidden}
+/* visually gone rather than display:none — some mobile browsers refuse to
+   open a picker for an input that isn't rendered at all */
+.ph-take input[type=file],.ph-pick input[type=file]{
+  position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;
+  left:0;bottom:0;
+}
 .ph-wait{font-size:12.5px;color:var(--amber);font-weight:600}
 .ph.busy{opacity:.55;pointer-events:none}
 .ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:9px;margin-top:12px}
@@ -5656,12 +5662,12 @@ function photosPanel(kind, rec){
       <label class="btn accent ph-take">
         📷 ${isJob ? "Add a photo" : "Photograph it"}
         <input type="file" accept="image/*" capture="environment" multiple
-               data-ph-file="${kind}:${rec.id}" hidden>
+               data-ph-file="${kind}:${rec.id}">
       </label>
       <label class="btn ph-pick">
         From the library
         <input type="file" accept="image/*" multiple
-               data-ph-file="${kind}:${rec.id}" hidden>
+               data-ph-file="${kind}:${rec.id}">
       </label>
       ${waiting ? `<span class="ph-wait">${waiting} waiting to upload</span>` : ""}
     </div>
@@ -7260,8 +7266,10 @@ document.addEventListener("change", e => {
   const f = e.target.closest("[data-ph-file]");
   if (f){
     const [k,id] = f.dataset.phFile.split(":");
-    const files = f.files;
-    f.value = "";                 // so the same photo can be picked twice
+    // Copy first. f.files is a live list, and clearing value — which is what
+    // lets the same photo be chosen twice — empties the very list we hold.
+    const files = Array.from(f.files || []);
+    f.value = "";
     takePhotos(k, id, files);
     return;
   }
