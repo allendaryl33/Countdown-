@@ -140,6 +140,17 @@ rest of the shop put together. They go to a private Supabase Storage bucket,
 and the record keeps only the name. Setup is one more SQL file,
 [supabase-photos.sql](supabase-photos.sql), run the same way as the first.
 
+Label each one Before, After, or anything you type — "main stack", "meter",
+"under the sink". Tap a photo to view it full size, relabel it, save a copy to
+the phone, or delete it. Adding, labelling and deleting all show up in the
+job's log alongside clocking in and out.
+
+**A photo taken through the app does not go into your camera roll.** That is
+how iOS works and a web page cannot change it: the picture is handed to the
+app, not to Photos. If you want a copy in your library, either use **Save to
+phone** on the photo, or take it with the normal Camera app and attach it with
+**From the library**.
+
 It is local-first on purpose. The picture is written to the device the instant
 it is taken and shown from there, and uploading happens afterwards when there
 is a signal for it. A basement costs you sync, never the photograph — a tile
