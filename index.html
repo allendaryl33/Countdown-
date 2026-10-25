@@ -159,6 +159,10 @@ nav button .count.alert{background:var(--amber);color:#fff}
 .stop.pri-Emergency{border-left-color:var(--red)}
 .stop.pri-High{border-left-color:var(--amber)}
 .stop.st-complete{border-left-color:var(--green);opacity:.75}
+.stop.inv-tosend{border-left-color:var(--gold)}
+.stop.inv-out{border-left-color:var(--blue)}
+.stop.inv-late{border-left-color:var(--red)}
+.stop.inv-paid{border-left-color:var(--green);opacity:.8}
 .stop.st-cancelled{opacity:.5}
 .stop-main{display:flex;gap:12px;padding:13px 14px;cursor:pointer;align-items:flex-start}
 .stop-main:hover{background:#fafcfd}
@@ -771,6 +775,8 @@ textarea.input{resize:vertical;min-height:76px}
   .row2,.row3{grid-template-columns:1fr}
   .board{flex-direction:column}
   .col{flex:1 1 auto;max-width:none;width:100%}
+  .stop.inv-out .stop-acts > :first-child,
+  .stop.inv-late .stop-acts > :first-child{flex:1 0 100%}
   .toolbar{gap:6px}
   .tpl-grid{grid-template-columns:1fr}
 }
@@ -2205,7 +2211,10 @@ const Store = {
   /* Payment tracking. Deliberately manual: Stripe (or whoever) stays the system
      of record, this just indexes it so the office can see what's outstanding. */
   balance(job){
-    return Math.max(0, this.invoiceTotal(job) - (Number(job.payment && job.payment.amountPaid) || 0));
+    const left = this.invoiceTotal(job) - (Number(job.payment && job.payment.amountPaid) || 0);
+    // To the cent: floating point left $236.16000000000003 sitting in the
+    // amount box when he went to take the rest of a part payment.
+    return Math.max(0, Math.round(left * 100) / 100);
   },
   payState(job){
     const pay = job.payment || blankPayment();
@@ -2228,8 +2237,9 @@ const Store = {
     if (job.payment.status === "invoiced" && !job.payment.invoicedAt) job.payment.invoicedAt = Date.now();
     if (job.payment.status === "paid"){
       if (!job.payment.paidAt) job.payment.paidAt = Date.now();
-      // Marking paid with no figure entered means paid in full.
-      if (!(Number(job.payment.amountPaid) > 0)) job.payment.amountPaid = this.jobTotal(job);
+      // Marking paid with no figure entered means paid in full — and in
+      // full means the invoice total, tax and all, not the pre-tax figure.
+      if (!(Number(job.payment.amountPaid) > 0)) job.payment.amountPaid = this.invoiceTotal(job);
     }
     if (job.payment.status === "unbilled"){ job.payment.invoicedAt = null; job.payment.paidAt = null; }
     if (prev !== job.payment.status){
@@ -2267,6 +2277,53 @@ const Store = {
     const days = Number(this.data.settings.invoiceTerms);
     if (!days || !job.invoicedOn) return null;
     return addDays(job.invoicedOn, days);
+  },
+
+  /* ---- The invoice list.
+     Three states, and he moves work between them: finished work nobody has
+     billed, invoices out waiting on money, and invoices paid. Nothing out
+     there tells us when the money lands — Stripe takes the payment and
+     never reports back — so "paid" is a tap he makes, and the app says so
+     rather than pretending to know. */
+
+  /* Finished, worth money, no invoice sent. The money filter matters: a
+     completed no-charge callback shouldn't sit in the list forever. */
+  invToSend(){
+    return this.data.jobs.filter(j => j.status === "complete" &&
+      (!j.payment || j.payment.status === "unbilled") && this.jobTotal(j) > 0);
+  },
+  invPaid(){
+    return this.data.jobs.filter(j => j.payment && j.payment.status === "paid");
+  },
+  /* How long it's been out. Falls back to the timestamp for anything
+     invoiced before invoice numbers existed. */
+  invDaysOut(job){
+    const on = job.invoicedOn ||
+      (job.payment && job.payment.invoicedAt ? ymd(new Date(job.payment.invoicedAt)) : null);
+    return on ? daysBetween(on, todayStr()) : null;
+  },
+  invOverdueBy(job){
+    const due = this.invoiceDue(job);
+    return due ? Math.max(0, daysBetween(due, todayStr())) : 0;
+  },
+  invOwed(){
+    return this.outstanding().reduce((s,j) => s + this.balance(j), 0);
+  },
+  /* What the badge counts: things waiting on him, not things waiting on a
+     customer. An invoice sent last week that isn't due yet needs nothing. */
+  invNeedsYou(){
+    return this.invToSend().length +
+           this.outstanding().filter(j => this.invOverdueBy(j) > 0).length;
+  },
+  /* The invoice has left his hands. Assigns the number if it hasn't got one,
+     stamps the reference so it matches what the customer is looking at, and
+     moves it into the waiting-on-money list. */
+  markInvoiced(job){
+    this.invoiceNoFor(job);
+    const pay = job.payment || blankPayment();
+    const ref = pay.ref || ("INV-" + job.invoiceNo);
+    if (pay.status === "unbilled") this.setPayment(job, { status:"invoiced", ref });
+    else if (!pay.ref)             this.setPayment(job, { ref });
   },
 
   nextWaiverNo(){
@@ -2853,6 +2910,7 @@ const App = {
   estFilter: "open",
   moneyRange: 90,
   waiverTab: "templates",
+  invTab: null,
   scheduleMode: "day",
   customerSort: "name"
 };
@@ -2863,6 +2921,7 @@ const VIEWS = [
   { id:"schedule",  label:"Schedule",  icon:"🗓", crumb:"Dispatch" },
   { id:"estimates", label:"Estimates", icon:"📋", crumb:"Work" },
   { id:"jobs",      label:"Jobs",      icon:"🧾", crumb:"Work" },
+  { id:"invoices",  label:"Invoices",  icon:"💵", crumb:"Work" },
   { id:"timemoney", label:"Time & Money", icon:"⏱", crumb:"Work" },
   { id:"pickup",    label:"Pick Up",      icon:"🧰", crumb:"Field" },
   { id:"customers", label:"Customers", icon:"👤", crumb:"Work" },
@@ -2877,7 +2936,7 @@ function openNavSheet(){
     ["Field",    ["today"]],
     ["Dispatch", ["dashboard","schedule"]],
     ["Field",    ["pickup"]],
-    ["Work",     ["estimates","jobs","timemoney","customers","waivers"]],
+    ["Work",     ["estimates","jobs","invoices","timemoney","customers","waivers"]],
     ["Setup",    ["techs","pricebook","data"]]
   ];
   const sheet = $("#nav-sheet");
@@ -3013,6 +3072,7 @@ function render(){
       case "waivers":   host.innerHTML = viewWaivers();   break;
       case "pricebook": host.innerHTML = viewPriceBook(); break;
       case "jobs":      host.innerHTML = viewJobs();      break;
+      case "invoices":  host.innerHTML = viewInvoices();  break;
       case "customers": host.innerHTML = viewCustomers(); break;
       case "techs":     host.innerHTML = viewTechs();     break;
       case "data":      host.innerHTML = viewData();      break;
@@ -3160,7 +3220,10 @@ function renderBrand(){
   if (el) el.textContent = Store.data.settings.company || "Poseidon Plumbing & Gasfitting Ltd.";
 }
 
-const MOBILE_NAV = ["today","schedule","jobs","estimates"];
+/* Five across the bottom of a phone plus More. Invoices earns its place
+   there because money he hasn't collected is the thing he checks standing
+   in a driveway, not from a desk. */
+const MOBILE_NAV = ["today","schedule","jobs","estimates","invoices"];
 
 function renderMobileNav(){
   const el = $("#mobile-nav");
@@ -3171,7 +3234,8 @@ function renderMobileNav(){
     today: jobs.filter(j => j.scheduledDate === t && isOpen(j)).length,
     schedule: jobs.filter(j => !j.techId && isOpen(j)).length,
     jobs: 0,
-    estimates: Store.openEstimates().length
+    estimates: Store.openEstimates().length,
+    invoices: Store.invNeedsYou()
   };
   el.innerHTML = MOBILE_NAV.map(id => {
     const v = VIEWS.find(x => x.id === id);
@@ -3191,6 +3255,7 @@ function renderNav(){
     today: jobs.filter(j => j.scheduledDate === t && isOpen(j)).length,
     schedule: jobs.filter(j => j.scheduledDate === t && j.status !== "cancelled").length,
     estimates: Store.openEstimates().length,
+    invoices: Store.invNeedsYou(),
     jobs: jobs.filter(j => !["complete","cancelled"].includes(j.status)).length,
     customers: Store.data.customers.length,
     waivers: Store.data.signedWaivers.length,
@@ -3215,7 +3280,7 @@ function renderNav(){
     group("Field", ["today"]) +
     group("Dispatch", ["dashboard","schedule"]) +
     group("Field", ["pickup"]) +
-    group("Work", ["estimates","jobs","timemoney","customers","waivers"]) +
+    group("Work", ["estimates","jobs","invoices","timemoney","customers","waivers"]) +
     group("Setup", ["techs","pricebook","data"]);
 }
 
@@ -3534,11 +3599,11 @@ function viewDashboard(){
         <div class="card" style="margin-top:16px">
           <div class="card-head"><h3>Money</h3></div>
           <div class="card-body" style="padding:8px 0">
-            <div class="money-row clickable" data-money="tobill" style="cursor:pointer">
+            <div class="money-row clickable" data-inv-go="tosend" style="cursor:pointer">
               <span class="mr-label">Ready to invoice</span>
               <span class="mr-val">${esc(money(toBillSum))}<span class="t-sub" style="font-weight:400"> · ${toBill.length}</span></span>
             </div>
-            <div class="money-row clickable" data-money="unpaid" style="cursor:pointer;border-bottom:0">
+            <div class="money-row clickable" data-inv-go="out" style="cursor:pointer;border-bottom:0">
               <span class="mr-label">Awaiting payment</span>
               <span class="mr-val" style="color:${owedSum>0.005?"var(--amber)":"inherit"}">${esc(money(owedSum))}<span class="t-sub" style="font-weight:400"> · ${owed.length}</span></span>
             </div>
@@ -4109,6 +4174,201 @@ function viewEstimates(){
       : `<tr><td colspan="7"><div class="empty"><div class="big">📋</div>No estimates in this view.</div></td></tr>`}
     </tbody>
   </table></div>`;
+}
+
+/* ============================================================
+   View: Invoices — what's gone out, and what's still owed
+   ============================================================
+   Before this, an invoice existed only inside the job that produced it.
+   To find out what he was owed he had to remember which jobs he'd
+   finished and go looking one at a time, which is no way to run a
+   business. This is the one screen that answers "what's out there".
+
+   Three lists, and work moves left to right: finished and not yet
+   billed, billed and waiting, paid. Saving the PDF moves it from the
+   first to the second by itself. Only the last move is a tap, because
+   only he knows when the money arrived. */
+function viewInvoices(){
+  const toSend = Store.invToSend()
+    .sort((a,b) => String(a.scheduledDate).localeCompare(String(b.scheduledDate)));
+  // Longest out first: the one that's been ignored the longest is the one
+  // worth a phone call.
+  const out = Store.outstanding().slice()
+    .sort((a,b) => (Store.invDaysOut(b) || 0) - (Store.invDaysOut(a) || 0));
+  const paid = Store.invPaid().slice()
+    .sort((a,b) => ((b.payment || {}).paidAt || 0) - ((a.payment || {}).paidAt || 0));
+
+  const owed     = out.reduce((s,j) => s + Store.balance(j), 0);
+  const late     = out.filter(j => Store.invOverdueBy(j) > 0);
+  const lateSum  = late.reduce((s,j) => s + Store.balance(j), 0);
+  const readySum = toSend.reduce((s,j) => s + Store.invoiceTotal(j), 0);
+
+  const month = todayStr().slice(0,7);
+  const thisMonth = paid.filter(j => j.payment.paidAt &&
+      ymd(new Date(j.payment.paidAt)).slice(0,7) === month)
+    .reduce((s,j) => s + (Number(j.payment.amountPaid) || 0), 0);
+
+  /* Until he picks a tab, open on the one with something on it. Landing on
+     an empty Out list while three finished jobs sit unbilled is a wasted tap. */
+  const tab = App.invTab || (out.length ? "out" : toSend.length ? "tosend" : "out");
+
+  const list = tab === "tosend" ? toSend : tab === "paid" ? paid : out;
+  const btn = (id, label, n) =>
+    `<button class="btn sm ${tab===id?"primary":""}" data-inv-tab="${id}">${esc(label)}${n!=null?` (${n})`:""}</button>`;
+
+  const ref = j => (j.payment && j.payment.ref) || (j.invoiceNo ? "INV-" + j.invoiceNo : "#" + j.no);
+
+  /* One row per invoice. Amount on the left where the eye lands, who and
+     what in the middle, and the action he'd actually reach for. */
+  function row(j){
+    const over = Store.invOverdueBy(j);
+    const days = Store.invDaysOut(j);
+    const due  = Store.invoiceDue(j);
+    const bal  = Store.balance(j);
+    const got  = Number((j.payment || {}).amountPaid) || 0;
+
+    let amount, when, flag = "", acts, tone;
+    if (tab === "tosend"){
+      tone   = "inv-tosend";
+      amount = Store.invoiceTotal(j);
+      when   = j.scheduledDate ? "finished " + fmtDate(j.scheduledDate) : "finished";
+      acts   = `<button class="btn primary" data-invoice="${j.id}">Make the invoice →</button>`;
+    } else if (tab === "paid"){
+      tone   = "inv-paid";
+      amount = got;
+      when   = (j.payment.paidAt ? "paid " + fmtStamp(j.payment.paidAt).split(" · ")[0] : "paid") +
+               (j.payment.method ? " · " + j.payment.method : "");
+      acts   = `<button class="btn" data-invoice="${j.id}">See the invoice</button>
+                <button class="btn ghost" data-inv-pay="${j.id}">Not actually paid…</button>`;
+    } else {
+      tone   = over ? "inv-late" : "inv-out";
+      amount = bal;
+      when   = days == null ? "sent" : days === 0 ? "sent today"
+             : `sent ${days} day${days===1?"":"s"} ago`;
+      if (due && !over) when += ` · due ${fmtDate(due)}`;
+      // Both facts can be true at once — an invoice can be part paid and
+      // still overdue — and the one that got dropped was the one he'd want.
+      const bits = [];
+      if (over) bits.push(`${over} day${over===1?"":"s"} overdue`);
+      if (got > 0.005) bits.push(`Part paid — ${money(got)} of ${money(Store.invoiceTotal(j))} in`);
+      else if (over) bits.push(`${money(bal)} still owed`);
+      if (bits.length) flag = `<div class="stop-flag">${esc(bits.join(" · "))}</div>`;
+      acts   = `<button class="btn accent" data-inv-got="${j.id}">💵 Money received</button>
+                <button class="btn" data-inv-pay="${j.id}">Part payment…</button>
+                <button class="btn ghost" data-invoice="${j.id}">See the invoice</button>`;
+    }
+
+    return `<div class="stop ${tone}">
+      <div class="stop-main" data-job="${j.id}">
+        <div class="stop-when">
+          <div class="w">${esc(money(amount))}</div>
+          <div class="n">${esc(tab === "tosend" ? "#" + j.no : ref(j))}</div>
+        </div>
+        <div class="stop-body">
+          <div class="cust">${esc(custName(j.customerId))}</div>
+          <div class="addr">${esc(j.type)}${tab === "tosend" ? "" : " · job #" + j.no}</div>
+          <div class="what t-sub">${esc(when)}</div>
+        </div>
+      </div>
+      ${flag}
+      <div class="stop-acts">${acts}</div>
+    </div>`;
+  }
+
+  const empty = {
+    tosend: ["🧾", "Nothing waiting to be billed.",
+             "Finish a job with parts or labour on it and it turns up here."],
+    out:    ["💵", "Nothing out there.",
+             "Every invoice you've sent has been paid. Enjoy it."],
+    paid:   ["✓", "Nothing paid yet.",
+             "Once you mark an invoice received it moves here and stays, so there's a record of it."]
+  }[tab];
+
+  return `
+  <div class="stat-row">
+    <div class="stat ${owed ? "alert" : ""}"><div class="label">Owed to you</div>
+      <div class="value">${esc(money(owed))}</div>
+      <div class="foot">${out.length} invoice${out.length===1?"":"s"} out</div></div>
+    <div class="stat ${late.length ? "alert" : ""}"><div class="label">Overdue</div>
+      <div class="value">${esc(money(lateSum))}</div>
+      <div class="foot">${late.length ? late.length + " past the due date" : "nothing late"}</div></div>
+    <div class="stat"><div class="label">Ready to invoice</div>
+      <div class="value">${esc(money(readySum))}</div>
+      <div class="foot">${toSend.length} finished job${toSend.length===1?"":"s"}</div></div>
+    <div class="stat"><div class="label">Collected</div>
+      <div class="value">${esc(money(thisMonth))}</div>
+      <div class="foot">${esc(fmtDate(todayStr(), { month:"long" }))} so far</div></div>
+  </div>
+
+  <div class="toolbar">
+    ${btn("tosend","To send", toSend.length)}
+    ${btn("out","Out", out.length)}
+    ${btn("paid","Paid", paid.length)}
+    <div style="flex:1"></div>
+    <span class="filter-note">Tap a row to open the job</span>
+  </div>
+
+  ${list.length ? list.map(row).join("")
+    : `<div class="today-empty">
+         <div class="big">${empty[0]}</div>
+         <div style="font-weight:600;color:var(--text);margin-bottom:4px">${esc(empty[1])}</div>
+         <div>${esc(empty[2])}</div>
+       </div>`}
+
+  ${tab === "out" && out.length ? `
+    <p class="t-sub" style="margin-top:16px;max-width:66ch">
+      Stripe doesn't tell the app when somebody pays — it takes the money and
+      that's the end of its involvement. So when the money lands, tap
+      <strong>Money received</strong> and it moves to Paid. Nothing here is
+      guessing on your behalf.
+    </p>` : ""}`;
+}
+
+/* The money-came-in sheet. One number, already filled in with the whole
+   balance, because that's what happens nearly every time. */
+function openInvPayment(id){
+  const j = Store.job(id);
+  if (!j) return;
+  const pay   = j.payment || blankPayment();
+  const total = Store.invoiceTotal(j);
+  const got   = Number(pay.amountPaid) || 0;
+  const bal   = Store.balance(j);
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">${esc(custName(j.customerId))} · job #${esc(j.no)}</div>
+        <h2>${esc(pay.ref || (j.invoiceNo ? "INV-" + j.invoiceNo : "Not invoiced yet"))}</h2></div>
+      <div class="spacer"></div><button class="x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="card" style="margin-bottom:14px">
+        <div class="money-row"><span class="mr-label">Invoice total</span>
+          <span class="mr-val">${esc(money(total))}</span></div>
+        <div class="money-row"><span class="mr-label">Already received</span>
+          <span class="mr-val">${esc(money(got))}</span></div>
+        <div class="money-row" style="border-bottom:0"><span class="mr-label">Still owed</span>
+          <span class="mr-val" style="color:${bal>0.005?"var(--amber)":"var(--green)"}">${esc(money(bal))}</span></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>How much came in</label>
+          <input class="input" id="ipay-amt" type="number" min="0" step="0.01" value="${esc(bal.toFixed(2))}">
+          <div class="hint">The whole balance is filled in already. Change it for a part payment.</div></div>
+        <div class="field"><label>How it came in</label>
+          <select class="input" id="ipay-method">
+            ${PAY_METHODS.map(m => `<option value="${esc(m)}"${m===pay.method?" selected":""}>${esc(m||"—")}</option>`).join("")}
+          </select></div>
+      </div>
+      <p class="t-sub" style="margin:4px 0 0">
+        Stripe never tells the app when it gets paid, so this is where it finds out.
+      </p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn primary" data-ipay-save="${j.id}">Record it</button>
+      ${got > 0.005 || pay.status === "paid"
+        ? `<button class="btn ghost" data-ipay-clear="${j.id}">Nothing received after all</button>` : ""}
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+    </div>`);
 }
 
 /* ============================================================
@@ -5889,6 +6149,13 @@ async function printInvoice(id){
     i.onload = r; i.onerror = r; setTimeout(r, 1500);
   })));
   window.print();
+  /* Saving the PDF is the moment the invoice leaves his hands, so that's
+     when it joins the Invoices list. Waiting for him to tick a box
+     somewhere afterwards means it never gets ticked. */
+  const fresh = !j.payment || j.payment.status === "unbilled";
+  Store.markInvoiced(j);
+  if (fresh) toast(`INV-${j.invoiceNo} is in Invoices now, waiting on payment`, "ok");
+  renderQuiet();
 }
 
 /* ---------- Photos, shared by jobs and estimates ----------
@@ -7095,6 +7362,57 @@ document.addEventListener("click", e => {
     if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
     return;
   }
+  const invGo = hit("[data-inv-go]");
+  if (invGo){ App.invTab = invGo.dataset.invGo; return go("invoices"); }
+
+  const invTab = hit("[data-inv-tab]");
+  if (invTab){ App.invTab = invTab.dataset.invTab; return render(); }
+
+  /* The whole point of the Invoices screen: one tap, money's in. */
+  const invGot = hit("[data-inv-got]");
+  if (invGot){
+    const j = Store.job(invGot.dataset.invGot);
+    if (!j) return;
+    const amt = Store.invoiceTotal(j);
+    Store.setPayment(j, { status:"paid", amountPaid: amt });
+    render();
+    toast(`${(j.payment.ref || "#" + j.no)} paid in full — ${money(amt)} in`, "ok");
+    return;
+  }
+  const invPay = hit("[data-inv-pay]");
+  if (invPay) return openInvPayment(invPay.dataset.invPay);
+
+  const ipaySave = hit("[data-ipay-save]");
+  if (ipaySave){
+    const j = Store.job(ipaySave.dataset.ipaySave);
+    if (!j) return;
+    const came  = Math.max(0, Number($("#ipay-amt").value) || 0);
+    const had   = Number((j.payment || {}).amountPaid) || 0;
+    const total = Store.invoiceTotal(j);
+    const now   = Math.round((had + came) * 100) / 100;
+    // Within half a cent of the total is paid. Anything less is still out,
+    // with the part payment recorded against it.
+    Store.setPayment(j, {
+      status: now >= total - 0.005 ? "paid" : "invoiced",
+      amountPaid: now,
+      method: $("#ipay-method").value
+    });
+    closeModal(); render();
+    toast(now >= total - 0.005
+      ? `Paid in full — ${money(now)} in`
+      : `${money(came)} in, ${money(Store.balance(j))} still owed`, "ok");
+    return;
+  }
+  const ipayClear = hit("[data-ipay-clear]");
+  if (ipayClear){
+    const j = Store.job(ipayClear.dataset.ipayClear);
+    if (!j) return;
+    Store.setPayment(j, { status:"invoiced", amountPaid: 0 });
+    closeModal(); render();
+    toast("Put back to waiting on payment", "ok");
+    return;
+  }
+
   const inv = hit("[data-invoice]");
   if (inv) return previewInvoice(inv.dataset.invoice);
 
@@ -7233,11 +7551,6 @@ document.addEventListener("click", e => {
     render(); openJob(j.id);
     toast("Payment updated", "ok");
     return;
-  }
-  const money$ = hit("[data-money]");
-  if (money$){
-    App.filters = { status:"", techId:"", type:"", when: money$.dataset.money };
-    return go("jobs");
   }
   const saveExt = hit("[data-save-ext]");
   if (saveExt){

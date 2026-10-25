@@ -106,19 +106,33 @@ quoted price and shows what it's running over or under once the tech adds
 parts. Job types that normally want a waiver say so on the job record until one
 is signed.
 
-**Payment tracking** — each job records whether it's been invoiced and paid, how
-much came in, by what method, the invoice reference, and a link to the payment
-page. The dashboard shows **Ready to invoice** and **Awaiting payment** as running
-totals, and clicking either opens that list. Partial payments and deposits show
-the balance owing.
+**Invoices** — the one place that answers "what am I owed?".
+Three lists, and work moves left to right:
 
-This is deliberately manual. Stripe (or whoever you invoice through) stays the
-system of record and keeps doing what it's good at — this just indexes the
-outcome so the office can answer "what's outstanding?" without leaving the app.
-Nothing here talks to a payment processor, so there is no integration to break,
-no keys to rotate, and no API version to keep up with. Same idea on a signed
-waiver: there's a field to link an external copy if you ever send one through
-DocuSign.
+- **To send** — finished jobs with money on them that nobody has billed yet.
+- **Out** — invoices sent and waiting, longest-out first, each showing how many
+  days it's been out and when it's due. Past the due date the row turns red and
+  says how late it is. A part payment shows what's in and what's left.
+- **Paid** — settled, with the date and the method, kept as a record.
+
+Across the top: owed to you, overdue, ready to invoice, and collected this
+month. The badge on the tab counts only what needs *you* — work to bill and
+invoices gone late. An invoice sent on Tuesday that isn't due until the 15th
+needs nothing from anybody, so it doesn't nag.
+
+Saving the PDF moves an invoice from **To send** to **Out** by itself, since
+that's the moment it leaves your hands. The other move is a tap: **Money
+received** marks it paid in full, tax included, and it drops into Paid.
+**Part payment…** opens a sheet with the balance already filled in for anything
+less. Marked the wrong one? "Nothing received after all" puts it straight back.
+
+This is deliberately manual, and the screen says so. Stripe (or whoever you
+invoice through) takes the money and never reports back — nothing out there
+tells the app when a customer pays. So the app asks you rather than guessing,
+and stays honest about which of the two of you knows. Nothing here talks to a
+payment processor, so there is no integration to break, no keys to rotate, and
+no API version to keep up with. Same idea on a signed waiver: there's a field
+to link an external copy if you ever send one through DocuSign.
 
 **Customers** — contact details, service address, site notes (gate codes, dogs,
 parking, billing quirks), full service history, and lifetime billed.
@@ -130,7 +144,7 @@ Deactivating a tech takes their column off the board without touching their jobs
 problem, site notes, room to write up the work, and a signature line. Print the
 whole day from the dashboard or any single job from its detail view.
 
-**Invoices** — your own, not a retyped copy of one. The **Invoice** button on a
+**The invoice document** — your own, not a retyped copy of one. The **Invoice** button on a
 job opens a preview of exactly what the customer will see: letterhead and logo,
 who it's billed to, what was wrong, line items, labour, subtotal, GST, total
 and the due date. Underneath that, the before-and-after photos and a list of
@@ -144,6 +158,10 @@ The invoice number is assigned the first time you open the preview and never
 changes afterwards, because by then it may be in somebody else's books. A job
 with no line items is refused rather than sent blank, and doesn't waste a
 number.
+
+Save the PDF and the invoice moves itself onto the **Invoices** screen under
+**Out**, with its number as the reference, so you never have to remember to
+file it anywhere.
 
 **GST only appears once there is a registration number in settings.** Charging
 it before you're registered isn't a formatting mistake, so the document simply
@@ -344,6 +362,12 @@ Estimates:
 Jobs:
 
     Unscheduled → Scheduled → Dispatched → In Progress → Complete
+
+Invoices:
+
+    To send → Out → Paid
+
+Saving the PDF makes the first move; you make the second.
 
 `Cancelled` is available at any point on a job. The blue button in the job
 detail moves it one step forward; the dropdown next to it jumps anywhere. A
