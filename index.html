@@ -1430,7 +1430,16 @@ const Cloud = {
     } finally {
       this.photoBusy = false;
     }
-    if (sent) this.emit();
+    if (sent){
+      this.emit();
+      // the waiting marker should disappear while he's looking at it, not
+      // the next time the record happens to be reopened
+      const host = $("[data-ph-host]");
+      if (host){
+        const [k, id] = host.dataset.phHost.split(":");
+        if (typeof refreshPhotos === "function") refreshPhotos(k, id);
+      }
+    }
     return sent;
   },
 
