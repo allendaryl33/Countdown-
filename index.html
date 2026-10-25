@@ -581,8 +581,19 @@ textarea.input{resize:vertical;min-height:76px}
 .toolbar select,.toolbar input{padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:#fff}
 .filter-note{font-size:12.5px;color:var(--muted)}
 
+/* ---------- Waiting-to-sync strip ---------- */
+.waiting{
+  display:flex;align-items:flex-start;gap:9px;margin-bottom:14px;padding:11px 13px;
+  border-radius:9px;font-size:13.5px;line-height:1.5;
+  background:var(--amber-soft);border:1px solid #f0d6bb;color:#8a4f16;
+}
+.waiting.ok{background:var(--green-soft);border-color:#bfe0cc;color:var(--green)}
+.waiting .w-ico{flex:0 0 auto;font-size:15px;line-height:1.35}
+.waiting b{font-weight:700}
+.waiting .w-act{margin-left:auto;flex:0 0 auto}
+
 /* ---------- Photos ---------- */
-.ph-label{padding:13px 16px;border-top:1px solid var(--line);background:var(--sunk)}
+.ph-label{padding:13px 16px;border-top:1px solid var(--line);background:var(--sunk);flex:0 0 auto}
 .ph-quick{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
 .ph-custom{display:flex;gap:8px}
 .ph-custom .input{flex:1;min-width:0}
@@ -2849,8 +2860,51 @@ function wireSheetDrag(sheet){
   });
 }
 
+/* Where you were, kept across a restart.
+
+   iOS will throw a home-screen web app out of memory while the camera is
+   open and reload it when you come back, which dumped you on Today with
+   the job you were working on closed. Nothing can stop the reload; this
+   makes it land you back where you were instead. */
+const PLACE_KEY = "pcp.place.v1";
+
+function rememberPlace(modal){
+  try {
+    localStorage.setItem(PLACE_KEY, JSON.stringify({
+      view: App.view, date: App.date, modal: modal || null, at: Date.now()
+    }));
+  } catch(e){}
+}
+
+function forgetPlaceModal(){
+  try {
+    const p = JSON.parse(localStorage.getItem(PLACE_KEY) || "null");
+    if (p){ p.modal = null; localStorage.setItem(PLACE_KEY, JSON.stringify(p)); }
+  } catch(e){}
+}
+
+function restorePlace(){
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem(PLACE_KEY) || "null"); } catch(e){}
+  if (!p) return false;
+  // half an hour is long enough to cover a camera trip, short enough that
+  // opening the app tomorrow starts on Today like it should
+  if (!p.at || Date.now() - p.at > 30*60*1000) return false;
+
+  if (p.view && VIEWS.some(v => v.id === p.view)) App.view = p.view;
+  if (p.date) App.date = p.date;
+  render();
+
+  if (p.modal && p.modal.id){
+    const open = p.modal.kind === "estimate" ? openEstimate : openJob;
+    if (Store.recordOf(p.modal.kind, p.modal.id)) setTimeout(() => open(p.modal.id), 0);
+  }
+  return true;
+}
+
 function go(view){
   App.view = view;
+  rememberPlace(null);
   render();
   window.scrollTo(0,0);
 }
@@ -3174,6 +3228,8 @@ function viewToday(){
     ${collected ? `<span class="pill cash">＋${esc(money(collected))} in</span>` : ""}
     ${owed ? `<span class="pill warn">${esc(money(owed))} to collect</span>` : ""}
   </div>
+
+  ${waitingStrip()}
 
   ${open.length ? open.map(stopCard).join("")
     : `<div class="today-empty">
@@ -4526,6 +4582,7 @@ function openModal(html, opts){
 function closeModal(){
   $("#modal-root").innerHTML = "";
   document.body.style.overflow = "";
+  forgetPlaceModal();
 }
 document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
@@ -4537,6 +4594,7 @@ document.addEventListener("keydown", e => {
 function openJob(id){
   const j = Store.job(id);
   if (!j) return;
+  rememberPlace({ kind:"job", id });
   const c = Store.customer(j.customerId);
   const next = NEXT_STATUS[j.status];
   const parts = j.parts || [];
@@ -4877,6 +4935,7 @@ function saveJobFromForm(id){
 function openEstimate(id){
   const e = Store.estimate(id);
   if (!e) return;
+  rememberPlace({ kind:"estimate", id });
   const c = Store.estContact(e);
   const total = Store.estimateTotal(e);
   const job = e.jobId ? Store.job(e.jobId) : null;
@@ -5662,6 +5721,34 @@ function saveTemplateFromForm(id){
   Store.save(); closeModal();
   App.view = "waivers"; App.waiverTab = "templates";
   render();
+}
+
+/* What is still only on this phone.
+
+   On a phone the sidebar is hidden, so the sync indicator down there is
+   invisible exactly where it matters most. This is the answer to "how am I
+   meant to know whether I should have used the camera app instead" — you
+   are not: it says so. */
+function waitingStrip(){
+  if (!Cloud.configured() || !Cloud.cfg.refreshToken) return "";
+  const photos = Store.pendingPhotos().length;
+  const offline = Cloud.state === "error";
+  // Ordinary edits go up in a couple of seconds and are tiny. Saying so after
+  // every keystroke would make this strip noise, and then he'd stop reading
+  // it on the day it matters. Photos and a dead connection only.
+  if (!photos && !offline) return "";
+
+  return `
+  <div class="waiting">
+    <span class="w-ico">${offline ? "📡" : "↑"}</span>
+    <span>
+      ${photos ? `<b>${photos} photo${photos===1?"":"s"}</b> still only on this phone. ` : ""}
+      ${offline
+        ? "No connection right now. Everything's safe here and goes up by itself when you're back in range."
+        : "Uploading now."}
+    </span>
+    ${offline ? "" : `<button class="btn sm ghost w-act" data-action="sync-now">Retry</button>`}
+  </div>`;
 }
 
 /* ---------- Photos, shared by jobs and estimates ----------
@@ -7200,6 +7287,7 @@ document.addEventListener("click", e => {
       }
       break;
     case "close-sheet": closeNavSheet(); break;
+    case "sync-now": Cloud.syncNow().then(() => render()); break;
     case "pick-clear": {
       const n = Store.pickupList().reduce((s,g) => s + g.items.length, 0);
       if (!n) break;
@@ -7339,7 +7427,7 @@ $("#btn-new-estimate").addEventListener("click", () => openEstimateForm(null));
 Store.load();
 App.date = todayStr();
 Cloud.loadCfg();
-render();
+if (!restorePlace()) render();
 renderSync();
 function renderStorageNote(){
   const n = Store.data.jobs.length;

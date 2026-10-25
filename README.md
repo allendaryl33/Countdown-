@@ -145,6 +145,15 @@ Label each one Before, After, or anything you type — "main stack", "meter",
 the phone, or delete it. Adding, labelling and deleting all show up in the
 job's log alongside clocking in and out.
 
+You never have to guess whether something is still only on the phone. If a
+photo hasn't uploaded, Today says so and says it's safe; when it goes up, the
+message disappears. It stays quiet for ordinary edits, so when it does speak
+it means something.
+
+If iOS throws the app out of memory while the camera is open — it does, and
+nothing in a web page can stop it — reopening lands you back on the same job
+rather than on Today.
+
 Location data never makes it in. Every photo is re-encoded through a canvas
 before it is stored, which drops the EXIF block the camera attaches — GPS
 included. A library photo iOS describes as having "Location Is Included"
