@@ -1863,7 +1863,9 @@ const Cloud = {
       });
       if (landed){
         this.markDirty();
-        toast(landed === 1 ? "An estimate came back signed" : landed + " estimates came back signed", "ok");
+        toast(landed === 1
+          ? "An estimate came back signed — the job's on the board"
+          : landed + " estimates came back signed — the jobs are on the board", "ok");
         renderQuiet();
       }
     } catch(err){
@@ -2214,6 +2216,39 @@ const Store = {
     if (status === "approved" || status === "declined") e.decidedAt = Date.now();
     this.addEstLog(e, `Status: ${from} → ${EST_STATUS_LABEL[status]}`);
     this.save();
+    if (status === "approved") this.jobFromApproved(e);
+  },
+
+  /* The customer on an estimate, whether they were already one or are still
+     only a name on a lead. Matched on the last ten digits of the phone, the
+     same as everything else here. */
+  customerFromEstimate(e){
+    if (e.customerId) return this.customer(e.customerId);
+    const l = e.lead;
+    if (!l || !String(l.name || "").trim()) return null;
+    const found = this.customerForLead({ phone: l.phone, name: l.name });
+    if (found) return found;
+    const c = {
+      id: uid("cus"), name: l.name, phone: l.phone || "", email: l.email || "",
+      address: l.address || "", city: l.city || "Edmonton", zone: "city",
+      notes: "", createdAt: Date.now()
+    };
+    this.data.customers.push(c);
+    return c;
+  },
+
+  /* Approving is the decision. Scheduling is a different one, made looking
+     at the week rather than from memory — so the job turns up unscheduled
+     above the board, where he can drop it on a day he can actually see. */
+  jobFromApproved(e){
+    if (e.jobId) return this.job(e.jobId);
+    if (!(e.items || []).length) return null;
+    const c = this.customerFromEstimate(e);
+    if (!c) return null;
+    return this.convertEstimate(e, {
+      customerId: c.id, scheduledDate: null, window: "Anytime",
+      techId: null, priority: "Normal"
+    });
   },
 
   /* Approved work becomes a real job. Line items and the agreed price carry
@@ -2247,7 +2282,7 @@ const Store = {
       e.status = "approved";
       e.decidedAt = Date.now();
     }
-    this.addEstLog(e, `Approved and converted to job #${job.no}`);
+    this.addEstLog(e, `Job #${job.no} created — waiting to be scheduled`);
     this.save();
     return job;
   },
@@ -2735,6 +2770,7 @@ const Store = {
     if (e.status !== "approved"){ e.status = "approved"; e.decidedAt = Date.now(); }
     this.addEstLog(e, `Approved on screen by ${opts.name}${opts.how && opts.how !== "in person" ? " (" + opts.how + ")" : ""}`);
     this.save();
+    this.jobFromApproved(e);
     return e.approval;
   },
   /* Has it been edited since they signed? A changed total means the paper
@@ -4662,13 +4698,23 @@ function viewEstimates(){
   const all = Store.data.estimates;
   let list = all.slice();
   if (f === "open")     list = list.filter(e => e.status === "draft" || e.status === "sent");
-  if (f === "approved") list = list.filter(e => e.status === "approved");
+  // Approved is a list of work still to do. Once its job has been billed it
+  // drops out of here and lives in All, so this stops growing forever.
+  if (f === "approved") list = list.filter(e => {
+    if (e.status !== "approved") return false;
+    const j = e.jobId ? Store.job(e.jobId) : null;
+    return !j || !j.payment || j.payment.status === "unbilled";
+  });
   if (f === "declined") list = list.filter(e => e.status === "declined");
   list.sort((a,b) => b.createdAt - a.createdAt);
 
   const sent = all.filter(e => e.status === "sent");
   const outValue = sent.reduce((s,e) => s + Store.estimateTotal(e), 0);
   const won = all.filter(e => e.status === "approved");
+  const liveWon = won.filter(e => {
+    const j = e.jobId ? Store.job(e.jobId) : null;
+    return !j || !j.payment || j.payment.status === "unbilled";
+  });
   const wonValue = won.reduce((s,e) => s + Store.estimateTotal(e), 0);
   const decided = won.length + all.filter(e => e.status === "declined").length;
   const winRate = decided ? Math.round(won.length / decided * 100) : null;
@@ -4696,7 +4742,7 @@ function viewEstimates(){
 
   <div class="toolbar">
     ${tab("open","Open", Store.openEstimates().length)}
-    ${tab("approved","Approved", won.length)}
+    ${tab("approved","Approved", liveWon.length)}
     ${tab("declined","Declined", all.filter(e=>e.status==="declined").length)}
     ${tab("all","All", all.length)}
     <div style="flex:1"></div>
@@ -4722,10 +4768,8 @@ function viewEstimates(){
           <td>${estBadge(e.status)}${job?`<div class="t-sub" style="margin-top:3px">→ job #${job.no}</div>`:""}</td>
           <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
           <td class="num" style="white-space:nowrap">
-            ${e.status==="sent"||e.status==="draft"
-              ? `<button class="btn sm primary" data-convert="${e.id}">Approve &amp; convert →</button>`
-              : (e.status==="approved" && !e.jobId
-                  ? `<button class="btn sm primary" data-convert="${e.id}">Convert to job →</button>` : "")}
+            ${e.status === "approved" && !e.jobId
+              ? `<button class="btn sm" data-convert="${e.id}">Make the job →</button>` : ""}
           </td>
         </tr>`;
       }).join("")
@@ -6089,11 +6133,13 @@ function openEstimate(id){
   const actions = [];
   if (e.status === "draft")  actions.push(`<button class="btn sm" data-est-status="${e.id}:sent">Mark as Sent</button>`);
   if (e.status === "draft" || e.status === "sent"){
-    actions.push(`<button class="btn primary sm" data-convert="${e.id}">Approve &amp; convert →</button>`);
+    actions.push(`<button class="btn primary sm" data-est-status="${e.id}:approved">✓ They approved it</button>`);
     actions.push(`<button class="btn sm" data-est-status="${e.id}:declined">Customer declined</button>`);
   }
+  // Normally approving makes the job by itself; this only shows if that
+  // could not happen — no line items, or no name to make a customer from.
   if (e.status === "approved" && !e.jobId)
-    actions.push(`<button class="btn primary sm" data-convert="${e.id}">Convert to job →</button>`);
+    actions.push(`<button class="btn sm" data-convert="${e.id}">Make the job →</button>`);
   if (e.status === "declined")
     actions.push(`<button class="btn sm" data-est-status="${e.id}:sent">Reopen as Sent</button>`);
 
@@ -8455,8 +8501,10 @@ function saveEstimateSignature(id){
   if (!ok) return;
 
   Store.signEstimate(e, { name, role: $("#es-role").value, signature: exportSignature() });
+  const job = e.jobId ? Store.job(e.jobId) : null;
   closeModal(); render(); openEstimate(e.id);
-  toast(`EST-${e.no} approved by ${name}`, "ok");
+  toast(job ? `Approved — job #${job.no} is on the board, waiting for a day`
+            : `EST-${e.no} approved by ${name}`, "ok");
 }
 
 /* Sending an estimate.
@@ -9144,8 +9192,10 @@ document.addEventListener("click", e => {
     const [eid, st] = estSt.dataset.estStatus.split(":");
     const e = Store.estimate(eid);
     Store.setEstStatus(e, st);
+    const made = st === "approved" && e.jobId ? Store.job(e.jobId) : null;
     render(); openEstimate(eid);
-    toast(`EST-${e.no} → ${EST_STATUS_LABEL[st]}`, "ok");
+    toast(made ? `Approved — job #${made.no} is on the board, waiting for a day`
+               : `EST-${e.no} → ${EST_STATUS_LABEL[st]}`, "ok");
     return;
   }
   const editEst = hit("[data-edit-estimate]");
