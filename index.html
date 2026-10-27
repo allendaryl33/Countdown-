@@ -5250,6 +5250,23 @@ function viewData(){
               your own domain. Links already sent keep working at the old address.</div>
           </div>
           <button class="btn primary" data-action="save-settings">Save it</button>
+          ${(() => {
+            /* A silent failure is worse than a broken one: the panels on the
+               estimate simply vanish, which reads as "nothing is out" rather
+               than "I could not look". Say it in one place he can always find. */
+            if (!Cloud.configured() || !Cloud.cfg.refreshToken) return "";
+            const err = Cloud.linkError;
+            const out = (Cloud.signLinks || []).filter(l => !l.signed_at).length;
+            if (!err) return `<p class="t-sub" style="margin:14px 0 0">
+              Signing table reachable${out ? ` · ${out} link${out===1?"":"s"} out` : " · nothing out"}.</p>`;
+            return `<div class="stop-flag" style="margin:14px -16px -16px;border-radius:0">
+              <strong>Can't read the signing table${err === "offline" ? " — no connection" : ""}.</strong>
+              ${err === "no-table"
+                ? ` Run <strong>supabase-signing.sql</strong> if you haven't; if you just did,
+                    give the database a minute to notice it.`
+                : err === "offline" ? "" : " " + esc(err)}
+              Signatures can't come back until this clears.</div>`;
+          })()}
         </div>
       </div>
 
@@ -5866,9 +5883,44 @@ function openEstimate(id){
 
       ${(() => {
         if (e.approval) return "";
-        const out = (Cloud.signLinks || []).filter(l => l.estimate_id === e.id && !l.signed_at)
+        const mine = (Cloud.signLinks || []).filter(l => l.estimate_id === e.id);
+        const out  = mine.filter(l => !l.signed_at)
           .sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+        const err  = Cloud.linkError;
+
+        /* The whole point of Check now is the times it has not come back by
+           itself, so hiding it whenever the lookup fails took the tool away
+           at precisely the moment it was needed. It shows for anything sent
+           and not yet approved. */
+        if (!out && !mine.length && !(err && e.status === "sent")) return "";
+
+        const check = `<button class="btn sm primary" data-check-signed="${e.id}">Check now</button>`;
+
+        if (err){
+          const why = {
+            "offline":  "No connection. It'll come in when you've got a bar.",
+            "no-table": "The signing table isn't readable yet. If you only just ran " +
+                        "<strong>supabase-signing.sql</strong>, give it a minute — the database " +
+                        "takes a moment to notice a new table. If it keeps saying this, the SQL " +
+                        "didn't finish."
+          }[err] || esc(err);
+          return `<div class="opt-card" style="cursor:default;margin-bottom:16px;border-color:#f0d6bb;background:var(--amber-soft)">
+            <div class="oc-t">⚠ Can't check for signatures</div>
+            <div class="oc-s">${why}</div>
+            <div style="margin-top:9px">${check}</div>
+          </div>`;
+        }
+
+        // Signed, but the approval hasn't been written on yet.
+        if (!out && mine.some(l => l.signed_at)){
+          return `<div class="opt-card" style="cursor:default;margin-bottom:16px;border-color:#bfe0cc;background:var(--green-soft)">
+            <div class="oc-t">✓ They signed it</div>
+            <div class="oc-s">Bringing it in now.</div>
+            <div style="margin-top:9px">${check}</div>
+          </div>`;
+        }
         if (!out) return "";
+
         const sent = out.created_at ? daysBetween(String(out.created_at).slice(0,10), todayStr()) : null;
         const dead = out.expires_at && new Date(out.expires_at) < new Date();
         return `<div class="opt-card" style="cursor:default;margin-bottom:16px;border-color:#d6d1f5;background:var(--purple-soft)">
@@ -5877,9 +5929,9 @@ function openEstimate(id){
             ? "Send a fresh one when you're ready."
             : `Sent ${sent === 0 ? "today" : sent === 1 ? "yesterday" : sent + " days ago"} —
                waiting on them. It lands here the moment they sign.`}</div>
-          ${dead ? "" : `<div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn sm primary" data-check-signed="${e.id}">Check now</button>
-            <button class="btn sm" data-copy-link="${esc(out.token)}">Copy the link again</button></div>`}
+          <div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
+            ${dead ? "" : check}
+            <button class="btn sm" data-copy-link="${esc(out.token)}">Copy the link again</button></div>
         </div>`;
       })()}
 
