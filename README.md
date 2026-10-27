@@ -297,6 +297,12 @@ days** is there for the commercial customer who needs net 15. Printing "due in
 15 days" to somebody standing in front of you with a card is an invitation to
 pay in 15 days.
 
+**An estimate shows GST everywhere it shows a price** — the printed copy, the
+text or email, the screen they sign in person, and the page they sign from a
+link. Subtotal, GST, total. The subtotal stays pre-tax because that is what you
+earn; the total is what they will be asked for, and it matches the invoice to
+the cent.
+
 **GST only appears once there is a registration number in settings.** Charging
 it before you're registered isn't a formatting mistake, so the document simply
 doesn't have a tax line until you fill that field in. What you *earn* stays

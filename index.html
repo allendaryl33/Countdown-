@@ -1804,9 +1804,8 @@ const Cloud = {
     const token = Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
 
     const days = Math.max(7, Number(e.validDays) || 30);
-    const rate = Store.taxRate();
-    const sub  = Store.estimateTotal(e);
-    const tax  = Math.round(sub * rate * 100) / 100;
+    const sub = Store.estimateTotal(e);
+    const tax = Store.estimateTax(e);
 
     const row = {
       token, owner: this.uid, estimate_id: e.id,
@@ -1818,8 +1817,8 @@ const Cloud = {
         address: [c.address, c.city].filter(Boolean).join(", "),
         description: e.description || "",
         items: (e.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
-        taxLabel: rate ? `GST ${Math.round(rate * 1000) / 10}%` : "",
-        tax, total: Math.round((sub + tax) * 100) / 100,
+        taxLabel: Store.taxLabel(),
+        tax, total: Store.estimateGross(e),
         validDays: days,
         company: {
           name: st.company, phone: st.phone ? fmtPhone(st.phone) : "",
@@ -2186,6 +2185,20 @@ const Store = {
   },
   estimateTotal(e){
     return (e.items || []).reduce((s,i) => s + (Number(i.qty)||0) * (Number(i.price)||0), 0);
+  },
+
+  /* An estimate's tax, worked out the same way an invoice's is. estimateTotal
+     stays pre-tax — it is what he earns — and this is what they'll be asked
+     for. Three places quote an estimate and they all have to agree. */
+  estimateTax(e){
+    return Math.round(this.estimateTotal(e) * this.taxRate() * 100) / 100;
+  },
+  estimateGross(e){
+    return Math.round((this.estimateTotal(e) + this.estimateTax(e)) * 100) / 100;
+  },
+  taxLabel(){
+    const r = this.taxRate();
+    return r ? `GST ${Math.round(r * 1000) / 10}%` : "";
   },
 
   addEstLog(e, text){
@@ -2715,6 +2728,7 @@ const Store = {
       at: Date.now(),
       how: opts.how || "in person",
       total: this.estimateTotal(e),
+      gross: this.estimateGross(e),
       items: (e.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
       validDays: e.validDays || 30
     };
@@ -7979,9 +7993,15 @@ function estimateDocHtml(e){
           <td style="text-align:right">${esc(money(i.price))}</td>
           <td style="text-align:right">${esc(money((Number(i.qty)||0)*(Number(i.price)||0)))}</td>
         </tr>`).join("")}
+        ${Store.taxRate() ? `<tr>
+          <td colspan="3" style="text-align:right">Subtotal</td>
+          <td style="text-align:right">${esc(money(total))}</td></tr>
+        <tr>
+          <td colspan="3" style="text-align:right">${esc(Store.taxLabel())}</td>
+          <td style="text-align:right">${esc(money(Store.estimateTax(e)))}</td></tr>` : ""}
         <tr class="tot">
           <td colspan="3" style="text-align:right">Total</td>
-          <td style="text-align:right">${esc(money(total))}</td>
+          <td style="text-align:right">${esc(money(Store.estimateGross(e)))}</td>
         </tr>
       </tbody>
     </table>
@@ -8373,9 +8393,14 @@ function openEstimateSign(id){
             <td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
               ${esc(money(i.qty * i.price))}</td></tr>`).join("")}
         </table>
+        ${Store.taxRate() ? `
+        <div class="money-row"><span class="mr-label">Subtotal</span>
+          <span class="mr-val">${esc(money(total))}</span></div>
+        <div class="money-row"><span class="mr-label">${esc(Store.taxLabel())}</span>
+          <span class="mr-val">${esc(money(Store.estimateTax(e)))}</span></div>` : ""}
         <div class="money-row" style="border-bottom:0">
           <span class="mr-label">Total</span>
-          <span class="mr-val" style="font-size:17px">${esc(money(total))}</span>
+          <span class="mr-val" style="font-size:17px">${esc(money(Store.estimateGross(e)))}</span>
         </div>
       </div>
 
@@ -8461,7 +8486,9 @@ Thanks for getting in touch. Here's the estimate for the ${String(e.type).toLowe
 
 ${(e.items || []).map(i => `  ${i.qty > 1 ? i.qty + " x " : ""}${i.desc} — ${money(i.qty * i.price)}`).join("\n")}
 
-Total: ${money(total)}${st.gst ? " (incl. GST)" : ""}
+${st.gst ? `Subtotal: ${money(total)}
+${Store.taxLabel()}: ${money(Store.estimateTax(e))}
+Total: ${money(Store.estimateGross(e))}` : `Total: ${money(total)}`}
 Good for ${valid} days.
 
 Happy to go through any of it. Just reply or give me a call${st.phone ? " on " + fmtPhone(st.phone) : ""} and we'll get you booked in.
