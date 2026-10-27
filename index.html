@@ -5210,13 +5210,7 @@ function viewData(){
             <div class="field"><label>Payment due in (days)</label>
               <input class="input" id="set-terms" type="number" min="0" step="1"
                      value="${esc(d.settings.invoiceTerms)}"></div>
-            <div class="field"><label>Signing page address</label>
-            <input class="input" id="set-signbase" value="${esc(d.settings.signBase || "")}"
-                   placeholder="https://poseidonplumbing.ca/sign">
-            <div class="hint">Where the page customers sign on is hosted. Leave blank and
-              links point at wherever this app is served from. Put your own domain here once
-              it's hosted there, so customers don't see someone else's address.</div></div>
-          <div class="field"><label>Note on invoices</label>
+            <div class="field"><label>Note on invoices</label>
               <input class="input" id="set-invnote" value="${esc(d.settings.invoiceNote)}"
                      placeholder="Thanks very much for the work."></div>
           </div>
@@ -5236,6 +5230,26 @@ function viewData(){
         <div class="card-head"><h3>Sync across your devices</h3></div>
         <div class="card-body">
           ${cloudCard()}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Customer signing page</h3></div>
+        <div class="card-body">
+          <p class="t-sub" style="margin-top:0;max-width:62ch">
+            When you send an estimate for signature, this is the address the
+            customer's link points at. Leave it blank and links point at wherever
+            this app is served from &mdash; which works, but puts someone else's
+            domain on your paperwork.
+          </p>
+          <div class="field" style="max-width:420px">
+            <label>Signing page address</label>
+            <input class="input" id="set-signbase" value="${esc(d.settings.signBase || "")}"
+                   placeholder="https://poseidonplumbing.ca/sign">
+            <div class="hint">The page is <code>sign.html</code> from this repo, hosted on
+              your own domain. Links already sent keep working at the old address.</div>
+          </div>
+          <button class="btn primary" data-action="save-settings">Save it</button>
         </div>
       </div>
 
