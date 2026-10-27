@@ -6158,8 +6158,8 @@ function openEstimate(id){
         ${actions.join("")}
         <button class="btn sm" data-edit-estimate="${e.id}">Edit details</button>
         ${e.approval ? "" : `<button class="btn sm primary" data-sign-estimate="${e.id}">✍ Sign &amp; approve here</button>`}
-        ${e.approval ? "" : `<button class="btn sm" data-link-estimate="${e.id}">🔗 Send for signature</button>`}
-        <button class="btn sm accent" data-send-estimate="${e.id}">✉ Send to customer</button>
+        ${e.approval ? "" : `<button class="btn sm accent" data-link-estimate="${e.id}">✉ ${e.linkSentAt ? "Send the link again" : "Send it to them to sign"}</button>`}
+        <button class="btn sm" data-send-estimate="${e.id}">Just the numbers, no link</button>
         <button class="btn sm" data-print-estimate="${e.id}">🖨 Print estimate</button>
       </div>
 
@@ -6202,6 +6202,20 @@ function openEstimate(id){
           </div>`;
         }
         if (!out) return "";
+
+        // A link that was made but never actually sent is not "out" — saying so
+        // is exactly the lie that leaves him wondering whether it went.
+        if (!e.linkSentAt && !out.signed_at){
+          return `<div class="opt-card" style="cursor:default;margin-bottom:16px;border-color:#d6d1f5;background:var(--purple-soft)">
+            <div class="oc-t">🔗 A link is ready — you haven't sent it yet</div>
+            <div class="oc-s">Nothing has gone to them. Open it again to text or email it.</div>
+            <div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn sm primary" data-link-estimate="${e.id}">Send it now</button>
+              <button class="btn sm" data-copy-link="${esc(out.token)}" data-sent-id="${e.id}">Copy the link</button>
+              ${check}
+            </div>
+          </div>`;
+        }
 
         const sent = out.created_at ? daysBetween(String(out.created_at).slice(0,10), todayStr()) : null;
         const dead = out.expires_at && new Date(out.expires_at) < new Date();
@@ -8325,6 +8339,19 @@ function signLinkUrl(token){
          `&u=${encodeURIComponent(Cloud.base())}&k=${encodeURIComponent(Cloud.cfg.key)}`;
 }
 
+/* He tapped Text, Email or Copy — so it really went. Until this runs, the
+   estimate says nothing about having been sent, because it hasn't been. */
+function markLinkSent(id, how){
+  const e = Store.estimate(id);
+  if (!e) return;
+  const first = e.status === "draft";
+  if (first) Store.setEstStatus(e, "sent");   // logs the move itself
+  e.linkSentAt = Date.now();
+  Store.addEstLog(e, `${how} the signing link to the customer`);
+  Store.save(); renderQuiet();
+  toast(first ? `EST-${e.no} — link sent` : `Link sent again — EST-${e.no}`, "ok");
+}
+
 async function sendForSignature(id){
   const e = Store.estimate(id);
   if (!e) return;
@@ -8334,8 +8361,9 @@ async function sendForSignature(id){
     return;
   }
   if (!Cloud.configured() || !Cloud.cfg.refreshToken){
-    toast("Connect this device first — More → Data & Setup", "warn");
-    return;
+    // Better a plain estimate than no estimate — he can still send the numbers.
+    toast("Not connected, so no signing link — sending it as a plain message", "warn");
+    return sendEstimate(id);
   }
 
   openModal(`<div class="modal-head"><div><div class="t-sub">EST-${e.no} · ${esc(c.name)}</div>
@@ -8357,12 +8385,15 @@ async function sendForSignature(id){
 
   const url = signLinkUrl(token);
   const first = String(c.name).trim().split(/\s+/)[0] || "there";
+  const gst = Store.data.settings.gst;
   const note = `Hi ${first} — here's the estimate for the ${String(e.type).toLowerCase()}, ` +
-    `${money(Store.estimateTotal(e))}. Have a look and approve it here when you're happy: ${url}`;
+    `${money(gst ? Store.estimateGross(e) : Store.estimateTotal(e))}` +
+    `${gst ? ` (incl. ${Store.taxLabel()})` : ""}. ` +
+    `Have a look and approve it here when you're happy: ${url}`;
 
-  if (e.status === "draft") Store.setEstStatus(e, "sent");
-  Store.addEstLog(e, "Sent a signing link to the customer");
-  Store.save();
+  // Making the link is not sending it. Nothing is recorded until he actually
+  // taps Text, Email or Copy — otherwise backing out of this screen leaves an
+  // estimate claiming it went to a customer who never heard from him.
   await Cloud.pullSignLinks();
 
   openModal(`
@@ -8379,9 +8410,9 @@ async function sendForSignature(id){
       <div class="field"><label>The message</label>
         <textarea class="msg-prev" id="lk-note" style="min-height:140px">${esc(note)}</textarea></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
-        ${c.phone ? `<a class="btn primary" id="lk-sms" href="#">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
-        ${c.email ? `<a class="btn" id="lk-mail" href="#">✉ Email ${esc(c.email)}</a>` : ""}
-        <button class="btn" data-copy-link="${esc(token)}">📋 Copy the link</button>
+        ${c.phone ? `<a class="btn primary" id="lk-sms" href="#" data-link-sent="${e.id}:Texted">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
+        ${c.email ? `<a class="btn" id="lk-mail" href="#" data-link-sent="${e.id}:Emailed">✉ Email ${esc(c.email)}</a>` : ""}
+        <button class="btn" data-copy-link="${esc(token)}" data-sent-id="${e.id}">📋 Copy the link</button>
       </div>
       <p class="t-sub" style="margin:14px 0 0;max-width:62ch">
         <strong>The link is the key.</strong> Anyone holding it can see this one
@@ -9159,6 +9190,16 @@ document.addEventListener("click", e => {
     if (navigator.clipboard && navigator.clipboard.writeText)
       navigator.clipboard.writeText(url).then(done, () => prompt("Copy this link:", url));
     else prompt("Copy this link:", url);
+    if (copyLink.dataset.sentId) markLinkSent(copyLink.dataset.sentId, "Copied");
+    return;
+  }
+
+  /* The anchor's own href opens Messages or the mail app; this only records
+     that he really did send it. */
+  const lkSent = hit("[data-link-sent]");
+  if (lkSent){
+    const [eid, how] = lkSent.dataset.linkSent.split(":");
+    markLinkSent(eid, how);
     return;
   }
 
