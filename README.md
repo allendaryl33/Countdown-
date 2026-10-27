@@ -249,6 +249,13 @@ Save the PDF and the invoice moves itself onto the **Invoices** screen under
 **Out**, with its number as the reference, so you never have to remember to
 file it anywhere.
 
+**Payment terms** are a choice, not only a number of days. **On completion of
+work** is the default for a shop that gets paid on the spot — the invoice says
+so where a due date would go, and no date is calculated. **Due in a number of
+days** is there for the commercial customer who needs net 15. Printing "due in
+15 days" to somebody standing in front of you with a card is an invitation to
+pay in 15 days.
+
 **GST only appears once there is a registration number in settings.** Charging
 it before you're registered isn't a formatting mistake, so the document simply
 doesn't have a tax line until you fill that field in. What you *earn* stays
