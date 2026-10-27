@@ -1206,6 +1206,17 @@ function readInquiry(r){
   };
 }
 
+/* The trident is a data URI on --logo so a saved copy of this file carries
+   its own logo. The customer's invoice page is a different file on a
+   different domain, so it has to be handed the image itself. */
+function logoDataUrl(){
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--logo") || "";
+    const m = v.match(/url\(\s*["']?(data:image\/[^"')]+)["']?\s*\)/);
+    return m ? m[1] : "";
+  } catch(e){ return ""; }
+}
+
 function blankPayment(){
   return { status:"unbilled", amountPaid:0, method:"", ref:"", url:"", invoicedAt:null, paidAt:null };
 }
@@ -1661,6 +1672,7 @@ const Cloud = {
       this.pullInquiries();
       // along with anything a customer has signed since we last looked
       this.pullSignLinks();
+      this.pullInvoiceLinks();
     } catch(err){
       if (err.offline){ this.set("error", "no connection — saved on this device"); return; }
       if (err.status === 401 || /refresh|jwt|token/i.test(err.message || "")){
@@ -1668,6 +1680,84 @@ const Cloud = {
       }
       this.set("error", err.message || "sync failed");
     }
+  },
+
+  /* --- the invoice the customer opens ---
+     A web page cannot attach a file to a text or an email, so attaching a
+     PDF was always going to mean save, find, attach. This publishes the
+     invoice under a token instead and sends a link, which is one tap, and
+     puts the pay button on the same page they are reading. */
+  async publishInvoiceLink(job){
+    await this.ensureToken();
+    const st = Store.data.settings;
+    const c  = Store.customer(job.customerId) || {};
+    const bytes = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    const token = Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    const days = 90;
+    const ttl  = days * 86400;
+
+    /* Photos live in a private bucket the customer has no way into, so mint
+       a signed link for each that lasts as long as the invoice link does.
+       Nothing in the bucket becomes public; these sit inside a payload that
+       needs the token to reach. */
+    const labelled = Store.photosOf(job).filter(p => p.tag);
+    const shots = [];
+    for (const ph of labelled){
+      if (!ph.path) continue;
+      try { shots.push({ tag: ph.tag, url: await this.signPhoto(ph.path, ttl) }); }
+      catch(e){ /* a photo that won't sign is left off rather than failing the invoice */ }
+    }
+
+    const signed = Store.signedForJob(job.id).map(w => ({
+      title: w.title, who: w.signerName, at: fmtStamp(w.signedAt), signature: w.signature || ""
+    }));
+
+    const payload = {
+      no: "INV-" + Store.invoiceNoFor(job),
+      date: fmtDate(job.invoicedOn || todayStr(), { month:"long", day:"numeric", year:"numeric" }),
+      customer: c.name || "", address: c.address || "", city: c.city || "", phone: c.phone ? fmtPhone(c.phone) : "",
+      type: job.type, jobNo: job.no,
+      when: job.scheduledDate ? fmtDateLong(job.scheduledDate) : "",
+      terms: Store.termsLine(job),
+      description: job.description || "",
+      lines: Store.invoiceLines(job),
+      taxLabel: Store.taxRate() ? `GST ${Math.round(Store.taxRate() * 1000) / 10}%` : "",
+      tax: Store.taxOn(job),
+      total: Store.invoiceTotal(job),
+      paid: Number((job.payment || {}).amountPaid) || 0,
+      balance: Store.balance(job),
+      note: st.invoiceNote || "",
+      photos: shots, signed,
+      pay: {
+        stripe: (job.payment && job.payment.url) || st.payStripeUrl || "",
+        etransfer: st.payEtransfer || "",
+        cash: !!st.payCash
+      },
+      company: {
+        name: st.company, phone: st.phone ? fmtPhone(st.phone) : "",
+        email: st.email || "", website: st.website || "", address: st.address || "",
+        logo: logoDataUrl()
+      }
+    };
+
+    await this.call("/rest/v1/invoice_links", {
+      method:"POST", headers:{ "Prefer":"return=minimal" },
+      body: { token, owner: this.uid, job_id: job.id, payload,
+              expires_at: new Date(Date.now() + days * 86400000).toISOString() }
+    });
+    return token;
+  },
+
+  invoiceLinks: [],
+  async pullInvoiceLinks(){
+    if (!this.configured() || !this.cfg.refreshToken) return;
+    try {
+      const rows = await this.call(
+        "/rest/v1/invoice_links?select=token,job_id,viewed_at,view_count,created_at,expires_at");
+      this.invoiceLinks = Array.isArray(rows) ? rows : [];
+    } catch(err){ this.invoiceLinks = []; }
   },
 
   /* --- estimates signed from a link ---
@@ -1877,6 +1967,9 @@ const Store = {
     if (this.data.settings.invoiceTermsMode == null)
       this.data.settings.invoiceTermsMode = "days";
     if (this.data.settings.signBase == null) this.data.settings.signBase = "";
+    if (this.data.settings.payStripeUrl == null) this.data.settings.payStripeUrl = "";
+    if (this.data.settings.payEtransfer == null) this.data.settings.payEtransfer = "";
+    if (this.data.settings.payCash == null) this.data.settings.payCash = true;
     if (this.data.settings.signShort == null) this.data.settings.signShort = false;
     if (this.data.settings.invoiceNote == null)
       this.data.settings.invoiceNote = "Thanks very much for the work.";
@@ -2519,6 +2612,17 @@ const Store = {
     if (this.termsOnCompletion()) return "Payment due on completion of work";
     const due = this.invoiceDue(job);
     return due ? "Payment due " + fmtDate(due, { month:"long", day:"numeric" }) : "";
+  },
+
+  /* Parts and labour as one list. The printed invoice builds this inline;
+     the page the customer opens needs the same thing as data. */
+  invoiceLines(job){
+    const lines = (job.parts || []).map(p => ({
+      desc: p.desc || p.name || "", qty: Number(p.qty) || 0, price: Number(p.price) || 0
+    })).filter(l => l.desc);
+    const hrs = Number(job.laborHours) || 0;
+    if (hrs) lines.push({ desc: "Labour", qty: hrs, price: Number(job.laborRate) || 0 });
+    return lines;
   },
 
   /* ---- The invoice list.
@@ -5283,6 +5387,36 @@ function viewData(){
       </div>
 
       <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>How they can pay</h3></div>
+        <div class="card-body">
+          <p class="t-sub" style="margin-top:0;max-width:62ch">
+            What appears on the invoice your customer opens. Leave anything blank
+            and it isn't offered.
+          </p>
+          <div class="field" style="max-width:460px">
+            <label>Card payment link</label>
+            <input class="input" id="set-pay-stripe" value="${esc(d.settings.payStripeUrl || "")}"
+                   placeholder="https://buy.stripe.com/...">
+            <div class="hint">Your Stripe payment link. A job with its own link on it
+              uses that one instead.</div>
+          </div>
+          <div class="field" style="max-width:460px">
+            <label>Interac e-Transfer to</label>
+            <input class="input" id="set-pay-etransfer" value="${esc(d.settings.payEtransfer || "")}"
+                   placeholder="admin@poseidonplumbing.ca">
+            <div class="hint">Printed exactly as you type it, so they can copy it. Use an
+              address you already give out &mdash; a second one is a second thing to mistype.</div>
+          </div>
+          <label class="field" style="display:flex;gap:9px;align-items:center;cursor:pointer">
+            <input type="checkbox" id="set-pay-cash" style="width:auto"
+                   ${d.settings.payCash ? "checked" : ""}>
+            <span><strong>Cash</strong></span>
+          </label>
+          <button class="btn primary" data-action="save-settings">Save it</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Customer signing page</h3></div>
         <div class="card-body">
           <p class="t-sub" style="margin-top:0;max-width:62ch">
@@ -6838,8 +6972,9 @@ async function previewInvoice(id){
     </div>
     <div class="modal-foot">
       ${missing.length ? "" : `
-        <button class="btn primary" data-inv-print="${j.id}">Save as PDF / Print</button>
-        <span class="t-sub">Share &rarr; Save to Files, then text or email it</span>`}
+        <button class="btn primary" data-send-invoice="${j.id}">✉ Send it to them</button>
+        <button class="btn" data-inv-print="${j.id}">Save as PDF / Print</button>
+        <span class="t-sub">A link they can pay from, or a file for a bookkeeper</span>`}
       <div class="spacer"></div>
       <button class="btn" data-close>Close</button>
     </div>`, { wide:true, noFocus:true });
@@ -7962,6 +8097,115 @@ async function openInquiryPhoto(path, lead){
   }
 }
 
+function invoiceLinkUrl(token){
+  const st = Store.data.settings || {};
+  const custom = String(st.signBase || "").trim();
+  // The invoice page sits beside the signing page, wherever that is.
+  const base = custom ? custom.replace(/\/+$/, "").replace(/\/sign$/, "") + "/invoice"
+    : location.origin + location.pathname.replace(/[^/]*$/, "") + "invoice.html";
+  if (custom && st.signShort) return `${base}#t=${encodeURIComponent(token)}`;
+  return `${base}#t=${encodeURIComponent(token)}` +
+         `&u=${encodeURIComponent(Cloud.base())}&k=${encodeURIComponent(Cloud.cfg.key)}`;
+}
+
+/* Send the invoice as a link rather than an attachment.
+   A browser cannot put a file into a text or an email, so the PDF route was
+   always save, find, attach. This is one tap — and it puts the pay button on
+   the page they are already reading, which is the shortest road there is
+   between finishing a job and the money arriving. */
+async function sendInvoiceLink(id){
+  const j = Store.job(id);
+  if (!j) return;
+  const c = Store.customer(j.customerId);
+  if (!Store.jobTotal(j)){ toast("There's no money on this job yet", "warn"); return; }
+  if (!c){ toast("Attach it to a customer first", "warn"); return; }
+  if (!Cloud.configured() || !Cloud.cfg.refreshToken){
+    toast("Connect this device first — More → Data & Setup", "warn"); return;
+  }
+
+  openModal(`<div class="modal-head"><div><div class="t-sub">${esc(c.name)}</div>
+      <h2>Making the invoice…</h2></div><div class="spacer"></div></div>
+    <div class="modal-body"><p class="t-sub">One moment.</p></div>`, { noFocus:true });
+
+  let token;
+  try {
+    token = await Cloud.publishInvoiceLink(j);
+  } catch(err){
+    closeModal();
+    toast(err.offline ? "No connection — try again when you've got a bar."
+      : /relation|does not exist|schema cache/i.test(err.message || "")
+        ? "The invoice table isn't set up yet. Run supabase-invoice-links.sql."
+        : (err.message || "It didn't go up."), "warn");
+    return;
+  }
+
+  const url = invoiceLinkUrl(token);
+  const first = String(c.name).trim().split(/\s+/)[0] || "there";
+  const owed = Store.balance(j);
+  const note = `Hi ${first} — invoice for the ${String(j.type).toLowerCase()}, ` +
+    `${money(owed)}. Everything's on here including the photos, and you can pay from the ` +
+    `same page: ${url}`;
+
+  const fresh = !j.payment || j.payment.status === "unbilled";
+  Store.markInvoiced(j);
+  Store.addLog(j, "Sent the invoice as a link");
+  Store.save();
+  await Cloud.pullInvoiceLinks();
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">INV-${esc(j.invoiceNo)} · ${esc(c.name)}</div>
+        <h2>Send the invoice</h2></div>
+      <div class="spacer"></div><button class="x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="t-sub" style="margin:0 0 12px">
+        They open it on their phone and see the lot &mdash; letterhead, the work,
+        before and after, what they signed, the total &mdash; and pay from the same page.
+      </p>
+      <div class="field"><label>The message</label>
+        <textarea class="msg-prev" id="iv-note" style="min-height:130px">${esc(note)}</textarea></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        ${c.phone ? `<a class="btn primary" id="iv-sms" href="#">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
+        ${c.email ? `<a class="btn" id="iv-mail" href="#">✉ Email ${esc(c.email)}</a>` : ""}
+        <button class="btn" data-copy-invoice="${esc(token)}">📋 Copy the link</button>
+      </div>
+      ${(() => {
+        const st = Store.data.settings;
+        const ways = [];
+        if ((j.payment && j.payment.url) || st.payStripeUrl) ways.push("card");
+        if (st.payEtransfer) ways.push("e-transfer");
+        if (st.payCash) ways.push("cash");
+        return ways.length
+          ? `<p class="t-sub" style="margin:14px 0 0">They can pay by
+             <strong>${esc(ways.join(", "))}</strong> from that page.</p>`
+          : `<div class="stop-flag" style="margin:14px -16px -16px;border-radius:0">
+             <strong>No way to pay on it.</strong> Add a card link, an e-transfer address
+             or tick cash under <strong>Data &amp; Setup → How they can pay</strong>.</div>`;
+      })()}
+      <p class="t-sub" style="margin:12px 0 0;max-width:62ch">
+        The link is the key &mdash; anyone holding it can see this one invoice. It
+        reaches nothing else, and it expires in 90 days. Still want a PDF for
+        somebody's bookkeeper? <strong>Invoice → Save as PDF</strong> is still there.
+      </p>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div><button class="btn" data-close>Close</button></div>`,
+    { wide:true, noFocus:true });
+
+  const ta = $("#iv-note");
+  const sync = () => {
+    const txt = ta.value;
+    const sms = $("#iv-sms"), mail = $("#iv-mail");
+    if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(txt)}`;
+    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
+      `?subject=${encodeURIComponent(Store.data.settings.company + " — invoice INV-" + j.invoiceNo)}` +
+      `&body=${encodeURIComponent(txt)}`;
+  };
+  ta.addEventListener("input", sync); sync();
+  if (fresh) toast(`INV-${j.invoiceNo} is in Invoices now`, "ok");
+  renderQuiet();
+}
+
 /* The signing link, for the ones he can't stand in the room for.
    Everything the page needs rides in the hash — the part after the # that
    browsers never send to a server — so the key stays out of access logs on
@@ -8787,6 +9031,19 @@ document.addEventListener("click", e => {
     return;
   }
 
+  const sendInv = hit("[data-send-invoice]");
+  if (sendInv) return sendInvoiceLink(sendInv.dataset.sendInvoice);
+
+  const copyInv = hit("[data-copy-invoice]");
+  if (copyInv){
+    const url = invoiceLinkUrl(copyInv.dataset.copyInvoice);
+    const done = () => toast("Link copied", "ok");
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(url).then(done, () => prompt("Copy this link:", url));
+    else prompt("Copy this link:", url);
+    return;
+  }
+
   const linkEst = hit("[data-link-estimate]");
   if (linkEst) return sendForSignature(linkEst.dataset.linkEstimate);
 
@@ -9118,6 +9375,10 @@ document.addEventListener("click", e => {
       // Trailing slash or not, it's the same address; store it one way.
       s.signBase     = $("#set-signbase").value.trim().replace(/\/+$/, "");
       s.signShort    = !!($("#set-signshort") || {}).checked;
+      s.payStripeUrl = ($("#set-pay-stripe") || {}).value ? $("#set-pay-stripe").value.trim() : s.payStripeUrl;
+      s.payEtransfer = ($("#set-pay-etransfer") || {}).value != null
+        ? $("#set-pay-etransfer").value.trim() : s.payEtransfer;
+      s.payCash      = !!($("#set-pay-cash") || {}).checked;
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");
       break;
