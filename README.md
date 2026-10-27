@@ -129,6 +129,16 @@ able to break the thing taking the calls, so which lead has been dealt with is
 kept in the shop instead. And it **never notifies you**: new leads show as a
 strip on Today, and whatever already pings your phone keeps that job.
 
+**Taking a lead down yourself** — **＋ Take a lead down** on the Leads screen.
+Somebody phones, or a referral turns up, or the website form falls over: name
+and a number is enough, everything else is optional. It lands in the same list
+and converts to a job or an estimate the same way.
+
+It needs no connection at all, which is the point — the times you most need it
+are the times something else has already failed. These are kept in your own
+shop, never written back to the website's table, and a mistyped one can be
+deleted outright (a website inquiry can't be, because it isn't yours).
+
 **Photos on a lead** — if the website form collects them, they show as
 thumbnails on the lead the moment it arrives, tap for full size, and carry
 onto the job or estimate when you book it. People describe plumbing wrong,
