@@ -2413,6 +2413,35 @@ const Store = {
     else if (!pay.ref)             this.setPayment(job, { ref });
   },
 
+  /* An estimate approved on screen, in front of him.
+     What they agreed to is frozen onto the approval — the lines and the
+     total as they stood at that moment — so editing the estimate afterwards
+     can never quietly change what somebody put their name to. Same principle
+     as a signed waiver freezing its own wording. */
+  signEstimate(e, opts){
+    e.approval = {
+      name: opts.name,
+      role: opts.role || "",
+      signature: opts.signature,
+      at: Date.now(),
+      how: opts.how || "in person",
+      total: this.estimateTotal(e),
+      items: (e.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
+      validDays: e.validDays || 30
+    };
+    if (e.status !== "approved"){ e.status = "approved"; e.decidedAt = Date.now(); }
+    this.addEstLog(e, `Approved on screen by ${opts.name}${opts.how && opts.how !== "in person" ? " (" + opts.how + ")" : ""}`);
+    this.save();
+    return e.approval;
+  },
+  /* Has it been edited since they signed? A changed total means the paper
+     they approved and the estimate on screen no longer agree, and he needs
+     to know before he bills it. */
+  approvalDrift(e){
+    if (!e.approval) return 0;
+    return Math.round((this.estimateTotal(e) - e.approval.total) * 100) / 100;
+  },
+
   /* ---- Leads from the website.
      Live rows, not shop data: they are read fresh from the website's table
      each sync and never saved into the shop. Only the fact that one has been
@@ -5650,9 +5679,25 @@ function openEstimate(id){
       <div class="status-steps" style="margin-bottom:16px">
         ${actions.join("")}
         <button class="btn sm" data-edit-estimate="${e.id}">Edit details</button>
+        ${e.approval ? "" : `<button class="btn sm primary" data-sign-estimate="${e.id}">✍ Sign &amp; approve here</button>`}
         <button class="btn sm accent" data-send-estimate="${e.id}">✉ Send to customer</button>
         <button class="btn sm" data-print-estimate="${e.id}">🖨 Print estimate</button>
       </div>
+
+      ${e.approval ? (() => {
+        const drift = Store.approvalDrift(e);
+        return `<div class="opt-card on" style="cursor:default;margin-bottom:16px">
+          <div class="oc-t">✍ Approved by ${esc(e.approval.name)}${e.approval.role ? " · " + esc(e.approval.role) : ""}</div>
+          <div class="oc-s">${esc(fmtStamp(e.approval.at))} · ${esc(e.approval.how)} ·
+            agreed at ${esc(money(e.approval.total))}</div>
+          ${e.approval.signature ? `<div style="margin-top:8px"><img src="${esc(e.approval.signature)}"
+               alt="Signature of ${esc(e.approval.name)}" style="max-height:60px;background:#fff;border-radius:4px"></div>` : ""}
+          ${Math.abs(drift) > 0.005 ? `<div class="stop-flag" style="margin:10px -14px -12px;border-radius:0">
+            Edited since they signed — it now comes to ${esc(money(Store.estimateTotal(e)))},
+            ${drift > 0 ? esc(money(drift)) + " more" : esc(money(-drift)) + " less"} than they agreed to.
+            Get it re-approved before you bill it.</div>` : ""}
+        </div>`;
+      })() : ""}
 
       ${job ? `<div class="opt-card on" style="cursor:default;margin-bottom:16px">
         <div class="oc-t">✅ Converted to job #${job.no}</div>
@@ -7464,10 +7509,111 @@ function estimateDocHtml(e){
       at cost where they apply.
     </div>
     <div style="display:flex;gap:40px">
-      <div class="sig">Customer approval</div>
-      <div class="sig">Date</div>
+      ${e.approval ? `
+        <div class="sig" style="border-top:0;width:auto">
+          <div style="font-weight:700;margin-bottom:4px">Approved by ${esc(e.approval.name)}${e.approval.role ? " · " + esc(e.approval.role) : ""}</div>
+          ${e.approval.signature ? `<img src="${esc(e.approval.signature)}" alt="Signature"
+               style="max-height:58px;display:block;margin:2px 0 4px">` : ""}
+          <div style="border-top:1px solid #000;width:280px;padding-top:4px">
+            ${esc(fmtStamp(e.approval.at))} · agreed at ${esc(money(e.approval.total))}</div>
+        </div>`
+      : `<div class="sig">Customer approval</div>
+         <div class="sig">Date</div>`}
     </div>
   </div>`;
+}
+
+/* Approve it on the spot.
+   He is standing in their basement with the quote built and the materials
+   list already made. Getting the signature here costs nothing; getting it
+   by email costs a drive back across the city for a piece of paper. */
+function openEstimateSign(id){
+  const e = Store.estimate(id);
+  if (!e) return;
+  const c = Store.estContact(e);
+  const total = Store.estimateTotal(e);
+  const items = e.items || [];
+  if (!items.length){
+    toast("Put the work on it first — there's nothing to approve", "warn");
+    return;
+  }
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">EST-${e.no} · ${esc(c.name)}</div>
+        <h2>Approve this estimate</h2></div>
+      <div class="spacer"></div><button class="x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="t-sub" style="margin:0 0 12px">Hand them the phone. This is what they're agreeing to.</p>
+
+      <div class="card" style="margin-bottom:16px">
+        <table class="inv-meta" style="width:100%;border-collapse:collapse">
+          ${items.map(i => `<tr>
+            <td style="padding:7px 12px;border-bottom:1px solid var(--line)">
+              ${i.qty > 1 ? esc(i.qty) + " &times; " : ""}${esc(i.desc)}</td>
+            <td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
+              ${esc(money(i.qty * i.price))}</td></tr>`).join("")}
+        </table>
+        <div class="money-row" style="border-bottom:0">
+          <span class="mr-label">Total</span>
+          <span class="mr-val" style="font-size:17px">${esc(money(total))}</span>
+        </div>
+      </div>
+
+      <p class="t-sub" style="margin:0 0 14px">
+        Good for ${e.validDays || 30} days. Approving books the work at this price;
+        anything found once the wall is open is quoted separately before it's done.
+      </p>
+
+      <div class="row2">
+        <div class="field"><label>Name *</label>
+          <input class="input" id="es-name" value="${esc(c.name || "")}" placeholder="Who is signing"></div>
+        <div class="field"><label>They are the</label>
+          <select class="input" id="es-role">
+            <option>Homeowner</option><option>Tenant</option>
+            <option>Property manager</option><option>Business owner</option>
+            <option>Authorised on their behalf</option>
+          </select></div>
+      </div>
+      <div class="err" id="es-name-err" style="display:none">A name is required.</div>
+
+      <div class="sigpad-wrap" id="sigwrap">
+        <canvas id="sigpad"></canvas>
+        <div class="sigpad-line"></div>
+        <div class="sigpad-hint">Sign above — finger on a phone, or the mouse</div>
+      </div>
+      <div class="err" id="es-sig-err" style="display:none">A signature is required.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn sm ghost" data-clear-sig>Clear signature</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-est-sign="${e.id}">Approve &amp; sign</button>
+    </div>`, { wide:true, noFocus:true });
+
+  initSigPad();
+}
+
+function saveEstimateSignature(id){
+  const e = Store.estimate(id);
+  if (!e) return;
+  let ok = true;
+
+  const name = $("#es-name").value.trim();
+  $("#es-name-err").style.display = name ? "none" : "block";
+  if (!name){ $("#es-name").classList.add("invalid"); ok = false; }
+
+  const signed = SigPad && SigPad.dirty;
+  $("#es-sig-err").style.display = signed ? "none" : "block";
+  if (!signed) ok = false;
+  if (!ok) return;
+
+  Store.signEstimate(e, { name, role: $("#es-role").value, signature: exportSignature() });
+  closeModal(); render(); openEstimate(e.id);
+  toast(`EST-${e.no} approved by ${name}`, "ok");
 }
 
 /* Sending an estimate.
@@ -8072,6 +8218,12 @@ document.addEventListener("click", e => {
 
   const doConv = hit("[data-do-convert]");
   if (doConv) return doConvert(doConv.dataset.doConvert);
+
+  const signEst = hit("[data-sign-estimate]");
+  if (signEst) return openEstimateSign(signEst.dataset.signEstimate);
+
+  const saveEstSign = hit("[data-save-est-sign]");
+  if (saveEstSign) return saveEstimateSignature(saveEstSign.dataset.saveEstSign);
 
   const sendEst = hit("[data-send-estimate]");
   if (sendEst) return sendEstimate(sendEst.dataset.sendEstimate);
