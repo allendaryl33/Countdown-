@@ -1902,6 +1902,9 @@ const Store = {
     // written back to the website's own table, so his devices agree without
     // the app ever writing a row it doesn't own.
     if (!this.data.leadsDone) this.data.leadsDone = {};
+    // Leads he took down himself — a phone call, a referral, or a website
+    // form that didn't make it. They live here, never in the website's table.
+    if (!this.data.manualLeads) this.data.manualLeads = [];
 
     // Added with payment tracking — older jobs have no payment block.
     this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
@@ -2599,7 +2602,29 @@ const Store = {
      each sync and never saved into the shop. Only the fact that one has been
      dealt with is ours to keep. */
   leads(){
-    return (Cloud.inquiries || []).map(readInquiry).filter(l => l.id);
+    const web = (Cloud.inquiries || []).map(readInquiry).filter(l => l.id);
+    const mine = (this.data.manualLeads || []).map(m => Object.assign({
+      phone:"", email:"", service:"", what:"", timing:"", address:"",
+      photos:[], raw:null
+    }, m));
+    return web.concat(mine);
+  },
+  addManualLead(f){
+    const lead = {
+      id: "man_" + uid("ld"),
+      name: f.name, phone: f.phone || "", email: f.email || "",
+      service: f.service || "", what: f.what || "", timing: f.timing || "",
+      address: f.address || "", source: f.source || "phone call",
+      at: new Date().toISOString(), photos: [], raw: null
+    };
+    this.data.manualLeads.push(lead);
+    this.save();
+    return lead;
+  },
+  forgetManualLead(id){
+    this.data.manualLeads = (this.data.manualLeads || []).filter(l => l.id !== id);
+    delete this.data.leadsDone[String(id)];
+    this.save();
   },
   leadsOpen(){
     const done = this.data.leadsDone || {};
@@ -4578,17 +4603,10 @@ function viewLeads(){
   const handled = Store.leads().filter(l => done[l.id])
     .sort((a,b) => (done[b.id].at || 0) - (done[a.id].at || 0));
 
-  if (!Cloud.configured()){
-    return `<div class="empty" style="padding:56px 20px">
-      <div class="big">📨</div>
-      <div style="font-size:16px;font-weight:650;color:var(--text);margin-bottom:6px">
-        Not connected yet</div>
-      Website inquiries live in your Supabase project. Connect the app under
-      <strong>Data &amp; Setup</strong> and they'll appear here.
-    </div>`;
-  }
-
-  const trouble = {
+  const trouble = !Cloud.configured() ? ["Not connected to your project",
+      "Website inquiries live in your Supabase project. Connect under " +
+      "<strong>Data &amp; Setup</strong> and they'll show up here. " +
+      "Anything you take down yourself works either way."] : {
     "offline":  ["No connection", "They're on the server, not this phone. They'll load when you've got a bar."],
     "no-table": ["Can't see the inquiries table",
                  "The app is connected, but the database says there's no table called <strong>inquiries</strong> it's allowed to read. Run the leads SQL file and this fills in."]
@@ -4602,7 +4620,8 @@ function viewLeads(){
     return `<div class="stop lead-card">
       <div class="stop-main" style="cursor:default">
         <div class="stop-body">
-          <div class="cust">${esc(l.name)}${known ? ` <span class="chip">already a customer</span>` : ""}</div>
+          <div class="cust">${esc(l.name)}${known ? ` <span class="chip">already a customer</span>` : ""}
+            ${l.source && l.source !== "website" ? `<span class="chip">${esc(l.source)}</span>` : ""}</div>
           <div class="addr">${esc([l.service, l.address].filter(Boolean).join(" · ") || "no service given")}</div>
           ${when ? `<div class="what t-sub">came in ${esc(when)}</div>` : ""}
         </div>
@@ -4621,6 +4640,8 @@ function viewLeads(){
         <button class="btn accent" data-lead-job="${esc(l.id)}">Book a job →</button>
         <button class="btn" data-lead-est="${esc(l.id)}">Make an estimate →</button>
         <button class="btn ghost" data-lead-drop="${esc(l.id)}">Not a job</button>
+        ${String(l.id).startsWith("man_")
+          ? `<button class="btn ghost" data-lead-forget="${esc(l.id)}">Delete</button>` : ""}
       </div>
     </div>`;
   };
@@ -4629,7 +4650,12 @@ function viewLeads(){
   <div class="today-head">
     <span class="big">${open.length ? open.length + " lead" + (open.length===1?"":"s") + " waiting"
                                     : "Nothing waiting"}</span>
-    <span class="sub">straight off the website</span>
+    <span class="sub">off the website, or taken down by you</span>
+  </div>
+
+  <div class="toolbar" style="margin-bottom:12px">
+    <button class="btn sm accent" data-add-lead>＋ Take a lead down</button>
+    <span class="filter-note">Someone phoned, or the form let you down</span>
   </div>
 
   ${trouble ? `<div class="stop-flag" style="border-radius:11px;border:1px solid #f0d6bb;margin-bottom:12px">
@@ -4639,8 +4665,9 @@ function viewLeads(){
   ${open.length ? open.map(card).join("")
     : (trouble ? "" : `<div class="today-empty">
          <div class="big">📨</div>
-         <div style="font-weight:600;color:var(--text);margin-bottom:4px">Nothing new off the website.</div>
-         <div>Anything someone fills in lands here, and stays here until you've dealt with it.</div>
+         <div style="font-weight:600;color:var(--text);margin-bottom:4px">Nothing waiting.</div>
+         <div>Anything filled in on the website lands here. So does anything you
+           take down yourself &mdash; use the button above when somebody phones.</div>
        </div>`)}
 
   ${handled.length ? `<div class="sec-head">Already dealt with</div>
@@ -7815,6 +7842,83 @@ function estimateDocHtml(e){
   </div>`;
 }
 
+/* Taking one down himself.
+   Somebody phones, or the website form falls over, or Victor's ping arrives
+   with no row behind it. Twenty seconds here beats a lead living in his head
+   until he forgets it. These are kept in the shop, never written back to the
+   website's table — that one is not ours to write to. */
+function openManualLead(){
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">Leads</div><h2>Take a lead down</h2></div>
+      <div class="spacer"></div><button class="x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="t-sub" style="margin:0 0 14px">
+        Name and a number is enough. Everything else helps you later, but get
+        off the phone first.
+      </p>
+      <div class="row2">
+        <div class="field"><label>Name *</label>
+          <input class="input" id="ml-name" placeholder="Who called"></div>
+        <div class="field"><label>Phone</label>
+          <input class="input" id="ml-phone" type="tel" inputmode="tel" placeholder="(780) 555-0100"></div>
+      </div>
+      <div class="err" id="ml-name-err" style="display:none">A name is required.</div>
+      <div class="row2">
+        <div class="field"><label>Email</label>
+          <input class="input" id="ml-email" type="email" placeholder="optional"></div>
+        <div class="field"><label>What do they need</label>
+          <select class="input" id="ml-service">
+            <option value="">—</option>
+            ${JOB_TYPES.map(t => `<option>${esc(t)}</option>`).join("")}
+          </select></div>
+      </div>
+      <div class="field"><label>What's going on</label>
+        <textarea class="input" id="ml-what" style="min-height:90px"
+                  placeholder="Their words. What they said is wrong, in the order they said it."></textarea></div>
+      <div class="row2">
+        <div class="field"><label>When they're free</label>
+          <input class="input" id="ml-timing" placeholder="Weekday afternoons, not Tuesdays"></div>
+        <div class="field"><label>Where it came from</label>
+          <select class="input" id="ml-source">
+            <option>phone call</option><option>text message</option>
+            <option>referral</option><option>repeat customer</option>
+            <option>website (form failed)</option><option>other</option>
+          </select></div>
+      </div>
+      <div class="field"><label>Address or area</label>
+        <input class="input" id="ml-address" placeholder="Glenora, or the full address if you got it"></div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-manual-lead>Add it</button>
+    </div>`, { wide:true });
+}
+
+function saveManualLead(){
+  const name = $("#ml-name").value.trim();
+  $("#ml-name-err").style.display = name ? "none" : "block";
+  if (!name){ $("#ml-name").classList.add("invalid"); return; }
+
+  const lead = Store.addManualLead({
+    name,
+    phone:   $("#ml-phone").value.trim(),
+    email:   $("#ml-email").value.trim(),
+    service: $("#ml-service").value,
+    what:    $("#ml-what").value.trim(),
+    timing:  $("#ml-timing").value.trim(),
+    address: $("#ml-address").value.trim(),
+    source:  $("#ml-source").value
+  });
+  Cloud.markDirty();
+  closeModal();
+  App.view = "leads";
+  render();
+  toast(`${lead.name} added to Leads`, "ok");
+}
+
 /* Thumbnails arrive after the view is drawn: each one is a separate signed
    URL and the list should not wait on the network to appear. Same approach as
    the job photos. */
@@ -8383,6 +8487,17 @@ document.addEventListener("click", e => {
     if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
     return;
   }
+  if (hit("[data-add-lead]")) return openManualLead();
+  if (hit("[data-save-manual-lead]")) return saveManualLead();
+
+  const leadForget = hit("[data-lead-forget]");
+  if (leadForget){
+    Store.forgetManualLead(leadForget.dataset.leadForget);
+    Cloud.markDirty(); render();
+    toast("Removed", "ok");
+    return;
+  }
+
   const leadJob = hit("[data-lead-job]");
   if (leadJob){
     const l = Store.leadsOpen().find(x => x.id === leadJob.dataset.leadJob);
