@@ -1874,6 +1874,8 @@ const Store = {
     // Added with invoicing. GST only ever applies when a number is on file.
     if (this.data.settings.gstRate == null) this.data.settings.gstRate = 5;
     if (this.data.settings.invoiceTerms == null) this.data.settings.invoiceTerms = 15;
+    if (this.data.settings.invoiceTermsMode == null)
+      this.data.settings.invoiceTermsMode = "days";
     if (this.data.settings.signBase == null) this.data.settings.signBase = "";
     if (this.data.settings.signShort == null) this.data.settings.signShort = false;
     if (this.data.settings.invoiceNote == null)
@@ -2497,10 +2499,23 @@ const Store = {
      and Time & Money would lie if it counted. What the customer owes is this. */
   invoiceTotal(job){ return Math.round((this.jobTotal(job) + this.taxOn(job)) * 100) / 100; },
 
+  /* Terms are not always a number of days. For a one-man shop collecting on
+     the spot, "due in 15 days" is an invitation to pay in 15 days, which is
+     the opposite of what he wants the invoice to say. */
+  termsOnCompletion(){
+    return (this.data.settings.invoiceTermsMode || "days") === "completion";
+  },
   invoiceDue(job){
+    if (this.termsOnCompletion()) return null;
     const days = Number(this.data.settings.invoiceTerms);
     if (!days || !job.invoicedOn) return null;
     return addDays(job.invoicedOn, days);
+  },
+  /* What the invoice says where a due date would go. */
+  termsLine(job){
+    if (this.termsOnCompletion()) return "Payment due on completion of work";
+    const due = this.invoiceDue(job);
+    return due ? "Payment due " + fmtDate(due, { month:"long", day:"numeric" }) : "";
   },
 
   /* ---- The invoice list.
@@ -5208,9 +5223,15 @@ function viewData(){
               <input class="input" id="set-gstrate" type="number" min="0" step="0.5"
                      value="${esc(d.settings.gstRate)}">
               <div class="hint">5% in Alberta. Only charged once a number is on file below.</div></div>
-            <div class="field"><label>Payment due in (days)</label>
+            <div class="field"><label>Payment terms</label>
+              <select class="input" id="set-terms-mode">
+                <option value="completion"${(d.settings.invoiceTermsMode||"days")==="completion"?" selected":""}>On completion of work</option>
+                <option value="days"${(d.settings.invoiceTermsMode||"days")==="days"?" selected":""}>Due in a number of days</option>
+              </select>
               <input class="input" id="set-terms" type="number" min="0" step="1"
-                     value="${esc(d.settings.invoiceTerms)}"></div>
+                     style="margin-top:8px;display:${(d.settings.invoiceTermsMode||"days")==="days"?"block":"none"}"
+                     value="${esc(d.settings.invoiceTerms)}" aria-label="Days">
+              <div class="hint">What the invoice prints where a due date would go.</div></div>
             <div class="field"><label>Note on invoices</label>
               <input class="input" id="set-invnote" value="${esc(d.settings.invoiceNote)}"
                      placeholder="Thanks very much for the work."></div>
@@ -7654,7 +7675,7 @@ async function invoiceDocHtml(j){
           <strong>Work done</strong><br>
           ${esc(j.type)} &middot; Job #${esc(j.no)}<br>
           ${j.scheduledDate ? esc(fmtDateLong(j.scheduledDate)) : ""}<br>
-          ${dueDate ? `<strong>Payment due ${esc(fmtDate(dueDate, { month:"long", day:"numeric" }))}</strong>` : ""}
+          ${(() => { const t = Store.termsLine(j); return t ? `<strong>${esc(t)}</strong>` : ""; })()}
         </td>
       </tr>
     </table>
@@ -8976,6 +8997,7 @@ document.addEventListener("click", e => {
       s.address = $("#set-address").value.trim();
       s.gst     = $("#set-gst").value.trim();
       s.gstRate = Number($("#set-gstrate").value) || 0;
+      s.invoiceTermsMode = $("#set-terms-mode").value === "completion" ? "completion" : "days";
       s.invoiceTerms = Math.max(0, Number($("#set-terms").value) || 0);
       s.invoiceNote  = $("#set-invnote").value.trim();
       // Trailing slash or not, it's the same address; store it one way.
@@ -8995,6 +9017,15 @@ document.addEventListener("click", e => {
 
 document.addEventListener("change", e => {
   const t = e.target;
+
+  // Show the day count only when days are what he's chosen. Done here rather
+  // than by re-rendering, because a rebuild would throw away everything else
+  // he has half-typed into that settings card.
+  if (t.id === "set-terms-mode"){
+    const n = $("#set-terms");
+    if (n) n.style.display = t.value === "days" ? "block" : "none";
+    return;
+  }
 
   if (t.id === "import-file" && t.files && t.files[0]){ importJson(t.files[0]); t.value = ""; return; }
   if (t.id === "board-date"){ App.date = t.value || todayStr(); return render(); }
