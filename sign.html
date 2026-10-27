@@ -87,8 +87,25 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 /* Everything this page needs arrives in the link's hash — the part after the
    #, which browsers never send to a server and which therefore stays out of
    access logs and referrer headers on the way. */
+/* ------------------------------------------------------------------
+   If this copy of the page is hosted on the plumber's own domain, the
+   two project values can live here instead of riding in every link.
+   That takes a link from ~210 characters to about 66, which is the
+   difference between something you'd text a customer and something
+   you'd apologise for.
+
+   The publishable key is not a secret — it is already in the page
+   source of any site that submits to this project — but it is left
+   blank in the repository so the repository stays key-free. Whoever
+   hosts this fills these two in.
+   ------------------------------------------------------------------ */
+const BAKED_URL = "";
+const BAKED_KEY = "";
+
 const P = new URLSearchParams(location.hash.slice(1));
-const TOKEN = P.get("t") || "", BASE = (P.get("u") || "").replace(/\/+$/, ""), KEY = P.get("k") || "";
+const TOKEN = P.get("t") || "";
+const BASE  = (P.get("u") || BAKED_URL).replace(/\/+$/, "");
+const KEY   = P.get("k") || BAKED_KEY;
 
 const $ = s => document.querySelector(s);
 const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g,

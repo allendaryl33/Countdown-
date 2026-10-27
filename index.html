@@ -1875,6 +1875,7 @@ const Store = {
     if (this.data.settings.gstRate == null) this.data.settings.gstRate = 5;
     if (this.data.settings.invoiceTerms == null) this.data.settings.invoiceTerms = 15;
     if (this.data.settings.signBase == null) this.data.settings.signBase = "";
+    if (this.data.settings.signShort == null) this.data.settings.signShort = false;
     if (this.data.settings.invoiceNote == null)
       this.data.settings.invoiceNote = "Thanks very much for the work.";
     this.data.counterInv = this.data.counterInv || 1000;
@@ -5249,6 +5250,15 @@ function viewData(){
             <div class="hint">The page is <code>sign.html</code> from this repo, hosted on
               your own domain. Links already sent keep working at the old address.</div>
           </div>
+          <label class="field" style="display:flex;gap:9px;align-items:flex-start;max-width:62ch;cursor:pointer">
+            <input type="checkbox" id="set-signshort" style="width:auto;margin-top:3px"
+                   ${Store.data.settings.signShort ? "checked" : ""}>
+            <span><strong>Short links</strong>
+              <div class="hint" style="margin-top:3px">Tick this only once whoever hosts that
+                page has filled in <code>BAKED_URL</code> and <code>BAKED_KEY</code> at the top
+                of it. Links then carry nothing but the code — about 66 characters instead of
+                210. Tick it before that's done and your customers get a link that won't open.</div></span>
+          </label>
           <button class="btn primary" data-action="save-settings">Save it</button>
           ${(() => {
             /* A silent failure is worse than a broken one: the panels on the
@@ -5973,6 +5983,16 @@ function openEstimate(id){
       </div>
 
       <div class="dl"><dt>Scope of work</dt><dd style="white-space:pre-wrap">${esc(e.description)||"—"}</dd></div>
+
+      ${(() => {
+        const lead = e.fromLead ? Store.leads().find(l => l.id === e.fromLead) : null;
+        if (!lead || !lead.photos.length) return "";
+        return `<div class="section-title" style="margin-top:22px">What they sent in
+          <span class="t-sub" style="text-transform:none;letter-spacing:0">— from their inquiry</span></div>
+          <div class="lead-shots" data-lead-shots="${esc(lead.id)}">
+            ${lead.photos.map((_, i) => `<div class="ls" data-i="${i}"></div>`).join("")}
+          </div>`;
+      })()}
 
       <div class="section-title" style="margin-top:22px">Photos</div>
       ${photosPanel("estimate", e)}
@@ -7825,9 +7845,17 @@ function signLinkUrl(token){
   // Default is whatever address the app itself is served from. Once the
   // signing page is hosted on his own domain, that goes in Data & Setup and
   // customers stop seeing a github.io address on his paperwork.
-  const custom = String((Store.data.settings || {}).signBase || "").trim();
+  const st = Store.data.settings || {};
+  const custom = String(st.signBase || "").trim();
   const base = custom ? custom.replace(/\/+$/, "")
     : location.origin + location.pathname.replace(/[^/]*$/, "") + "sign.html";
+
+  // A page hosted on his own domain can hold the project details itself, and
+  // then the link is the token and nothing else — about 66 characters instead
+  // of 210. A generic copy can't know whose project it is, so that one still
+  // carries them.
+  if (custom && st.signShort) return `${base}#t=${encodeURIComponent(token)}`;
+
   return `${base}#t=${encodeURIComponent(token)}` +
          `&u=${encodeURIComponent(Cloud.base())}&k=${encodeURIComponent(Cloud.cfg.key)}`;
 }
@@ -8952,6 +8980,7 @@ document.addEventListener("click", e => {
       s.invoiceNote  = $("#set-invnote").value.trim();
       // Trailing slash or not, it's the same address; store it one way.
       s.signBase     = $("#set-signbase").value.trim().replace(/\/+$/, "");
+      s.signShort    = !!($("#set-signshort") || {}).checked;
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");
       break;
