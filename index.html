@@ -1350,6 +1350,9 @@ const Cloud = {
   state: "off",      // off | signed-out | syncing | synced | conflict | error
   detail: "",
   dirty: false,
+  /* True from raising the "which copy is right" question until he answers it.
+     Everything that writes to the shop holds off while it is set. */
+  conflictOpen: false,
   signingIn: false,
   pushTimer: null,
   _listeners: [],
@@ -1455,6 +1458,7 @@ const Cloud = {
 
   signOut(){
     this.token = null; this.tokenExp = 0; this.uid = null; this.baseRev = 0; this.dirty = false;
+    this.conflictOpen = false;
     if (this.cfg){ delete this.cfg.refreshToken; this.saveCfg(); }
     this.set("signed-out");
   },
@@ -1647,6 +1651,10 @@ const Cloud = {
     if (!this.configured() || !this.cfg.refreshToken) return;
     this.noteUnsent(true);
     clearTimeout(this.pushTimer);
+    // An unresolved conflict means baseRev is stale, so a push can only fail
+    // the guard and raise the same dialog again. The edit is safe on the
+    // device; it goes up the moment he says which copy wins.
+    if (this.conflictOpen) return;
     this.pushTimer = setTimeout(() => this.syncNow({ quiet:true }), 2500);
     if (this.state === "synced") this.set("syncing", "saving…");
   },
@@ -1662,7 +1670,11 @@ const Cloud = {
       const r = this.dirty ? await this.push() : await this.pull();
       if (r.conflict){
         this.set("conflict", "changed on another device");
-        onCloudConflict(r.remote);
+        if (!this.conflictOpen){
+          this.conflictOpen = true;
+          this.conflictCount = (this.conflictCount || 0) + 1;
+          onCloudConflict(r.remote);
+        }
         return;
       }
       this.set("synced", "just now");
@@ -1677,11 +1689,22 @@ const Cloud = {
     } finally {
       /* These read Victor's table and our own link tables, not the shop row.
          They used to sit inside the success branch, so any hiccup on the shop
-         — a conflict, a dropped bar — took the website's leads off the screen
-         with no word of explanation. They are independent; they run either way. */
+         — a dropped bar, a failed write — took the website's leads off the
+         screen with no word of explanation.
+
+         pullInquiries only ever assigns Cloud.inquiries, so it cannot reach
+         the shop and runs either way: the Leads screen stays honest even
+         while the conflict question is on screen. The other two are not
+         reads — pullSignLinks writes approvals, pullInvoiceLinks writes
+         payments, both ending in markDirty. Running either mid-conflict
+         would edit one of the two copies he is being asked to choose
+         between, and queue a push certain to raise that same question
+         again. They wait until he has answered. */
       this.pullInquiries();
-      this.pullSignLinks();
-      this.pullInvoiceLinks();
+      if (!this.conflictOpen){
+        this.pullSignLinks();
+        this.pullInvoiceLinks();
+      }
     }
   },
 
@@ -2834,14 +2857,29 @@ const Store = {
   /* An inquiry is from somebody who may already be a customer. Match on the
      digits of the phone — people type their own number three different ways
      and none of them match a string compare. */
+  /* The same number is usually the same person, and matching on it is what
+     stops a regular turning into four customer records. But it is not always
+     the same person: a couple, an office line, a landlord and their tenant
+     all share a number. Two people sharing a line is commoner than one
+     customer changing their name, so a number that matches while the name
+     plainly disagrees is somebody new — not a rename. Filing their job under
+     the other person's name is how work ends up on the wrong customer. */
   customerForLead(lead){
-    const d = String(lead.phone || "").replace(/\D/g, "").slice(-10);
+    const tenDigits = v => String(v || "").replace(/\D/g, "").slice(-10);
+    const norm = v => String(v || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const d = tenDigits(lead.phone), n = norm(lead.name);
+
+    // "Bob" and "Bob Down" are one man; "Bob Down" and "Daryl" are two.
+    const agrees = a => !a || !n || a === n ||
+                        a.startsWith(n + " ") || n.startsWith(a + " ");
+
     if (d.length === 10){
-      const hit = this.data.customers.find(c => String(c.phone || "").replace(/\D/g, "").slice(-10) === d);
-      if (hit) return hit;
+      const sameNumber = this.data.customers.filter(c => tenDigits(c.phone) === d);
+      const both = sameNumber.find(c => agrees(norm(c.name)));
+      if (both) return both;
+      if (sameNumber.length && !n) return sameNumber[0];   // no name to go on
     }
-    const n = String(lead.name || "").trim().toLowerCase();
-    return n ? this.data.customers.find(c => String(c.name || "").trim().toLowerCase() === n) || null : null;
+    return n ? this.data.customers.find(c => norm(c.name) === n) || null : null;
   },
   customerFromLead(lead){
     const found = this.customerForLead(lead);
@@ -3770,6 +3808,19 @@ function onCloudConflict(remote){
         <div class="oc-s">${esc(count(theirs))}${remote && remote.updated_at
           ? " · saved " + esc(fmtStamp(Date.parse(remote.updated_at))) : ""}</div>
       </div>
+
+      ${count(mine) === count(theirs) ? `<p class="t-sub" style="margin:14px 0 0;max-width:62ch">
+        Both copies hold the same amount of work, so this is almost certainly the
+        same shop saved twice rather than two different days' work. Either button
+        is safe.</p>` : ""}
+
+      ${Cloud.conflictCount > 1 ? `<div class="legal-note" style="margin:14px 0 0">
+        <strong>This keeps happening.</strong> Something else is signed in and saving
+        at the same time — usually the app left open in another tab, or the old
+        icon on your home screen, which iOS keeps separate from Safari. Close the
+        other one and this stops.</div>` : `<p class="t-sub" style="margin:14px 0 0;max-width:62ch">
+        If you have the app open somewhere else — another tab, or the icon on your
+        home screen — close it, or the two will keep overwriting each other.</p>`}
     </div>
     <div class="modal-foot">
       <div class="spacer"></div>
@@ -3805,6 +3856,9 @@ async function resolveConflict(which){
     Cloud.set("error", err.message || "couldn't resolve");
   }
   Cloud._conflictRemote = null;
+  Cloud.conflictOpen = false;
+  // anything he changed while the question was on screen was held back; send it
+  if (Cloud.dirty) Cloud.markDirty();
 }
 
 function renderBrand(){
