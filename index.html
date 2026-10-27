@@ -1668,17 +1668,20 @@ const Cloud = {
       this.set("synced", "just now");
       // photographs go up behind the record, never in front of it
       this.flushPhotos().then(n => { if (n) this.markDirty(); });
-      // and the website's leads come down behind both
-      this.pullInquiries();
-      // along with anything a customer has signed since we last looked
-      this.pullSignLinks();
-      this.pullInvoiceLinks();
     } catch(err){
       if (err.offline){ this.set("error", "no connection — saved on this device"); return; }
       if (err.status === 401 || /refresh|jwt|token/i.test(err.message || "")){
         this.signOut(); this.set("signed-out", "sign in again"); return;
       }
       this.set("error", err.message || "sync failed");
+    } finally {
+      /* These read Victor's table and our own link tables, not the shop row.
+         They used to sit inside the success branch, so any hiccup on the shop
+         — a conflict, a dropped bar — took the website's leads off the screen
+         with no word of explanation. They are independent; they run either way. */
+      this.pullInquiries();
+      this.pullSignLinks();
+      this.pullInvoiceLinks();
     }
   },
 
@@ -1907,6 +1910,7 @@ const Cloud = {
      across his devices without touching a row of Victor's. */
   inquiries: [],
   inqError: "",
+  inqLoaded: false,   // false until the first attempt finishes, win or lose
 
   async pullInquiries(){
     if (!this.configured() || !this.cfg.refreshToken) return;
@@ -1917,10 +1921,12 @@ const Cloud = {
       const rows = await this.call("/rest/v1/inquiries?select=*&limit=500");
       this.inquiries = Array.isArray(rows) ? rows : [];
       this.inqError = "";
+      this.inqLoaded = true;
     } catch(err){
       // A missing table or a refused read is not a sync failure — the shop is
       // fine. It gets said on the Leads screen and nowhere else.
       this.inquiries = [];
+      this.inqLoaded = true;
       this.inqError = err.offline ? "offline"
         : (err.status === 404 || /relation|does not exist|schema cache/i.test(err.message || ""))
           ? "no-table" : (err.message || "could not read the table");
@@ -4795,6 +4801,11 @@ function viewLeads(){
   const handled = Store.leads().filter(l => done[l.id])
     .sort((a,b) => (done[b.id].at || 0) - (done[a.id].at || 0));
 
+  /* Connected, but the first read of the website's table hasn't come back yet.
+     Saying "Nothing waiting" here is a lie that lasts a second or two and
+     makes leads look like they come and go. */
+  const looking = Cloud.configured() && Cloud.cfg.refreshToken && !Cloud.inqLoaded;
+
   const trouble = !Cloud.configured() ? ["Not connected to your project",
       "Website inquiries live in your Supabase project. Connect under " +
       "<strong>Data &amp; Setup</strong> and they'll show up here. " +
@@ -4841,7 +4852,7 @@ function viewLeads(){
   return `
   <div class="today-head">
     <span class="big">${open.length ? open.length + " lead" + (open.length===1?"":"s") + " waiting"
-                                    : "Nothing waiting"}</span>
+                                    : (looking ? "Looking…" : "Nothing waiting")}</span>
     <span class="sub">off the website, or taken down by you</span>
   </div>
 
@@ -4854,8 +4865,12 @@ function viewLeads(){
       <strong>${esc(trouble[0])}</strong> — ${trouble[1]}
     </div>` : ""}
 
+  ${looking && !open.length ? `<div class="today-empty">
+      <div class="big">🛜</div>Checking the website for new inquiries…
+    </div>` : ""}
+
   ${open.length ? open.map(card).join("")
-    : (trouble ? "" : `<div class="today-empty">
+    : (trouble || looking ? "" : `<div class="today-empty">
          <div class="big">📨</div>
          <div style="font-weight:600;color:var(--text);margin-bottom:4px">Nothing waiting.</div>
          <div>Anything filled in on the website lands here. So does anything you
