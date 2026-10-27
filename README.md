@@ -129,6 +129,18 @@ able to break the thing taking the calls, so which lead has been dealt with is
 kept in the shop instead. And it **never notifies you**: new leads show as a
 strip on Today, and whatever already pings your phone keeps that job.
 
+**Photos on a lead** — if the website form collects them, they show as
+thumbnails on the lead the moment it arrives, tap for full size, and carry
+onto the job or estimate when you book it. People describe plumbing wrong,
+reliably; a photo decides whether a job needs an hour of unpaid driving to
+quote or can be quoted from the truck.
+
+Setup is [supabase-inquiry-photos.sql](supabase-inquiry-photos.sql) plus a
+change to the website form — written up in [FOR-VICTOR.md](FOR-VICTOR.md).
+The bucket is private: whoever fills in the form can **insert and nothing
+else** — no read, no list, no overwrite, no delete. The app views them through
+signed links good for a few minutes.
+
 **Invoices** — the one place that answers "what am I owed?".
 Three lists, and work moves left to right:
 
