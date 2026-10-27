@@ -1730,6 +1730,26 @@ const Cloud = {
     }
   },
 
+  /* An estimate out for signature is the one thing the app has to notice
+     without being touched. Everything else here is driven by something he
+     does — a tap, a tab switch, coming back online — but a signature arrives
+     from somebody else's phone while he is looking at a screen that has no
+     reason to refresh. So a signed estimate sat in the database, correct and
+     invisible, until something unrelated happened to trigger a sync.
+
+     While anything is out, look every minute. Once nothing is, stop: there is
+     no sense asking a question whose answer cannot have changed. */
+  _sigTimer: null,
+  watchSignatures(){
+    clearInterval(this._sigTimer);
+    this._sigTimer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (!this.configured() || !this.cfg.refreshToken) return;
+      if (!(this.signLinks || []).some(l => !l.signed_at)) return;
+      this.pullSignLinks();
+    }, 60000);
+  },
+
   /* --- the website's inquiries ---
      The website writes what people type into public.inquiries, in this same
      Supabase project. So there is no pipe to build: the app is already
@@ -1770,6 +1790,7 @@ const Cloud = {
     try {
       await this.refresh();
       await this.syncNow();
+      this.watchSignatures();
     } catch(err){
       if (err.offline) this.set("error", "no connection — saved on this device");
       else { this.signOut(); this.set("signed-out", "sign in again"); }
@@ -4437,8 +4458,13 @@ function viewEstimates(){
 
   return `
   <div class="stat-row">
-    <div class="stat ${sent.length?"alert":""}"><div class="label">Out for decision</div>
-      <div class="value">${sent.length}</div><div class="foot">${esc(money(outValue))} pending</div></div>
+    ${(() => {
+      const waiting = (Cloud.signLinks || []).filter(l => !l.signed_at).length;
+      return `<div class="stat ${sent.length?"alert":""}"><div class="label">Out for decision</div>
+        <div class="value">${sent.length}</div>
+        <div class="foot">${esc(money(outValue))} pending${waiting
+          ? ` · ${waiting} awaiting signature` : ""}</div></div>`;
+    })()}
     <div class="stat"><div class="label">Drafts</div>
       <div class="value">${all.filter(e=>e.status==="draft").length}</div><div class="foot">not sent yet</div></div>
     <div class="stat"><div class="label">Approved</div>
@@ -5786,7 +5812,8 @@ function openEstimate(id){
             ? "Send a fresh one when you're ready."
             : `Sent ${sent === 0 ? "today" : sent === 1 ? "yesterday" : sent + " days ago"} —
                waiting on them. It lands here the moment they sign.`}</div>
-          ${dead ? "" : `<div style="margin-top:9px">
+          ${dead ? "" : `<div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn sm primary" data-check-signed="${e.id}">Check now</button>
             <button class="btn sm" data-copy-link="${esc(out.token)}">Copy the link again</button></div>`}
         </div>`;
       })()}
@@ -8417,6 +8444,19 @@ document.addEventListener("click", e => {
 
   const doConv = hit("[data-do-convert]");
   if (doConv) return doConvert(doConv.dataset.doConvert);
+
+  const checkSigned = hit("[data-check-signed]");
+  if (checkSigned){
+    const id = checkSigned.dataset.checkSigned;
+    checkSigned.textContent = "Checking…"; checkSigned.disabled = true;
+    Cloud.pullSignLinks().then(() => {
+      const e = Store.estimate(id);
+      render();
+      if (e && e.approval) openEstimate(id);
+      else { openEstimate(id); toast("Not signed yet", "ok"); }
+    });
+    return;
+  }
 
   const linkEst = hit("[data-link-estimate]");
   if (linkEst) return sendForSignature(linkEst.dataset.linkEstimate);
