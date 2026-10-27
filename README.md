@@ -167,6 +167,21 @@ Deactivating a tech takes their column off the board without touching their jobs
 problem, site notes, room to write up the work, and a signature line. Print the
 whole day from the dashboard or any single job from its detail view.
 
+**Approving an estimate on the spot** — **Sign & approve here** on any estimate
+hands them the phone. They see the lines, the total and how long it's good for,
+type their name, and sign with a finger. It goes straight to Approved.
+
+This is the one that saves the drive. You're already standing in their
+basement with the quote built and the materials list made — getting the
+signature there costs nothing, and getting it by email costs a trip back
+across the city for a piece of paper.
+
+What they agreed to is **frozen** onto the approval: the lines and the total as
+they stood at that moment. Edit the estimate afterwards and the record says so
+in red, with the difference, so a changed price can never quietly ride on an
+old signature. The signed copy prints with their mark on it instead of a blank
+line; an unsigned one still prints blank lines for a pen.
+
 **Sending an estimate** — the **Send to customer** button on any estimate
 writes the note for you: the line items, the total, how long it's good for, and
 an invitation to call. Edit it however you like, then hand it to your mail app
