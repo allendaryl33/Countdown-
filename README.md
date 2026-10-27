@@ -182,6 +182,28 @@ in red, with the difference, so a changed price can never quietly ride on an
 old signature. The signed copy prints with their mark on it instead of a blank
 line; an unsigned one still prints blank lines for a pen.
 
+**Getting one signed remotely** — **Send for signature** publishes that one
+estimate under a long random token and writes the text or email for you. They
+open the link on their phone, read it, type their name, sign with a finger and
+tap Approve. It lands back in the app on the next sync and the estimate turns
+Approved with their signature on it. The estimate says *Out for signature —
+sent 2 days ago* until they do.
+
+Setup is one more SQL file, [supabase-signing.sql](supabase-signing.sql). The
+page they open is [sign.html](sign.html) — standalone, no dependencies, works
+on any phone.
+
+**The link is the key.** Anyone holding it can see that one estimate and sign
+it, the same as any e-signature service, so don't post one publicly. It reaches
+nothing else: the customer is never signed in, and `anon` has **no rights on
+the table at all** — only permission to call two functions that each demand the
+token. An unknown token, an expired one and one that never existed all look
+identical from outside. Links expire with the estimate.
+
+The Supabase URL and key travel in the link's `#` fragment, which browsers
+never send to a server — so they stay out of access logs on the way, and out of
+this repo.
+
 **Sending an estimate** — the **Send to customer** button on any estimate
 writes the note for you: the line items, the total, how long it's good for, and
 an invitation to call. Edit it however you like, then hand it to your mail app

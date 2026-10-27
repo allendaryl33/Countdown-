@@ -1633,12 +1633,100 @@ const Cloud = {
       this.flushPhotos().then(n => { if (n) this.markDirty(); });
       // and the website's leads come down behind both
       this.pullInquiries();
+      // along with anything a customer has signed since we last looked
+      this.pullSignLinks();
     } catch(err){
       if (err.offline){ this.set("error", "no connection — saved on this device"); return; }
       if (err.status === 401 || /refresh|jwt|token/i.test(err.message || "")){
         this.signOut(); this.set("signed-out", "sign in again"); return;
       }
       this.set("error", err.message || "sync failed");
+    }
+  },
+
+  /* --- estimates signed from a link ---
+     One estimate, frozen, published under a long random token. The customer
+     opens sign.html with that token and signs. The app never gives them a
+     login and they never reach anything else: anon has no rights on the
+     table at all, only permission to call two functions that each demand
+     the token. */
+  async publishSignLink(e){
+    await this.ensureToken();
+    const st = Store.data.settings;
+    const c = Store.estContact(e);
+    const bytes = new Uint8Array(16);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    const token = Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+
+    const days = Math.max(7, Number(e.validDays) || 30);
+    const rate = Store.taxRate();
+    const sub  = Store.estimateTotal(e);
+    const tax  = Math.round(sub * rate * 100) / 100;
+
+    const row = {
+      token, owner: this.uid, estimate_id: e.id,
+      expires_at: new Date(Date.now() + days * 86400000).toISOString(),
+      payload: {
+        no: e.no,
+        created: fmtStamp(e.createdAt).split(" · ")[0],
+        customer: c.name,
+        address: [c.address, c.city].filter(Boolean).join(", "),
+        description: e.description || "",
+        items: (e.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
+        taxLabel: rate ? `GST ${Math.round(rate * 1000) / 10}%` : "",
+        tax, total: Math.round((sub + tax) * 100) / 100,
+        validDays: days,
+        company: {
+          name: st.company, phone: st.phone ? fmtPhone(st.phone) : "",
+          email: st.email || "", website: st.website || "", address: st.address || ""
+        }
+      }
+    };
+    await this.call("/rest/v1/estimate_links", {
+      method:"POST", headers:{ "Prefer":"return=minimal" }, body: row
+    });
+    return token;
+  },
+
+  /* Everything he has out for signature, so the estimate can say where it
+     stands and a signature can be brought back in. */
+  async fetchSignLinks(){
+    await this.ensureToken();
+    const rows = await this.call(
+      "/rest/v1/estimate_links?select=token,estimate_id,signer_name,signer_role,signature,signed_at,expires_at,created_at");
+    return Array.isArray(rows) ? rows : [];
+  },
+
+  signLinks: [],
+  linkError: "",
+
+  async pullSignLinks(){
+    if (!this.configured() || !this.cfg.refreshToken) return;
+    try {
+      this.signLinks = await this.fetchSignLinks();
+      this.linkError = "";
+      // Anything signed since last time becomes a real approval on the estimate.
+      let landed = 0;
+      this.signLinks.forEach(l => {
+        if (!l.signed_at || !l.signature) return;
+        const e = Store.estimate(l.estimate_id);
+        if (!e || e.approval) return;
+        Store.signEstimate(e, {
+          name: l.signer_name, role: l.signer_role || "",
+          signature: l.signature, how: "signed from the link"
+        });
+        landed++;
+      });
+      if (landed){
+        this.markDirty();
+        toast(landed === 1 ? "An estimate came back signed" : landed + " estimates came back signed", "ok");
+        renderQuiet();
+      }
+    } catch(err){
+      this.signLinks = [];
+      this.linkError = err.offline ? "offline"
+        : (err.status === 404 || /relation|does not exist|schema cache/i.test(err.message || ""))
+          ? "no-table" : (err.message || "could not read");
     }
   },
 
@@ -5680,9 +5768,28 @@ function openEstimate(id){
         ${actions.join("")}
         <button class="btn sm" data-edit-estimate="${e.id}">Edit details</button>
         ${e.approval ? "" : `<button class="btn sm primary" data-sign-estimate="${e.id}">✍ Sign &amp; approve here</button>`}
+        ${e.approval ? "" : `<button class="btn sm" data-link-estimate="${e.id}">🔗 Send for signature</button>`}
         <button class="btn sm accent" data-send-estimate="${e.id}">✉ Send to customer</button>
         <button class="btn sm" data-print-estimate="${e.id}">🖨 Print estimate</button>
       </div>
+
+      ${(() => {
+        if (e.approval) return "";
+        const out = (Cloud.signLinks || []).filter(l => l.estimate_id === e.id && !l.signed_at)
+          .sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+        if (!out) return "";
+        const sent = out.created_at ? daysBetween(String(out.created_at).slice(0,10), todayStr()) : null;
+        const dead = out.expires_at && new Date(out.expires_at) < new Date();
+        return `<div class="opt-card" style="cursor:default;margin-bottom:16px;border-color:#d6d1f5;background:var(--purple-soft)">
+          <div class="oc-t">🔗 ${dead ? "The signing link has expired" : "Out for signature"}</div>
+          <div class="oc-s">${dead
+            ? "Send a fresh one when you're ready."
+            : `Sent ${sent === 0 ? "today" : sent === 1 ? "yesterday" : sent + " days ago"} —
+               waiting on them. It lands here the moment they sign.`}</div>
+          ${dead ? "" : `<div style="margin-top:9px">
+            <button class="btn sm" data-copy-link="${esc(out.token)}">Copy the link again</button></div>`}
+        </div>`;
+      })()}
 
       ${e.approval ? (() => {
         const drift = Store.approvalDrift(e);
@@ -7523,6 +7630,98 @@ function estimateDocHtml(e){
   </div>`;
 }
 
+/* The signing link, for the ones he can't stand in the room for.
+   Everything the page needs rides in the hash — the part after the # that
+   browsers never send to a server — so the key stays out of access logs on
+   the way, and out of this repo. */
+function signLinkUrl(token){
+  const base = location.origin + location.pathname.replace(/[^/]*$/, "") + "sign.html";
+  return `${base}#t=${encodeURIComponent(token)}` +
+         `&u=${encodeURIComponent(Cloud.base())}&k=${encodeURIComponent(Cloud.cfg.key)}`;
+}
+
+async function sendForSignature(id){
+  const e = Store.estimate(id);
+  if (!e) return;
+  const c = Store.estContact(e);
+  if (!(e.items || []).length){
+    toast("Put the work on it first — there's nothing to approve", "warn");
+    return;
+  }
+  if (!Cloud.configured() || !Cloud.cfg.refreshToken){
+    toast("Connect this device first — More → Data & Setup", "warn");
+    return;
+  }
+
+  openModal(`<div class="modal-head"><div><div class="t-sub">EST-${e.no} · ${esc(c.name)}</div>
+      <h2>Making the link…</h2></div><div class="spacer"></div></div>
+    <div class="modal-body"><p class="t-sub">One moment.</p></div>`, { noFocus:true });
+
+  let token;
+  try {
+    token = await Cloud.publishSignLink(e);
+  } catch(err){
+    closeModal();
+    const why = err.offline ? "No connection — try again when you've got a bar."
+      : /relation|does not exist|schema cache/i.test(err.message || "")
+        ? "The signing table isn't set up yet. Run supabase-signing.sql."
+        : (err.message || "It didn't go up.");
+    toast(why, "warn");
+    return;
+  }
+
+  const url = signLinkUrl(token);
+  const first = String(c.name).trim().split(/\s+/)[0] || "there";
+  const note = `Hi ${first} — here's the estimate for the ${String(e.type).toLowerCase()}, ` +
+    `${money(Store.estimateTotal(e))}. Have a look and approve it here when you're happy: ${url}`;
+
+  if (e.status === "draft") Store.setEstStatus(e, "sent");
+  Store.addEstLog(e, "Sent a signing link to the customer");
+  Store.save();
+  await Cloud.pullSignLinks();
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">EST-${e.no} · ${esc(c.name)}</div>
+        <h2>Send them the link</h2></div>
+      <div class="spacer"></div><button class="x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="t-sub" style="margin:0 0 12px">
+        They open it on their phone, read the estimate, sign with a finger. It
+        lands back here on its own — you don't have to chase it.
+      </p>
+      <div class="field"><label>The message</label>
+        <textarea class="msg-prev" id="lk-note" style="min-height:140px">${esc(note)}</textarea></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        ${c.phone ? `<a class="btn primary" id="lk-sms" href="#">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
+        ${c.email ? `<a class="btn" id="lk-mail" href="#">✉ Email ${esc(c.email)}</a>` : ""}
+        <button class="btn" data-copy-link="${esc(token)}">📋 Copy the link</button>
+      </div>
+      <p class="t-sub" style="margin:14px 0 0;max-width:62ch">
+        <strong>The link is the key.</strong> Anyone holding it can see this one
+        estimate and sign it — same as any e-signature service — so don't post it
+        anywhere public. It reaches nothing else: not your other estimates, not
+        your customers, not your pricing. It expires in ${Math.max(7, Number(e.validDays) || 30)} days.
+      </p>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div><button class="btn" data-close>Close</button></div>`,
+    { wide:true, noFocus:true });
+
+  const ta = $("#lk-note");
+  const sync = () => {
+    const txt = ta.value;
+    const sms = $("#lk-sms"), mail = $("#lk-mail");
+    if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(txt)}`;
+    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
+      `?subject=${encodeURIComponent(Store.data.settings.company + " — estimate EST-" + e.no)}` +
+      `&body=${encodeURIComponent(txt)}`;
+  };
+  ta.addEventListener("input", sync);
+  sync();
+  render();
+}
+
 /* Approve it on the spot.
    He is standing in their basement with the quote built and the materials
    list already made. Getting the signature here costs nothing; getting it
@@ -8218,6 +8417,19 @@ document.addEventListener("click", e => {
 
   const doConv = hit("[data-do-convert]");
   if (doConv) return doConvert(doConv.dataset.doConvert);
+
+  const linkEst = hit("[data-link-estimate]");
+  if (linkEst) return sendForSignature(linkEst.dataset.linkEstimate);
+
+  const copyLink = hit("[data-copy-link]");
+  if (copyLink){
+    const url = signLinkUrl(copyLink.dataset.copyLink);
+    const done = () => toast("Link copied", "ok");
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(url).then(done, () => prompt("Copy this link:", url));
+    else prompt("Copy this link:", url);
+    return;
+  }
 
   const signEst = hit("[data-sign-estimate]");
   if (signEst) return openEstimateSign(signEst.dataset.signEstimate);
