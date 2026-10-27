@@ -19,8 +19,18 @@ create table if not exists public.invoice_links (
   viewed_at   timestamptz,             -- so he knows they opened it
   view_count  int not null default 0,
   created_at  timestamptz not null default now(),
-  expires_at  timestamptz not null
+  expires_at  timestamptz not null,
+  -- Written by the Stripe webhook, never by the customer's page and never by
+  -- the app. The app reads them and marks the job paid on its next sync.
+  paid_at     timestamptz,
+  paid_amount numeric,
+  paid_ref    text
 );
+
+-- Safe to re-run against a table made before the Stripe webhook existed.
+alter table public.invoice_links add column if not exists paid_at     timestamptz;
+alter table public.invoice_links add column if not exists paid_amount numeric;
+alter table public.invoice_links add column if not exists paid_ref    text;
 
 create index if not exists invoice_links_owner_idx on public.invoice_links (owner);
 
@@ -81,6 +91,14 @@ revoke all on function public.invoice_for_viewing(text) from public, anon, authe
 revoke all on function public.mark_invoice_viewed(text) from public, anon, authenticated;
 grant execute on function public.invoice_for_viewing(text) to anon, authenticated;
 grant execute on function public.mark_invoice_viewed(text) to anon, authenticated;
+
+-- A NOTE ON GETTING PAID
+--
+-- Stripe tells nobody by itself. An Edge Function listening to Stripe writes
+-- paid_at here using the service role, and the app marks the job paid the
+-- next time it looks. The customer's page cannot write these columns — anon
+-- has no rights on this table at all — and the app does not write them
+-- either. Only the webhook does.
 
 -- A NOTE ON THE PHOTOS
 --

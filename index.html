@@ -1731,7 +1731,15 @@ const Cloud = {
       note: st.invoiceNote || "",
       photos: shots, signed,
       pay: {
-        stripe: (job.payment && job.payment.url) || st.payStripeUrl || "",
+        /* Stripe hands back whatever is in client_reference_id when it fires
+           its webhook, which is the only way a plain payment link can say
+           which invoice was just paid. The token, not the invoice number:
+           one is unguessable and the other is INV-1004. */
+        stripe: (() => {
+          const base = (job.payment && job.payment.url) || st.payStripeUrl || "";
+          if (!base) return "";
+          return base + (base.includes("?") ? "&" : "?") + "client_reference_id=" + token;
+        })(),
         etransfer: st.payEtransfer || "",
         cash: !!st.payCash
       },
@@ -1755,8 +1763,29 @@ const Cloud = {
     if (!this.configured() || !this.cfg.refreshToken) return;
     try {
       const rows = await this.call(
-        "/rest/v1/invoice_links?select=token,job_id,viewed_at,view_count,created_at,expires_at");
+        "/rest/v1/invoice_links?select=token,job_id,viewed_at,view_count," +
+        "paid_at,paid_amount,paid_ref,created_at,expires_at");
       this.invoiceLinks = Array.isArray(rows) ? rows : [];
+
+      /* Stripe cannot tell the app anything. A webhook on Supabase can, by
+         writing paid_at onto the row — so the same trip that fetches the
+         links brings the money news back with it. */
+      let landed = 0;
+      this.invoiceLinks.forEach(l => {
+        if (!l.paid_at) return;
+        const j = Store.job(l.job_id);
+        if (!j || Store.payState(j) === "paid") return;
+        const amount = Number(l.paid_amount) > 0 ? Number(l.paid_amount) : Store.invoiceTotal(j);
+        Store.setPayment(j, { status:"paid", amountPaid: amount, method: "Card",
+                              ref: l.paid_ref || (j.payment && j.payment.ref) || "" });
+        Store.addLog(j, `Paid ${money(amount)} by card — Stripe told us`);
+        landed++;
+      });
+      if (landed){
+        this.markDirty();
+        toast(landed === 1 ? "An invoice just got paid" : landed + " invoices just got paid", "ok");
+        renderQuiet();
+      }
     } catch(err){ this.invoiceLinks = []; }
   },
 

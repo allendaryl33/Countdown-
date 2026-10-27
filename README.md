@@ -258,8 +258,15 @@ signed link for each one at the moment it sends, lasting as long as the invoice
 link does. Nothing in the bucket becomes public. Links expire in 90 days, and
 the app can tell you when they opened it.
 
-**Stripe still doesn't tell the app when they pay.** You tap **Money
-received**, same as before.
+**Stripe can tell the app when they pay**, once the webhook is wired up
+([FOR-VICTOR-2.md](FOR-VICTOR-2.md)). The app puts the invoice's token on the
+card link as `client_reference_id`; Stripe hands it back on the event; an Edge
+Function writes `paid_at` onto that row; the app marks the job paid on its next
+sync, by card, with the Stripe reference on it. The function writes three
+columns and never touches the shop.
+
+**Until that's wired, you tap Money received**, same as before — and the tap
+still works afterwards for cash and e-transfers.
 
 **The invoice document** — your own, not a retyped copy of one. The **Invoice** button on a
 job opens a preview of exactly what the customer will see: letterhead and logo,
