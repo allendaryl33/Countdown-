@@ -4894,8 +4894,8 @@ function viewLeads(){
       </div>
       <div class="stop-acts">
         ${l.phone ? `<a class="btn" href="tel:${esc(String(l.phone).replace(/[^\d+]/g,""))}">📞 Call</a>` : ""}
-        <button class="btn accent" data-lead-job="${esc(l.id)}">Book a job →</button>
-        <button class="btn" data-lead-est="${esc(l.id)}">Make an estimate →</button>
+        <button class="btn accent" data-lead-est="${esc(l.id)}">Make an estimate →</button>
+        <button class="btn" data-lead-job="${esc(l.id)}">Book a job →</button>
         <button class="btn ghost" data-lead-drop="${esc(l.id)}">Not a job</button>
         ${String(l.id).startsWith("man_")
           ? `<button class="btn ghost" data-lead-forget="${esc(l.id)}">Delete</button>` : ""}
@@ -5859,7 +5859,7 @@ function openJob(id){
     </div>
     <div class="modal-body">
       <div class="status-steps" style="margin-bottom:16px">
-        ${next ? `<button class="btn primary sm" data-advance="${j.id}">Mark ${esc(STATUS_LABEL[next])} →</button>` : ""}
+        ${next ? `<button class="btn sm" data-advance="${j.id}">Mark ${esc(STATUS_LABEL[next])} →</button>` : ""}
         <select class="input" style="width:auto;padding:5px 8px" data-setstatus="${j.id}">
           ${STATUSES.map(s => `<option value="${s.id}"${s.id===j.status?" selected":""}>${esc(s.label)}</option>`).join("")}
         </select>
@@ -8323,7 +8323,8 @@ async function sendInvoiceLink(id){
   const owed = Store.balance(j);
   const note = `Hi ${first} — invoice for the ${String(j.type).toLowerCase()}, ` +
     `${money(owed)}. Everything's on here including the photos, and you can pay from the ` +
-    `same page: ${url}`;
+    `same page: ${url}\n\n(Need a copy for your records? There's a Save a copy button ` +
+    `at the bottom of that page.)`;
 
   const fresh = !j.payment || j.payment.status === "unbilled";
   Store.markInvoiced(j);

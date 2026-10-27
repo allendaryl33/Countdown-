@@ -58,10 +58,17 @@ tr.total td{border-bottom:0;border-top:2px solid var(--navy);font-weight:700;fon
 .state h2{font-size:17px;text-transform:none;letter-spacing:0;color:var(--text);margin-bottom:6px}
 .paid{background:var(--green);color:#fff;border-radius:10px;padding:13px 16px;
   font-weight:650;text-align:center;margin-bottom:14px}
+.keepit{text-align:center;margin:18px 0 6px}
+.keepit button{font:inherit;font-weight:650;cursor:pointer;color:var(--text);
+  background:var(--card);border:1px solid var(--line);border-radius:11px;
+  padding:13px 20px;width:100%;max-width:320px}
+.keepit button:active{opacity:.7}
+.keepit .note{margin-top:7px}
 @media print{
   body{background:#fff}
   .card{box-shadow:none;border:0;padding:0;margin-bottom:18px}
   .pay{background:#fff;color:#111;border:1px solid #999}
+  .keepit{display:none}
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){--bg:#0e1620;--card:#152233;--line:#25384f;--text:#e8eef5;--muted:#9db0c4}
@@ -182,10 +189,20 @@ function render(p){
       </div>`).join("")}</div>` : ""}
 
     ${p.note ? `<p class="note" style="text-align:center">${esc(p.note)}</p>` : ""}
+
+    <div class="keepit">
+      <button type="button" id="pdf">🖨 Save a copy / Print</button>
+      <div class="note">Your phone's print screen can save this as a PDF.</div>
+    </div>
+
     <p class="note" style="text-align:center">
       Questions? ${esc(co.phone || "")}${co.email ? " · " + esc(co.email) : ""}
     </p>`;
 }
+
+document.addEventListener("click", e => {
+  if (e.target && e.target.id === "pdf") window.print();
+});
 
 window.addEventListener("hashchange", () => location.reload());
 
