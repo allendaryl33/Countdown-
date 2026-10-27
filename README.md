@@ -106,6 +106,29 @@ quoted price and shows what it's running over or under once the tech adds
 parts. Job types that normally want a waiver say so on the job record until one
 is signed.
 
+**Leads** — what came in off the website, in a list instead of a chat.
+
+The website writes every inquiry into `public.inquiries`, in the **same**
+Supabase project the shop syncs to. So there was no pipe to build: the app was
+already signed in to the database the leads were sitting in. Setup is one more
+SQL file, [supabase-leads.sql](supabase-leads.sql), which opens a window
+between the two rooms.
+
+Each lead shows who, their number, **what they said in their own words**, and
+roughly when they're free. One tap turns it into a job or an estimate — the
+customer record is created for you, matched on the last ten digits of the
+phone so a second inquiry from the same person doesn't make a second customer.
+Dealt-with leads move down the page and can be put back.
+
+The job it creates is **unscheduled on purpose**. A lead says roughly when
+they're free; you pick the actual slot. Nothing here books anything.
+
+Two things it deliberately does not do. It **never writes** to the website's
+table — that table belongs to the website, and a bug in dispatch must not be
+able to break the thing taking the calls, so which lead has been dealt with is
+kept in the shop instead. And it **never notifies you**: new leads show as a
+strip on Today, and whatever already pings your phone keeps that job.
+
 **Invoices** — the one place that answers "what am I owed?".
 Three lists, and work moves left to right:
 
@@ -358,6 +381,10 @@ Estimates:
 
     Draft → Sent → Approved → converted to a job
                  ↘ Declined
+
+Leads:
+
+    Website form → inquiries table → Leads → job or estimate
 
 Jobs:
 
