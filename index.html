@@ -2126,17 +2126,18 @@ const Store = {
       counter: Number(opts.startJobNo) || 1000,
       counterEst: 2000,
       counterWaiver: 5000,
-      settings: {
-        company: opts.company,
-        phone: opts.phone,
-        email: opts.email != null ? opts.email : (this.data.settings.email || ""),
-        website: opts.website != null ? opts.website : (this.data.settings.website || ""),
-        address: opts.address != null ? opts.address : (this.data.settings.address || ""),
-        gst: opts.gst != null ? opts.gst : (this.data.settings.gst || ""),
-        laborRate: Number(opts.laborRate) || 0,
-        zones: this.data.settings.zones || defaultZones(),
-        messages: this.data.settings.messages || defaultMessages()
-      },
+      settings: (() => {
+        const keep = Object.assign({}, this.data.settings);
+        keep.company   = opts.company;
+        keep.phone     = opts.phone;
+        keep.laborRate = Number(opts.laborRate) || 0;
+        ["email","website","address","gst"].forEach(k => {
+          if (opts[k] != null) keep[k] = opts[k];
+        });
+        keep.zones    = keep.zones    || defaultZones();
+        keep.messages = keep.messages || defaultMessages();
+        return keep;
+      })(),
       techs: opts.techName
         ? [{ id: uid("tech"), name: opts.techName, phone: opts.techPhone || opts.phone,
              color: TECH_COLORS[0], skill: opts.techSkill || "", active: true }]
