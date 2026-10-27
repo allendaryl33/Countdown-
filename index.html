@@ -5127,18 +5127,43 @@ function viewData(){
       <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Next steps</h3></div>
         <div class="card-body t-sub" style="line-height:1.65">
-          Runs on one browser, on this device. What's still missing, roughly in the
-          order it starts to hurt:
-          <ul style="padding-left:18px;margin:8px 0 0">
-            ${Cloud.configured() && Cloud.cfg.refreshToken ? "" : `
-            <li><strong>Somewhere real to keep it</strong> — so a dead laptop isn't a dead
-                business, and the phone and the office see the same jobs.
-                <em>Ready to switch on — see Sync across your devices above</em></li>`}
-            <li><strong>Photos</strong> — the corroded fitting, the model plate, the
-                before-and-after</li>
-            <li>Customer text or email confirmations</li>
-            <li>Sending real invoices, rather than recording that you sent one</li>
-          </ul>
+          ${(() => {
+            /* Built from what is actually true on this device, not a list
+               written once and left behind. It used to name photos, customer
+               messages and invoices as missing long after all three shipped,
+               which made the whole panel worth ignoring. */
+            const synced = Cloud.configured() && !!Cloud.cfg.refreshToken;
+            const live   = !!Store.data.liveSince;
+            const todo = [];
+
+            if (!synced) todo.push(`<strong>Connect this device</strong> — so a dead laptop
+              isn't a dead business, and the phone and the office see the same jobs.
+              <em>See Sync across your devices, above.</em>`);
+
+            if (!d.settings.gst) todo.push(`<strong>GST number, once you're registered</strong>
+              — invoices charge no tax until one is on file, which is correct until you
+              are, and wrong the day after.`);
+
+            const blanks = [["email","a business email"],["website","your website"],
+                            ["address","a business address"]]
+              .filter(([k]) => !d.settings[k]).map(([,label]) => label);
+            if (blanks.length) todo.push(`<strong>Business details</strong> — still no
+              ${esc(blanks.join(", no "))}. Each one prints on documents only once it's filled in.`);
+
+            if (!live) todo.push(`<strong>Clear the demo</strong> — the sample jobs and
+              customers are still here. Do it when you take your first real call, not before.`);
+
+            todo.push(`<strong>Get the waivers looked at</strong> — fourteen templates,
+              drafted but never reviewed by a lawyer or your insurer. It's the only thing
+              on this screen with real liability attached to it.`);
+
+            return (todo.length > 1 || !synced || !live
+              ? `What's still outstanding, roughly in the order it starts to hurt:`
+              : `Nearly everything is in place. Outstanding:`) +
+              `<ul style="padding-left:18px;margin:8px 0 0">
+                ${todo.map(t => `<li style="margin-bottom:6px">${t}</li>`).join("")}
+              </ul>`;
+          })()}
         </div>
       </div>
     </div>
