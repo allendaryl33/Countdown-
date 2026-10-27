@@ -90,6 +90,37 @@ Tell Allen the address when it's up; he pastes it into **Data & Setup →
 Signing page address** and every link from then on uses it. Links already sent
 keep working at the old address.
 
+### One more line, to make the links short
+
+As shipped, every link has to carry the project URL and the publishable key,
+because a generic copy of the page can't know whose project it belongs to.
+That makes a link around 210 characters. On your copy it doesn't have to.
+
+At the top of the `<script>` in `sign.html`:
+
+```js
+const BAKED_URL = "";
+const BAKED_KEY = "";
+```
+
+Fill those two in with the project URL and the **publishable** key (not the
+secret one), and the links drop to about 70 characters — just the domain and
+a code:
+
+```
+https://poseidonplumbing.ca/sign#t=a7f3c91e4b2d...
+```
+
+No new exposure: that key is already in the page source of the site that
+submits to this project. This only stops it making a round trip through a
+customer's text messages.
+
+Tell Allen when it's done — there's a **Short links** tick-box next to the
+address in Data & Setup, and it has to stay off until those two values are in,
+or the links won't open.
+
+The copies in the repo stay empty so the repo stays key-free.
+
 ### If it's easier to redirect
 
 A redirect from `poseidonplumbing.ca/sign` works **only if the `#` fragment is
