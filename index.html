@@ -1690,19 +1690,15 @@ const Cloud = {
       /* These read Victor's table and our own link tables, not the shop row.
          They used to sit inside the success branch, so any hiccup on the shop
          — a dropped bar, a failed write — took the website's leads off the
-         screen with no word of explanation. They are independent; they run
-         whether the shop sync won or lost.
+         screen with no word of explanation.
 
-         Not while a conflict is open, though. pullSignLinks writes approvals
-         into Store.data, which is one of the two copies he is being asked to
-         choose between, and its markDirty would schedule a push that is
-         certain to conflict again and pop this very dialog a second time. */
-      /* pullInquiries only ever sets Cloud.inquiries — it cannot touch the
-         shop, so it runs even mid-conflict and the Leads screen stays honest.
-         The other two are not reads: pullSignLinks writes approvals and
-         pullInvoiceLinks writes payments, both ending in markDirty. Running
-         either now would edit one of the two copies he is being asked to
-         choose between, and queue a push certain to raise this same question
+         pullInquiries only ever assigns Cloud.inquiries, so it cannot reach
+         the shop and runs either way: the Leads screen stays honest even
+         while the conflict question is on screen. The other two are not
+         reads — pullSignLinks writes approvals, pullInvoiceLinks writes
+         payments, both ending in markDirty. Running either mid-conflict
+         would edit one of the two copies he is being asked to choose
+         between, and queue a push certain to raise that same question
          again. They wait until he has answered. */
       this.pullInquiries();
       if (!this.conflictOpen){
