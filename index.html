@@ -159,6 +159,17 @@ nav button .count.alert{background:var(--amber);color:#fff}
 .stop.pri-Emergency{border-left-color:var(--red)}
 .stop.pri-High{border-left-color:var(--amber)}
 .stop.st-complete{border-left-color:var(--green);opacity:.75}
+.waiting.lead-wait{border-color:#d6d1f5;background:var(--purple-soft);color:#43389b}
+.stop.lead-card{border-left-color:var(--purple)}
+.stop.lead-done{border-left-color:var(--green);opacity:.72}
+.lead-body{padding:0 14px 10px}
+.lead-said{
+  margin:0 0 9px;padding:10px 12px;background:var(--sunk,#f3f6f9);border-radius:8px;
+  font-size:14px;line-height:1.5;white-space:pre-wrap;
+}
+.lead-row{display:flex;gap:10px;font-size:13.5px;padding:3px 0}
+.lead-row .k{color:var(--muted);min-width:52px}
+.lead-row .v{font-weight:550;overflow-wrap:anywhere}
 .stop.inv-tosend{border-left-color:var(--gold)}
 .stop.inv-out{border-left-color:var(--blue)}
 .stop.inv-late{border-left-color:var(--red)}
@@ -775,6 +786,9 @@ textarea.input{resize:vertical;min-height:76px}
   .row2,.row3{grid-template-columns:1fr}
   .board{flex-direction:column}
   .col{flex:1 1 auto;max-width:none;width:100%}
+  /* A lead card carries four actions — call, job, estimate, dismiss — and
+     "Make an estimate" clipped itself at phone width. Two per row. */
+  .stop.lead-card .stop-acts .btn{flex:1 1 calc(50% - 4px);min-width:0}
   .stop.inv-out .stop-acts > :first-child,
   .stop.inv-late .stop-acts > :first-child{flex:1 0 100%}
   .toolbar{gap:6px}
@@ -1146,6 +1160,36 @@ function fmtPhone(p){
   if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
   return p || "";
 }
+/* The website's table is the website's. Its column names were chosen for a
+   contact form, not for dispatch, and `contact` holds a phone OR an email in
+   one field. This reads a row of it into the shape the app thinks in, and
+   tolerates the names moving, because they are not ours to pin down. */
+function readInquiry(r){
+  const pick = (...names) => {
+    for (const n of names){
+      const v = r[n];
+      if (v != null && String(v).trim() !== "") return String(v).trim();
+    }
+    return "";
+  };
+  const one   = pick("contact", "contact_info", "phone_or_email");
+  const mail  = /@/.test(one);
+  const digits = String(one).replace(/\D/g, "");
+  return {
+    id:      String(r.id != null ? r.id : pick("uuid", "inquiry_id", "ref")),
+    name:    pick("name", "full_name", "customer_name", "first_name") || "(no name given)",
+    phone:   mail ? pick("phone", "telephone") : (digits.length >= 7 ? one : pick("phone", "telephone")),
+    email:   mail ? one : pick("email"),
+    service: pick("service", "service_type", "type", "subject"),
+    what:    pick("description", "message", "details", "notes", "body"),
+    timing:  pick("timing", "availability", "when", "preferred_time", "best_time"),
+    address: pick("address", "service_address", "street", "location"),
+    source:  pick("source") || "website",
+    at:      pick("created_at", "inserted_at", "created", "submitted_at", "timestamp"),
+    raw: r
+  };
+}
+
 function blankPayment(){
   return { status:"unbilled", amountPaid:0, method:"", ref:"", url:"", invoicedAt:null, paidAt:null };
 }
@@ -1583,6 +1627,8 @@ const Cloud = {
       this.set("synced", "just now");
       // photographs go up behind the record, never in front of it
       this.flushPhotos().then(n => { if (n) this.markDirty(); });
+      // and the website's leads come down behind both
+      this.pullInquiries();
     } catch(err){
       if (err.offline){ this.set("error", "no connection — saved on this device"); return; }
       if (err.status === 401 || /refresh|jwt|token/i.test(err.message || "")){
@@ -1590,6 +1636,38 @@ const Cloud = {
       }
       this.set("error", err.message || "sync failed");
     }
+  },
+
+  /* --- the website's inquiries ---
+     The website writes what people type into public.inquiries, in this same
+     Supabase project. So there is no pipe to build: the app is already
+     signed in to the database the leads are sitting in.
+
+     The app only ever READS that table. It belongs to the website, and a bug
+     in dispatch must not be able to break the thing that takes the calls.
+     Which lead has been dealt with is kept in the shop instead, so it syncs
+     across his devices without touching a row of Victor's. */
+  inquiries: [],
+  inqError: "",
+
+  async pullInquiries(){
+    if (!this.configured() || !this.cfg.refreshToken) return;
+    try {
+      await this.ensureToken();
+      // No order parameter: the column names are the website's, not ours, and
+      // PostgREST rejects an order on a column that isn't there. Sort locally.
+      const rows = await this.call("/rest/v1/inquiries?select=*&limit=500");
+      this.inquiries = Array.isArray(rows) ? rows : [];
+      this.inqError = "";
+    } catch(err){
+      // A missing table or a refused read is not a sync failure — the shop is
+      // fine. It gets said on the Leads screen and nowhere else.
+      this.inquiries = [];
+      this.inqError = err.offline ? "offline"
+        : (err.status === 404 || /relation|does not exist|schema cache/i.test(err.message || ""))
+          ? "no-table" : (err.message || "could not read the table");
+    }
+    this.emit();
   },
 
   /* Resume a session on open, then catch up. */
@@ -1677,6 +1755,11 @@ const Store = {
         && this.data.seededOn !== todayStr()){
       this.shiftDemoDates(daysBetween(this.data.seededOn, todayStr()));
     }
+    // Which website inquiries have been dealt with. Kept here rather than
+    // written back to the website's own table, so his devices agree without
+    // the app ever writing a row it doesn't own.
+    if (!this.data.leadsDone) this.data.leadsDone = {};
+
     // Added with payment tracking — older jobs have no payment block.
     this.data.jobs.forEach(j => { if (!j.payment) j.payment = blankPayment(); });
     // Renamed on rebrand. Only a name this app shipped as a default is
@@ -2326,6 +2409,109 @@ const Store = {
     else if (!pay.ref)             this.setPayment(job, { ref });
   },
 
+  /* ---- Leads from the website.
+     Live rows, not shop data: they are read fresh from the website's table
+     each sync and never saved into the shop. Only the fact that one has been
+     dealt with is ours to keep. */
+  leads(){
+    return (Cloud.inquiries || []).map(readInquiry).filter(l => l.id);
+  },
+  leadsOpen(){
+    const done = this.data.leadsDone || {};
+    return this.leads().filter(l => !done[l.id]).sort((a,b) => {
+      if (a.at && b.at) return String(b.at).localeCompare(String(a.at));
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
+    });
+  },
+  leadDone(id, how, recId){
+    this.data.leadsDone[String(id)] = { at: Date.now(), how, recId: recId || null };
+    this.save();
+  },
+  leadReopen(id){
+    delete this.data.leadsDone[String(id)];
+    this.save();
+  },
+  /* An inquiry is from somebody who may already be a customer. Match on the
+     digits of the phone — people type their own number three different ways
+     and none of them match a string compare. */
+  customerForLead(lead){
+    const d = String(lead.phone || "").replace(/\D/g, "").slice(-10);
+    if (d.length === 10){
+      const hit = this.data.customers.find(c => String(c.phone || "").replace(/\D/g, "").slice(-10) === d);
+      if (hit) return hit;
+    }
+    const n = String(lead.name || "").trim().toLowerCase();
+    return n ? this.data.customers.find(c => String(c.name || "").trim().toLowerCase() === n) || null : null;
+  },
+  customerFromLead(lead){
+    const found = this.customerForLead(lead);
+    if (found) return found;
+    const c = {
+      id: uid("cus"), name: lead.name, phone: lead.phone, email: lead.email,
+      address: lead.address, city: "Edmonton", zone: "city",
+      notes: lead.timing ? `Said they're free: ${lead.timing}` : "",
+      createdAt: Date.now()
+    };
+    this.data.customers.push(c);
+    return c;
+  },
+  /* Unscheduled on purpose. The lead said roughly when they're free; he
+     picks the actual slot, which is the whole point of not automating it. */
+  jobFromLead(lead){
+    const c = this.customerFromLead(lead);
+    const j = {
+      id: uid("job"), no: this.nextJobNo(), createdAt: Date.now(),
+      customerId: c.id,
+      type: this.leadJobType(lead),
+      priority: "Normal",
+      description: this.leadStory(lead),
+      scheduledDate: null, window: "Anytime",
+      techId: null, status: "new", completedAt: null,
+      laborHours: 0, laborRate: this.data.settings.laborRate,
+      parts: [], payment: blankPayment(), timeEntries: [],
+      log: [{ ts: Date.now(), text: `From a ${lead.source} inquiry` }]
+    };
+    this.data.jobs.push(j);
+    this.leadDone(lead.id, "job", j.id);
+    return j;
+  },
+  estimateFromLead(lead){
+    const found = this.customerForLead(lead);
+    const e = {
+      id: uid("est"), no: this.nextEstNo(),
+      customerId: found ? found.id : null,
+      lead: found ? null : { name: lead.name, phone: lead.phone, email: lead.email,
+                             address: lead.address, city: "Edmonton" },
+      type: this.leadJobType(lead), status: "draft",
+      description: this.leadStory(lead),
+      validDays: 30, createdAt: Date.now(), sentAt: null, decidedAt: null, jobId: null,
+      items: [], materials: [],
+      log: [{ ts: Date.now(), text: `From a ${lead.source} inquiry` }]
+    };
+    this.data.estimates.push(e);
+    this.leadDone(lead.id, "estimate", e.id);
+    return e;
+  },
+  /* Their words first, then what the form called it. He reads this on the
+     doorstep, so it keeps what they actually said. */
+  leadStory(lead){
+    const bits = [];
+    if (lead.what) bits.push(lead.what);
+    if (lead.timing) bits.push(`They said they're free: ${lead.timing}.`);
+    if (!bits.length) bits.push(lead.service || "Website inquiry — no detail given.");
+    return bits.join("\n\n");
+  },
+  /* The form's own service wording rarely matches a job type exactly. Take
+     the closest one we have and leave it editable rather than guessing hard. */
+  leadJobType(lead){
+    const want = String(lead.service || "").toLowerCase();
+    if (!want) return JOB_TYPES[0];
+    const exact = JOB_TYPES.find(t => t.toLowerCase() === want);
+    if (exact) return exact;
+    const near = JOB_TYPES.find(t => want.includes(t.toLowerCase()) || t.toLowerCase().includes(want));
+    return near || JOB_TYPES[0];
+  },
+
   nextWaiverNo(){
     this.data.counterWaiver = (this.data.counterWaiver || 5000) + 1;
     return this.data.counterWaiver;
@@ -2917,6 +3103,7 @@ const App = {
 
 const VIEWS = [
   { id:"today",     label:"Today",     icon:"🚐", crumb:"Field" },
+  { id:"leads",     label:"Leads",     icon:"📨", crumb:"Field" },
   { id:"dashboard", label:"Dashboard", icon:"▦",  crumb:"Dispatch" },
   { id:"schedule",  label:"Schedule",  icon:"🗓", crumb:"Dispatch" },
   { id:"estimates", label:"Estimates", icon:"📋", crumb:"Work" },
@@ -2933,7 +3120,7 @@ const VIEWS = [
 
 function openNavSheet(){
   const groups = [
-    ["Field",    ["today"]],
+    ["Field",    ["today","leads"]],
     ["Dispatch", ["dashboard","schedule"]],
     ["Field",    ["pickup"]],
     ["Work",     ["estimates","jobs","invoices","timemoney","customers","waivers"]],
@@ -3066,6 +3253,7 @@ function render(){
     switch(App.view){
       case "schedule":  host.innerHTML = viewSchedule();  break;
       case "today":     host.innerHTML = viewToday();     break;
+      case "leads":     host.innerHTML = viewLeads();     break;
       case "estimates": host.innerHTML = viewEstimates(); break;
       case "timemoney": host.innerHTML = viewTimeMoney(); break;
       case "pickup":    host.innerHTML = viewPickup(); break;
@@ -3235,7 +3423,8 @@ function renderMobileNav(){
     schedule: jobs.filter(j => !j.techId && isOpen(j)).length,
     jobs: 0,
     estimates: Store.openEstimates().length,
-    invoices: Store.invNeedsYou()
+    invoices: Store.invNeedsYou(),
+    leads: Store.leadsOpen().length
   };
   el.innerHTML = MOBILE_NAV.map(id => {
     const v = VIEWS.find(x => x.id === id);
@@ -3256,6 +3445,7 @@ function renderNav(){
     schedule: jobs.filter(j => j.scheduledDate === t && j.status !== "cancelled").length,
     estimates: Store.openEstimates().length,
     invoices: Store.invNeedsYou(),
+    leads: Store.leadsOpen().length,
     jobs: jobs.filter(j => !["complete","cancelled"].includes(j.status)).length,
     customers: Store.data.customers.length,
     waivers: Store.data.signedWaivers.length,
@@ -3277,7 +3467,7 @@ function renderNav(){
     }).join("")}`;
 
   $("#nav").innerHTML =
-    group("Field", ["today"]) +
+    group("Field", ["today","leads"]) +
     group("Dispatch", ["dashboard","schedule"]) +
     group("Field", ["pickup"]) +
     group("Work", ["estimates","jobs","invoices","timemoney","customers","waivers"]) +
@@ -3377,6 +3567,7 @@ function viewToday(){
     ${owed ? `<span class="pill warn">${esc(money(owed))} to collect</span>` : ""}
   </div>
 
+  ${leadStrip()}
   ${waitingStrip()}
 
   ${open.length ? open.map(stopCard).join("")
@@ -4174,6 +4365,113 @@ function viewEstimates(){
       : `<tr><td colspan="7"><div class="empty"><div class="big">📋</div>No estimates in this view.</div></td></tr>`}
     </tbody>
   </table></div>`;
+}
+
+/* ============================================================
+   View: Leads — what came in off the website
+   ============================================================
+   The website already writes every inquiry into public.inquiries, in the
+   same Supabase project the shop syncs to. Nothing had to be plumbed: the
+   app was already signed in to the database they were sitting in. Until
+   now the only copy he ever saw was a Telegram message, which scrolls.
+
+   Read-only on that table. Nothing here books anything either — a lead
+   says roughly when they're free and he picks the slot, which is the part
+   he said he wanted to keep. */
+function viewLeads(){
+  const open = Store.leadsOpen();
+  const done = Store.data.leadsDone || {};
+  const handled = Store.leads().filter(l => done[l.id])
+    .sort((a,b) => (done[b.id].at || 0) - (done[a.id].at || 0));
+
+  if (!Cloud.configured()){
+    return `<div class="empty" style="padding:56px 20px">
+      <div class="big">📨</div>
+      <div style="font-size:16px;font-weight:650;color:var(--text);margin-bottom:6px">
+        Not connected yet</div>
+      Website inquiries live in your Supabase project. Connect the app under
+      <strong>Data &amp; Setup</strong> and they'll appear here.
+    </div>`;
+  }
+
+  const trouble = {
+    "offline":  ["No connection", "They're on the server, not this phone. They'll load when you've got a bar."],
+    "no-table": ["Can't see the inquiries table",
+                 "The app is connected, but the database says there's no table called <strong>inquiries</strong> it's allowed to read. Run the leads SQL file and this fills in."]
+  }[Cloud.inqError];
+
+  const card = l => {
+    const known = Store.customerForLead(l);
+    const when = l.at ? fmtStamp(Date.parse(l.at) || null) : "";
+    const row = (label, value) => value
+      ? `<div class="lead-row"><span class="k">${esc(label)}</span><span class="v">${esc(value)}</span></div>` : "";
+    return `<div class="stop lead-card">
+      <div class="stop-main" style="cursor:default">
+        <div class="stop-body">
+          <div class="cust">${esc(l.name)}${known ? ` <span class="chip">already a customer</span>` : ""}</div>
+          <div class="addr">${esc([l.service, l.address].filter(Boolean).join(" · ") || "no service given")}</div>
+          ${when ? `<div class="what t-sub">came in ${esc(when)}</div>` : ""}
+        </div>
+      </div>
+      <div class="lead-body">
+        ${l.what ? `<p class="lead-said">${esc(l.what)}</p>` : ""}
+        ${row("Phone", l.phone ? fmtPhone(l.phone) : "")}
+        ${row("Email", l.email)}
+        ${row("Free", l.timing)}
+      </div>
+      <div class="stop-acts">
+        ${l.phone ? `<a class="btn" href="tel:${esc(String(l.phone).replace(/[^\d+]/g,""))}">📞 Call</a>` : ""}
+        <button class="btn accent" data-lead-job="${esc(l.id)}">Book a job →</button>
+        <button class="btn" data-lead-est="${esc(l.id)}">Make an estimate →</button>
+        <button class="btn ghost" data-lead-drop="${esc(l.id)}">Not a job</button>
+      </div>
+    </div>`;
+  };
+
+  return `
+  <div class="today-head">
+    <span class="big">${open.length ? open.length + " lead" + (open.length===1?"":"s") + " waiting"
+                                    : "Nothing waiting"}</span>
+    <span class="sub">straight off the website</span>
+  </div>
+
+  ${trouble ? `<div class="stop-flag" style="border-radius:11px;border:1px solid #f0d6bb;margin-bottom:12px">
+      <strong>${esc(trouble[0])}</strong> — ${trouble[1]}
+    </div>` : ""}
+
+  ${open.length ? open.map(card).join("")
+    : (trouble ? "" : `<div class="today-empty">
+         <div class="big">📨</div>
+         <div style="font-weight:600;color:var(--text);margin-bottom:4px">Nothing new off the website.</div>
+         <div>Anything someone fills in lands here, and stays here until you've dealt with it.</div>
+       </div>`)}
+
+  ${handled.length ? `<div class="sec-head">Already dealt with</div>
+    ${handled.slice(0,12).map(l => {
+      const d = done[l.id];
+      const rec = d.how === "job" ? Store.job(d.recId) : d.how === "estimate" ? Store.estimate(d.recId) : null;
+      return `<div class="stop lead-done">
+        <div class="stop-main" ${rec ? `data-${d.how === "job" ? "job" : "estimate"}="${rec.id}"` : 'style="cursor:default"'}>
+          <div class="stop-body">
+            <div class="cust">${esc(l.name)}</div>
+            <div class="addr">${rec
+              ? (d.how === "job" ? `→ job #${rec.no}` : `→ EST-${rec.no}`)
+              : "not a job"}</div>
+          </div>
+          <div class="stop-when"><div class="n">${esc(fmtStamp(d.at).split(" · ")[0])}</div></div>
+        </div>
+        <div class="stop-acts">
+          <button class="btn ghost sm" data-lead-back="${esc(l.id)}">Put back</button>
+        </div>
+      </div>`;
+    }).join("")}` : ""}
+
+  <p class="t-sub" style="margin-top:16px;max-width:66ch">
+    These are read straight from the website's own table — the app never writes
+    to it, so nothing in here can break the form that's taking the calls.
+    Booking stays yours: a lead tells you roughly when they're free, you pick
+    the slot.
+  </p>`;
 }
 
 /* ============================================================
@@ -6085,6 +6383,20 @@ function saveTemplateFromForm(id){
    invisible exactly where it matters most. This is the answer to "how am I
    meant to know whether I should have used the camera app instead" — you
    are not: it says so. */
+/* Leads in front of him on the day's screen, without a notification.
+   Victor does the pinging and he likes it that way — this is just so the
+   list can't be forgotten once the ping has scrolled past. */
+function leadStrip(){
+  const n = Store.leadsOpen().length;
+  if (!n) return "";
+  return `
+  <div class="waiting lead-wait" data-nav="leads" style="cursor:pointer">
+    <span class="w-ico">📨</span>
+    <span><b>${n} new lead${n===1?"":"s"}</b> off the website, waiting on you.</span>
+    <button class="btn sm ghost w-act" data-nav="leads">Open</button>
+  </div>`;
+}
+
 function waitingStrip(){
   if (!Cloud.configured() || !Cloud.cfg.refreshToken) return "";
   const photos = Store.pendingPhotos().length;
@@ -7362,6 +7674,39 @@ document.addEventListener("click", e => {
     if ($("#modal-root").innerHTML){ kind === "estimate" ? openEstimate(id) : openJob(id); }
     return;
   }
+  const leadJob = hit("[data-lead-job]");
+  if (leadJob){
+    const l = Store.leadsOpen().find(x => x.id === leadJob.dataset.leadJob);
+    if (!l) return;
+    const j = Store.jobFromLead(l);
+    Store.save(); render(); openJob(j.id);
+    toast(`Job #${j.no} from ${l.name} — pick a day`, "ok");
+    return;
+  }
+  const leadEst = hit("[data-lead-est]");
+  if (leadEst){
+    const l = Store.leadsOpen().find(x => x.id === leadEst.dataset.leadEst);
+    if (!l) return;
+    const e = Store.estimateFromLead(l);
+    Store.save(); render(); openEstimate(e.id);
+    toast(`EST-${e.no} started from ${l.name}`, "ok");
+    return;
+  }
+  const leadDrop = hit("[data-lead-drop]");
+  if (leadDrop){
+    Store.leadDone(leadDrop.dataset.leadDrop, "dropped", null);
+    render();
+    toast("Moved to dealt with", "ok");
+    return;
+  }
+  const leadBack = hit("[data-lead-back]");
+  if (leadBack){
+    Store.leadReopen(leadBack.dataset.leadBack);
+    render();
+    toast("Back in the list", "ok");
+    return;
+  }
+
   const invGo = hit("[data-inv-go]");
   if (invGo){ App.invTab = invGo.dataset.invGo; return go("invoices"); }
 
