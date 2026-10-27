@@ -1350,6 +1350,9 @@ const Cloud = {
   state: "off",      // off | signed-out | syncing | synced | conflict | error
   detail: "",
   dirty: false,
+  /* True from raising the "which copy is right" question until he answers it.
+     Everything that writes to the shop holds off while it is set. */
+  conflictOpen: false,
   signingIn: false,
   pushTimer: null,
   _listeners: [],
@@ -1455,6 +1458,7 @@ const Cloud = {
 
   signOut(){
     this.token = null; this.tokenExp = 0; this.uid = null; this.baseRev = 0; this.dirty = false;
+    this.conflictOpen = false;
     if (this.cfg){ delete this.cfg.refreshToken; this.saveCfg(); }
     this.set("signed-out");
   },
@@ -1647,6 +1651,10 @@ const Cloud = {
     if (!this.configured() || !this.cfg.refreshToken) return;
     this.noteUnsent(true);
     clearTimeout(this.pushTimer);
+    // An unresolved conflict means baseRev is stale, so a push can only fail
+    // the guard and raise the same dialog again. The edit is safe on the
+    // device; it goes up the moment he says which copy wins.
+    if (this.conflictOpen) return;
     this.pushTimer = setTimeout(() => this.syncNow({ quiet:true }), 2500);
     if (this.state === "synced") this.set("syncing", "saving…");
   },
@@ -1662,7 +1670,11 @@ const Cloud = {
       const r = this.dirty ? await this.push() : await this.pull();
       if (r.conflict){
         this.set("conflict", "changed on another device");
-        onCloudConflict(r.remote);
+        if (!this.conflictOpen){
+          this.conflictOpen = true;
+          this.conflictCount = (this.conflictCount || 0) + 1;
+          onCloudConflict(r.remote);
+        }
         return;
       }
       this.set("synced", "just now");
@@ -1677,11 +1689,19 @@ const Cloud = {
     } finally {
       /* These read Victor's table and our own link tables, not the shop row.
          They used to sit inside the success branch, so any hiccup on the shop
-         — a conflict, a dropped bar — took the website's leads off the screen
-         with no word of explanation. They are independent; they run either way. */
-      this.pullInquiries();
-      this.pullSignLinks();
-      this.pullInvoiceLinks();
+         — a dropped bar, a failed write — took the website's leads off the
+         screen with no word of explanation. They are independent; they run
+         whether the shop sync won or lost.
+
+         Not while a conflict is open, though. pullSignLinks writes approvals
+         into Store.data, which is one of the two copies he is being asked to
+         choose between, and its markDirty would schedule a push that is
+         certain to conflict again and pop this very dialog a second time. */
+      if (!this.conflictOpen){
+        this.pullInquiries();
+        this.pullSignLinks();
+        this.pullInvoiceLinks();
+      }
     }
   },
 
@@ -3770,6 +3790,19 @@ function onCloudConflict(remote){
         <div class="oc-s">${esc(count(theirs))}${remote && remote.updated_at
           ? " · saved " + esc(fmtStamp(Date.parse(remote.updated_at))) : ""}</div>
       </div>
+
+      ${count(mine) === count(theirs) ? `<p class="t-sub" style="margin:14px 0 0;max-width:62ch">
+        Both copies hold the same amount of work, so this is almost certainly the
+        same shop saved twice rather than two different days' work. Either button
+        is safe.</p>` : ""}
+
+      ${Cloud.conflictCount > 1 ? `<div class="legal-note" style="margin:14px 0 0">
+        <strong>This keeps happening.</strong> Something else is signed in and saving
+        at the same time — usually the app left open in another tab, or the old
+        icon on your home screen, which iOS keeps separate from Safari. Close the
+        other one and this stops.</div>` : `<p class="t-sub" style="margin:14px 0 0;max-width:62ch">
+        If you have the app open somewhere else — another tab, or the icon on your
+        home screen — close it, or the two will keep overwriting each other.</p>`}
     </div>
     <div class="modal-foot">
       <div class="spacer"></div>
@@ -3805,6 +3838,9 @@ async function resolveConflict(which){
     Cloud.set("error", err.message || "couldn't resolve");
   }
   Cloud._conflictRemote = null;
+  Cloud.conflictOpen = false;
+  // anything he changed while the question was on screen was held back; send it
+  if (Cloud.dirty) Cloud.markDirty();
 }
 
 function renderBrand(){
