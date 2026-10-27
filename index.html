@@ -606,6 +606,8 @@ textarea.input{resize:vertical;min-height:76px}
 .inv-preview .inv-meta{width:100%;border-collapse:collapse;margin-bottom:14px}
 .inv-preview .inv-meta td{padding:5px 4px;border-bottom:1px solid #e3e3e3;vertical-align:top}
 .inv-preview .inv-desc{margin:0 0 14px}
+.inv-preview .inv-sig{margin-top:4px}
+.inv-preview .inv-sig img{max-height:46px;max-width:100%;display:block}
 .inv-preview .inv-lines{width:100%;border-collapse:collapse;margin-top:6px}
 .inv-preview .inv-lines th,.inv-preview .inv-lines td{border-bottom:1px solid #ddd;padding:7px 4px}
 .inv-preview .inv-lines th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#555}
@@ -827,6 +829,8 @@ textarea.input{resize:vertical;min-height:76px}
   .invdoc .inv-meta{width:100%;border-collapse:collapse;margin-bottom:14px}
   .invdoc .inv-meta td{padding:4px 4px;border-bottom:1px solid #ddd;vertical-align:top}
   .invdoc .inv-desc{margin:0 0 14px;line-height:1.55}
+  .invdoc .inv-sig{margin-top:4px}
+  .invdoc .inv-sig img{max-height:46px;max-width:100%;display:block}
   .invdoc .inv-lines{width:100%;border-collapse:collapse;margin-top:6px}
   .invdoc .inv-lines th,.invdoc .inv-lines td{border-bottom:1px solid #ccc;padding:6px 4px}
   .invdoc .inv-lines th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
@@ -5621,6 +5625,7 @@ function openEstimate(id){
       <div class="status-steps" style="margin-bottom:16px">
         ${actions.join("")}
         <button class="btn sm" data-edit-estimate="${e.id}">Edit details</button>
+        <button class="btn sm accent" data-send-estimate="${e.id}">✉ Send to customer</button>
         <button class="btn sm" data-print-estimate="${e.id}">🖨 Print estimate</button>
       </div>
 
@@ -7364,7 +7369,11 @@ async function invoiceDocHtml(j){
       <table class="inv-meta">
         ${signed.map(w => `<tr>
           <td>${esc(w.title)}</td>
-          <td style="width:42%">${esc(w.signerName)} &middot; ${esc(fmtStamp(w.signedAt))}</td>
+          <td style="width:42%">
+            ${esc(w.signerName)} &middot; ${esc(fmtStamp(w.signedAt))}
+            ${w.signature ? `<div class="inv-sig"><img src="${esc(w.signature)}"
+                 alt="Signature of ${esc(w.signerName)}"></div>` : ""}
+          </td>
         </tr>`).join("")}
       </table>` : ""}
 
@@ -7434,6 +7443,95 @@ function estimateDocHtml(e){
       <div class="sig">Date</div>
     </div>
   </div>`;
+}
+
+/* Sending an estimate.
+   Printing it was the only way out of here, which meant the quote stopped
+   at his own printer. This shows him exactly what the customer will see,
+   then hands it to whatever he actually sends with — his mail app or his
+   messages — because a browser cannot attach a file to either, and
+   pretending otherwise would lose him the job quietly.
+
+   Marking it Sent happens here, on the way out, rather than being another
+   button he has to remember afterwards. */
+function sendEstimate(id){
+  const e = Store.estimate(id);
+  if (!e) return;
+  const c = Store.estContact(e);
+  const st = Store.data.settings;
+  const total = Store.estimateTotal(e);
+  const valid = e.validDays || 30;
+  const missing = [];
+  if (!(e.items || []).length) missing.push("there are no line items on it yet");
+  if (!c.phone && !c.email) missing.push("there's no phone number or email for them");
+
+  const note =
+`Hi ${String(c.name).trim().split(/\s+/)[0] || "there"},
+
+Thanks for getting in touch. Here's the estimate for the ${String(e.type).toLowerCase()}:
+
+${(e.items || []).map(i => `  ${i.qty > 1 ? i.qty + " x " : ""}${i.desc} — ${money(i.qty * i.price)}`).join("\n")}
+
+Total: ${money(total)}${st.gst ? " (incl. GST)" : ""}
+Good for ${valid} days.
+
+Happy to go through any of it. Just reply or give me a call${st.phone ? " on " + fmtPhone(st.phone) : ""} and we'll get you booked in.
+
+${st.company}`;
+
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">EST-${e.no} · ${esc(c.name)}</div>
+        <h2>Send the estimate</h2></div>
+      <div class="spacer"></div><button class="x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      ${missing.length ? `<div class="legal-note" style="margin:0 0 14px">
+        <strong>Not ready to send:</strong> ${esc(missing.join(", and "))}.</div>` : ""}
+
+      <div class="section-title" style="margin-top:0">What they'll read</div>
+      <textarea class="msg-prev" id="est-note" style="min-height:230px">${esc(note)}</textarea>
+      <div class="msg-meta"><span id="est-count"></span>
+        <span>Edit it however you like before it goes.</span></div>
+
+      <div class="section-title" style="margin-top:20px">The estimate itself</div>
+      <p class="t-sub" style="margin:0 0 10px;max-width:62ch">
+        A web page can't attach a file to your mail app for you. Save the PDF
+        first, then attach it to the email — or just send the note above on its
+        own if they only want the number.
+      </p>
+      <button class="btn" data-print-estimate="${e.id}">🖨 Save as PDF / Print</button>
+
+      <div class="section-title" style="margin-top:20px">Then send it</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${c.email ? `<a class="btn primary" id="est-mail" href="#" data-est-sent="${e.id}:Emailed">✉ Email ${esc(c.email)}</a>`
+                  : `<span class="t-sub">No email on file for them.</span>`}
+        ${c.phone ? `<a class="btn" id="est-sms" href="#" data-est-sent="${e.id}:Texted">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
+      </div>
+      <p class="t-sub" style="margin:12px 0 0">
+        Either one marks it <strong>Sent</strong>, so it stops showing as a draft.
+      </p>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="btn" data-close>Close</button>
+    </div>`, { wide:true, noFocus:true });
+
+  // Keep the links carrying whatever is on screen right now, not what it
+  // said when the sheet opened.
+  const ta = $("#est-note");
+  const subject = `${st.company} — estimate EST-${e.no}`;
+  const sync = () => {
+    const txt = ta.value;
+    const n = $("#est-count");
+    if (n) n.textContent = txt.length + " characters";
+    const mail = $("#est-mail"), sms = $("#est-sms");
+    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
+      `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(txt)}`;
+    if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(txt)}`;
+  };
+  ta.addEventListener("input", sync);
+  sync();
 }
 
 function printEstimate(e){
@@ -7949,6 +8047,25 @@ document.addEventListener("click", e => {
 
   const doConv = hit("[data-do-convert]");
   if (doConv) return doConvert(doConv.dataset.doConvert);
+
+  const sendEst = hit("[data-send-estimate]");
+  if (sendEst) return sendEstimate(sendEst.dataset.sendEstimate);
+
+  /* The anchor's own href opens the mail app or Messages; this just records
+     that it happened and moves the estimate off Draft. */
+  const estSent = hit("[data-est-sent]");
+  if (estSent){
+    const [eid, how] = estSent.dataset.estSent.split(":");
+    const e = Store.estimate(eid);
+    if (e){
+      const first = e.status === "draft";
+      if (first) Store.setEstStatus(e, "sent");   // logs the move itself
+      Store.addEstLog(e, `${how} the estimate to the customer`);
+      Store.save(); renderQuiet();
+      toast(first ? `EST-${e.no} marked as sent` : `${how} again — EST-${e.no}`, "ok");
+    }
+    return;
+  }
 
   const estSt = hit("[data-est-status]");
   if (estSt){

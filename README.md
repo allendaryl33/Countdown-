@@ -167,6 +167,17 @@ Deactivating a tech takes their column off the board without touching their jobs
 problem, site notes, room to write up the work, and a signature line. Print the
 whole day from the dashboard or any single job from its detail view.
 
+**Sending an estimate** — the **Send to customer** button on any estimate
+writes the note for you: the line items, the total, how long it's good for, and
+an invitation to call. Edit it however you like, then hand it to your mail app
+or Messages — both carry whatever is on screen at that moment. Either one marks
+the estimate **Sent**, so it stops showing as a draft, and records it in the
+estimate's log.
+
+A browser can't attach a file to your mail app, so if you want the formatted
+estimate to go with it, save the PDF first and attach it. The note alone is
+often enough when they just want the number.
+
 **The invoice document** — your own, not a retyped copy of one. The **Invoice** button on a
 job opens a preview of exactly what the customer will see: letterhead and logo,
 who it's billed to, what was wrong, line items, labour, subtotal, GST, total
@@ -176,6 +187,9 @@ it however you like.
 
 Only labelled photos go on it. An unlabelled one — a model plate, a part number
 — stays yours.
+
+Anything signed on the job appears underneath, **with the signature itself** —
+what it was, who signed it, when, and their actual mark on the page.
 
 The invoice number is assigned the first time you open the preview and never
 changes afterwards, because by then it may be in somebody else's books. A job
