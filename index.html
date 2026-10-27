@@ -1697,8 +1697,15 @@ const Cloud = {
          into Store.data, which is one of the two copies he is being asked to
          choose between, and its markDirty would schedule a push that is
          certain to conflict again and pop this very dialog a second time. */
+      /* pullInquiries only ever sets Cloud.inquiries — it cannot touch the
+         shop, so it runs even mid-conflict and the Leads screen stays honest.
+         The other two are not reads: pullSignLinks writes approvals and
+         pullInvoiceLinks writes payments, both ending in markDirty. Running
+         either now would edit one of the two copies he is being asked to
+         choose between, and queue a push certain to raise this same question
+         again. They wait until he has answered. */
+      this.pullInquiries();
       if (!this.conflictOpen){
-        this.pullInquiries();
         this.pullSignLinks();
         this.pullInvoiceLinks();
       }
