@@ -237,6 +237,30 @@ A browser can't attach a file to your mail app, so if you want the formatted
 estimate to go with it, save the PDF first and attach it. The note alone is
 often enough when they just want the number.
 
+**Sending the invoice** — **✉ Send it to them** publishes the invoice under a
+token and writes the text or email. One tap. They open it on their phone and
+see the whole thing — letterhead, the work, before and after, what they
+signed, the total — and **pay from the same page**.
+
+A browser cannot attach a file to a text or an email, so the PDF route was
+always save, find, attach. This is one tap, and it puts the pay button on the
+page they're already reading. **Save as PDF is still there** for the customer
+who wants a file for their bookkeeper.
+
+**How they can pay** is set under Data & Setup: a card link (Stripe), an
+Interac e-Transfer address, and cash. Anything left blank isn't offered. A job
+with its own payment link uses that one instead of the default.
+
+Setup is [supabase-invoice-links.sql](supabase-invoice-links.sql), and the page
+is [invoice.html](invoice.html) — standalone, hosted beside the signing page.
+Photos live in a private bucket the customer can't reach, so the app mints a
+signed link for each one at the moment it sends, lasting as long as the invoice
+link does. Nothing in the bucket becomes public. Links expire in 90 days, and
+the app can tell you when they opened it.
+
+**Stripe still doesn't tell the app when they pay.** You tap **Money
+received**, same as before.
+
 **The invoice document** — your own, not a retyped copy of one. The **Invoice** button on a
 job opens a preview of exactly what the customer will see: letterhead and logo,
 who it's billed to, what was wrong, line items, labour, subtotal, GST, total
