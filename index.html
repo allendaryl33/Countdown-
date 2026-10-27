@@ -163,6 +163,14 @@ nav button .count.alert{background:var(--amber);color:#fff}
 .stop.lead-card{border-left-color:var(--purple)}
 .stop.lead-done{border-left-color:var(--green);opacity:.72}
 .lead-body{padding:0 14px 10px}
+.lead-shots{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 10px}
+.lead-shots .ls{
+  width:84px;height:84px;border-radius:8px;border:1px solid var(--line);
+  background:var(--sunk,#f3f6f9) center/cover no-repeat;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;color:var(--muted-2);font-size:18px;
+}
+.lead-shots .ls.on{cursor:zoom-in;border-color:#c6d2de}
+.lead-shots .ls.bad{color:var(--red)}
 .lead-said{
   margin:0 0 9px;padding:10px 12px;background:var(--sunk,#f3f6f9);border-radius:8px;
   font-size:14px;line-height:1.5;white-space:pre-wrap;
@@ -1189,6 +1197,10 @@ function readInquiry(r){
     timing:  pick("timing", "availability", "when", "preferred_time", "best_time"),
     address: pick("address", "service_address", "street", "location"),
     source:  pick("source") || "website",
+    photos:  (Array.isArray(r.photos) ? r.photos
+             : Array.isArray(r.images) ? r.images : [])
+             .map(x => typeof x === "string" ? x : (x && (x.path || x.key || x.name)))
+             .filter(Boolean),
     at:      pick("created_at", "inserted_at", "created", "submitted_at", "timestamp"),
     raw: r
   };
@@ -1510,6 +1522,20 @@ const Cloud = {
     await this.ensureToken();
     const r = await this.call(
       `/storage/v1/object/sign/${this.PHOTO_BUCKET}/${path}`,
+      { method:"POST", body:{ expiresIn: seconds || 600 } });
+    const signed = r && (r.signedURL || r.signedUrl);
+    if (!signed) throw new Error("no signed url returned");
+    return this.base() + "/storage/v1" + (signed.startsWith("/") ? signed : "/" + signed);
+  },
+
+  /* A photo somebody attached to the website form. Different bucket from the
+     job photos: that one only he can write to, this one the public can post
+     into and nobody but him can read. */
+  INQUIRY_BUCKET: "inquiry-photos",
+  async signInquiryPhoto(path, seconds){
+    await this.ensureToken();
+    const r = await this.call(
+      `/storage/v1/object/sign/${this.INQUIRY_BUCKET}/${String(path).replace(/^\/+/, "")}`,
       { method:"POST", body:{ expiresIn: seconds || 600 } });
     const signed = r && (r.signedURL || r.signedUrl);
     if (!signed) throw new Error("no signed url returned");
@@ -1848,6 +1874,7 @@ const Store = {
     // Added with invoicing. GST only ever applies when a number is on file.
     if (this.data.settings.gstRate == null) this.data.settings.gstRate = 5;
     if (this.data.settings.invoiceTerms == null) this.data.settings.invoiceTerms = 15;
+    if (this.data.settings.signBase == null) this.data.settings.signBase = "";
     if (this.data.settings.invoiceNote == null)
       this.data.settings.invoiceNote = "Thanks very much for the work.";
     this.data.counterInv = this.data.counterInv || 1000;
@@ -2611,7 +2638,9 @@ const Store = {
       techId: null, status: "new", completedAt: null,
       laborHours: 0, laborRate: this.data.settings.laborRate,
       parts: [], payment: blankPayment(), timeEntries: [],
-      log: [{ ts: Date.now(), text: `From a ${lead.source} inquiry` }]
+      fromLead: lead.id,
+      log: [{ ts: Date.now(), text: `From a ${lead.source} inquiry`
+              + (lead.photos.length ? ` · ${lead.photos.length} photo${lead.photos.length===1?"":"s"} they sent` : "") }]
     };
     this.data.jobs.push(j);
     this.leadDone(lead.id, "job", j.id);
@@ -2627,8 +2656,9 @@ const Store = {
       type: this.leadJobType(lead), status: "draft",
       description: this.leadStory(lead),
       validDays: 30, createdAt: Date.now(), sentAt: null, decidedAt: null, jobId: null,
-      items: [], materials: [],
-      log: [{ ts: Date.now(), text: `From a ${lead.source} inquiry` }]
+      items: [], materials: [], fromLead: lead.id,
+      log: [{ ts: Date.now(), text: `From a ${lead.source} inquiry`
+              + (lead.photos.length ? ` · ${lead.photos.length} photo${lead.photos.length===1?"":"s"} they sent` : "") }]
     };
     this.data.estimates.push(e);
     this.leadDone(lead.id, "estimate", e.id);
@@ -3411,6 +3441,7 @@ function render(){
     }
   }
   if (App.view === "schedule" && !App.search.trim()) wireBoard();
+  if (App.view === "leads" && !App.search.trim()) fillLeadShots();
 }
 
 Cloud.onChange(renderSync);
@@ -4561,6 +4592,9 @@ function viewLeads(){
         </div>
       </div>
       <div class="lead-body">
+        ${l.photos.length ? `<div class="lead-shots" data-lead-shots="${esc(l.id)}">
+          ${l.photos.map((_, i) => `<div class="ls" data-i="${i}"></div>`).join("")}
+        </div>` : ""}
         ${l.what ? `<p class="lead-said">${esc(l.what)}</p>` : ""}
         ${row("Phone", l.phone ? fmtPhone(l.phone) : "")}
         ${row("Email", l.email)}
@@ -5176,7 +5210,13 @@ function viewData(){
             <div class="field"><label>Payment due in (days)</label>
               <input class="input" id="set-terms" type="number" min="0" step="1"
                      value="${esc(d.settings.invoiceTerms)}"></div>
-            <div class="field"><label>Note on invoices</label>
+            <div class="field"><label>Signing page address</label>
+            <input class="input" id="set-signbase" value="${esc(d.settings.signBase || "")}"
+                   placeholder="https://poseidonplumbing.ca/sign">
+            <div class="hint">Where the page customers sign on is hosted. Leave blank and
+              links point at wherever this app is served from. Put your own domain here once
+              it's hosted there, so customers don't see someone else's address.</div></div>
+          <div class="field"><label>Note on invoices</label>
               <input class="input" id="set-invnote" value="${esc(d.settings.invoiceNote)}"
                      placeholder="Thanks very much for the work."></div>
           </div>
@@ -5403,6 +5443,7 @@ function openModal(html, opts){
   document.body.style.overflow = "hidden";
   // a record can open with photo cells in it; the pictures arrive after
   if (typeof fillPhotos === "function") fillPhotos(root);
+  if (typeof fillLeadShots === "function") fillLeadShots();
 }
 function closeModal(){
   $("#modal-root").innerHTML = "";
@@ -5528,6 +5569,16 @@ function openJob(id){
           })() : ""}
         </tbody>
       </table>
+
+      ${(() => {
+        const lead = j.fromLead ? Store.leads().find(l => l.id === j.fromLead) : null;
+        if (!lead || !lead.photos.length) return "";
+        return `<div class="section-title" style="margin-top:22px">What they sent in
+          <span class="t-sub" style="text-transform:none;letter-spacing:0">— from their inquiry</span></div>
+          <div class="lead-shots" data-lead-shots="${esc(lead.id)}">
+            ${lead.photos.map((_, i) => `<div class="ls" data-i="${i}"></div>`).join("")}
+          </div>`;
+      })()}
 
       <div class="section-title" style="margin-top:22px">Photos</div>
       ${photosPanel("job", j)}
@@ -7657,12 +7708,60 @@ function estimateDocHtml(e){
   </div>`;
 }
 
+/* Thumbnails arrive after the view is drawn: each one is a separate signed
+   URL and the list should not wait on the network to appear. Same approach as
+   the job photos. */
+function fillLeadShots(){
+  $$("[data-lead-shots]").forEach(async box => {
+    const lead = Store.leads().find(l => l.id === box.dataset.leadShots);
+    if (!lead) return;
+    lead.photos.forEach(async (path, i) => {
+      const cell = box.querySelector(`.ls[data-i="${i}"]`);
+      if (!cell || cell.dataset.done) return;
+      cell.dataset.done = "1";
+      try {
+        const url = await Cloud.signInquiryPhoto(path);
+        cell.style.backgroundImage = `url("${url}")`;
+        cell.classList.add("on");
+        cell.setAttribute("role", "button");
+        cell.setAttribute("aria-label", "View photo " + (i + 1));
+        cell.addEventListener("click", () => openInquiryPhoto(path, lead));
+      } catch(e){ cell.classList.add("bad"); cell.textContent = "✕"; }
+    });
+  });
+}
+
+async function openInquiryPhoto(path, lead){
+  openModal(`<div class="modal-head"><div><div class="t-sub">${esc(lead.name)}</div>
+      <h2>What they sent</h2></div><div class="spacer"></div>
+      <button class="x" data-close>&times;</button></div>
+    <div class="modal-body" style="background:#111;text-align:center;padding:0">
+      <div class="t-sub" style="padding:30px;color:#999">Loading…</div></div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Close</button></div>`, { wide:true, noFocus:true });
+  try {
+    const url = await Cloud.signInquiryPhoto(path, 900);
+    const body = $("#modal-root .modal-body");
+    if (body) body.innerHTML = `<img src="${esc(url)}" alt="Photo from ${esc(lead.name)}"
+      style="max-width:100%;max-height:72vh;display:block;margin:0 auto">`;
+  } catch(err){
+    const body = $("#modal-root .modal-body");
+    if (body) body.innerHTML = `<div class="t-sub" style="padding:30px;color:#999">
+      Couldn't load it${err.offline ? " — no connection" : ""}.</div>`;
+  }
+}
+
 /* The signing link, for the ones he can't stand in the room for.
    Everything the page needs rides in the hash — the part after the # that
    browsers never send to a server — so the key stays out of access logs on
    the way, and out of this repo. */
 function signLinkUrl(token){
-  const base = location.origin + location.pathname.replace(/[^/]*$/, "") + "sign.html";
+  // Default is whatever address the app itself is served from. Once the
+  // signing page is hosted on his own domain, that goes in Data & Setup and
+  // customers stop seeing a github.io address on his paperwork.
+  const custom = String((Store.data.settings || {}).signBase || "").trim();
+  const base = custom ? custom.replace(/\/+$/, "")
+    : location.origin + location.pathname.replace(/[^/]*$/, "") + "sign.html";
   return `${base}#t=${encodeURIComponent(token)}` +
          `&u=${encodeURIComponent(Cloud.base())}&k=${encodeURIComponent(Cloud.cfg.key)}`;
 }
@@ -8785,6 +8884,8 @@ document.addEventListener("click", e => {
       s.gstRate = Number($("#set-gstrate").value) || 0;
       s.invoiceTerms = Math.max(0, Number($("#set-terms").value) || 0);
       s.invoiceNote  = $("#set-invnote").value.trim();
+      // Trailing slash or not, it's the same address; store it one way.
+      s.signBase     = $("#set-signbase").value.trim().replace(/\/+$/, "");
       s.laborRate = Number($("#set-rate").value) || 0;
       Store.save(); render(); toast("Settings saved", "ok");
       break;
