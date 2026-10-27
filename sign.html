@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Approve your estimate</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+/* Standalone on purpose. This page is opened by a customer on a phone, once,
+   and must not depend on anything that could be slow, blocked or missing. No
+   fonts, no scripts, no analytics — nothing leaves this page but the two
+   calls it has to make. */
+:root{
+  --navy:#0a2a42; --blue:#1668ab; --gold:#e8b931;
+  --bg:#f3f6f9; --card:#fff; --line:#e1e7ed;
+  --text:#16222e; --muted:#6b7c8c; --green:#1f8a4c; --red:#c0392b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:var(--bg);color:var(--text);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding:0 0 calc(24px + env(safe-area-inset-bottom,0px));
+}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 1px 2px rgba(16,36,56,.06),0 2px 8px rgba(16,36,56,.05);
+  padding:20px;margin-bottom:14px}
+.head{display:flex;gap:12px;align-items:flex-start;border-bottom:2px solid var(--navy);
+  padding-bottom:12px;margin-bottom:14px}
+.head h1{font-size:18px;margin:0 0 2px;line-height:1.25}
+.head .meta{font-size:12.5px;color:var(--muted)}
+.head .right{margin-left:auto;text-align:right;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.head .right b{display:block;font-size:16px;color:var(--text)}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+  font-weight:650;margin:0 0 8px}
+table{width:100%;border-collapse:collapse}
+td{padding:9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+tr.total td{border-bottom:0;border-top:2px solid var(--navy);font-weight:700;font-size:18px;padding-top:12px}
+.desc{white-space:pre-wrap;margin:0 0 14px}
+label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:0 0 5px}
+input,select{
+  width:100%;padding:12px 13px;border:1px solid #d5dde5;border-radius:9px;
+  font:16px/1.4 inherit;background:#fff;color:var(--text);
+}
+input:focus,select:focus{border-color:var(--blue);outline:none;box-shadow:0 0 0 3px rgba(22,104,171,.12)}
+input.bad{border-color:var(--red)}
+.field{margin-bottom:14px}
+.padwrap{position:relative;border:1px solid #d5dde5;border-radius:9px;background:#fff;
+  height:190px;touch-action:none;overflow:hidden}
+.padwrap.filled{border-color:var(--blue)}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+.padline{position:absolute;left:18px;right:18px;bottom:46px;border-bottom:1px solid #c8d2dc;pointer-events:none}
+.padhint{position:absolute;left:0;right:0;bottom:16px;text-align:center;font-size:12.5px;
+  color:var(--muted);pointer-events:none}
+.btn{
+  display:inline-block;border:1px solid var(--line);background:#fff;color:var(--text);
+  padding:13px 18px;border-radius:9px;font:600 15px/1 inherit;cursor:pointer;text-align:center;
+}
+.btn.primary{background:var(--navy);border-color:var(--navy);color:#fff;width:100%;padding:16px;font-size:16px}
+.btn.primary:disabled{opacity:.55}
+.err{color:var(--red);font-size:13px;margin:6px 0 0;display:none}
+.err.on{display:block}
+.note{font-size:13px;color:var(--muted);margin:14px 0 0}
+.state{text-align:center;padding:40px 20px}
+.state .big{font-size:40px;margin-bottom:10px}
+.state h2{font-size:17px;text-transform:none;letter-spacing:0;color:var(--text);margin-bottom:6px}
+.ok{color:var(--green)}
+.sigshot{max-height:70px;margin:10px 0 0}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1620;--card:#152233;--line:#25384f;--text:#e8eef5;--muted:#9db0c4;
+  }
+  :root:not([data-theme="light"]) input,
+  :root:not([data-theme="light"]) select{background:#0e1620;color:#e8eef5;border-color:#2c4056}
+  :root:not([data-theme="light"]) .padwrap{background:#fff}
+}
+</style>
+</head>
+<body>
+<div class="wrap" id="root">
+  <div class="state"><div class="big">⏳</div><h2>Loading your estimate…</h2></div>
+</div>
+
+<script>
+/* Everything this page needs arrives in the link's hash — the part after the
+   #, which browsers never send to a server and which therefore stays out of
+   access logs and referrer headers on the way. */
+const P = new URLSearchParams(location.hash.slice(1));
+const TOKEN = P.get("t") || "", BASE = (P.get("u") || "").replace(/\/+$/, ""), KEY = P.get("k") || "";
+
+const $ = s => document.querySelector(s);
+const esc = v => String(v == null ? "" : v).replace(/[&<>"']/g,
+  c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const money = n => "$" + (Number(n)||0).toLocaleString(undefined,
+  { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+function rpc(fn, body){
+  return fetch(BASE + "/rest/v1/rpc/" + fn, {
+    method:"POST",
+    headers:{ "apikey":KEY, "Content-Type":"application/json" },
+    body: JSON.stringify(body)
+  }).then(async r => {
+    const txt = await r.text();
+    let j = null; try { j = txt ? JSON.parse(txt) : null; } catch(e){}
+    if (!r.ok) throw new Error((j && (j.message || j.error)) || ("HTTP " + r.status));
+    return j;
+  });
+}
+
+function state(icon, title, body, cls){
+  $("#root").innerHTML = `<div class="state">
+    <div class="big">${icon}</div>
+    <h2 class="${cls||""}">${esc(title)}</h2>
+    <div style="color:var(--muted)">${body||""}</div>
+  </div>`;
+}
+
+function letterhead(c){
+  return [c.phone, c.email, c.website, c.address].filter(Boolean)
+    .map(x => `<div>${esc(x)}</div>`).join("");
+}
+
+function render(d){
+  const p = d.payload || {};
+  const items = p.items || [];
+  const co = p.company || {};
+
+  if (d.signed){
+    state("✓", "Already approved",
+      `Signed by ${esc(d.signer_name || "someone")}. Nothing more to do — ` +
+      `${esc(co.name || "we")} will be in touch.`, "ok");
+    return;
+  }
+
+  $("#root").innerHTML = `
+    <div class="card">
+      <div class="head">
+        <div>
+          <h1>${esc(co.name || "Estimate")}</h1>
+          <div class="meta">${letterhead(co)}</div>
+        </div>
+        <div class="right"><b>Estimate</b>EST-${esc(p.no)}<br>${esc(p.created || "")}</div>
+      </div>
+
+      <h2>Prepared for</h2>
+      <div style="margin-bottom:14px">${esc(p.customer || "")}${p.address ? `<div class="meta">${esc(p.address)}</div>` : ""}</div>
+
+      ${p.description ? `<h2>The work</h2><p class="desc">${esc(p.description)}</p>` : ""}
+
+      <table>
+        ${items.map(i => `<tr>
+          <td>${i.qty > 1 ? esc(i.qty) + " &times; " : ""}${esc(i.desc)}</td>
+          <td class="n">${esc(money(i.qty * i.price))}</td></tr>`).join("")}
+        ${p.taxLabel ? `<tr><td>${esc(p.taxLabel)}</td><td class="n">${esc(money(p.tax))}</td></tr>` : ""}
+        <tr class="total"><td>Total</td><td class="n">${esc(money(p.total))}</td></tr>
+      </table>
+
+      <p class="note">Good for ${esc(p.validDays || 30)} days from the date above.
+      Approving books the work at this price. Anything found once the wall is open
+      is quoted separately before it's done.</p>
+    </div>
+
+    <div class="card">
+      <h2>Approve it</h2>
+      <div class="field">
+        <label for="nm">Your name</label>
+        <input id="nm" autocomplete="name" value="${esc(p.customer || "")}" placeholder="Full name">
+        <div class="err" id="nm-err">Please put your name in.</div>
+      </div>
+      <div class="field">
+        <label for="role">You are the</label>
+        <select id="role">
+          <option>Homeowner</option><option>Tenant</option>
+          <option>Property manager</option><option>Business owner</option>
+          <option>Authorised on their behalf</option>
+        </select>
+      </div>
+      <label>Sign below</label>
+      <div class="padwrap" id="padwrap">
+        <canvas id="pad"></canvas>
+        <div class="padline"></div>
+        <div class="padhint" id="hint">Draw your signature with a finger</div>
+      </div>
+      <div class="err" id="sig-err">Please sign before approving.</div>
+      <div style="margin:10px 0 16px"><button class="btn" id="clear" type="button">Clear</button></div>
+
+      <button class="btn primary" id="go" type="button">Approve this estimate</button>
+      <div class="err" id="go-err"></div>
+      <p class="note">Your name, your signature and the time are recorded with the
+      figures above, exactly as shown.</p>
+    </div>`;
+
+  initPad();
+  $("#clear").addEventListener("click", clearPad);
+  $("#go").addEventListener("click", submit);
+}
+
+/* ---- signature pad ---- */
+let Pad = null;
+function initPad(){
+  const cv = $("#pad");
+  const dpr = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  cv.width = Math.max(1, Math.round(r.width * dpr));
+  cv.height = Math.max(1, Math.round(r.height * dpr));
+  const ctx = cv.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = "#16222e";
+  Pad = { cv, ctx, dpr, drawing:false, dirty:false, cssW:r.width, cssH:r.height,
+          b:{ minX:Infinity, minY:Infinity, maxX:-Infinity, maxY:-Infinity } };
+
+  const at = ev => { const q = cv.getBoundingClientRect();
+                     return { x: ev.clientX - q.left, y: ev.clientY - q.top }; };
+  const mark = p => { const b = Pad.b;
+    if (p.x < b.minX) b.minX = p.x; if (p.y < b.minY) b.minY = p.y;
+    if (p.x > b.maxX) b.maxX = p.x; if (p.y > b.maxY) b.maxY = p.y; };
+
+  cv.addEventListener("pointerdown", ev => {
+    ev.preventDefault(); Pad.drawing = true;
+    const p = at(ev); mark(p); ctx.beginPath(); ctx.moveTo(p.x, p.y);
+    try { cv.setPointerCapture(ev.pointerId); } catch(_){}
+  });
+  cv.addEventListener("pointermove", ev => {
+    if (!Pad.drawing) return;
+    ev.preventDefault();
+    const p = at(ev); mark(p); ctx.lineTo(p.x, p.y); ctx.stroke();
+    if (!Pad.dirty){
+      Pad.dirty = true;
+      $("#padwrap").classList.add("filled");
+      $("#hint").style.display = "none";
+      $("#sig-err").classList.remove("on");
+    }
+  });
+  ["pointerup","pointercancel","pointerleave"].forEach(n =>
+    cv.addEventListener(n, () => { Pad.drawing = false; }));
+}
+function clearPad(){
+  if (!Pad) return;
+  Pad.ctx.clearRect(0, 0, Pad.cv.width, Pad.cv.height);
+  Pad.dirty = false;
+  Pad.b = { minX:Infinity, minY:Infinity, maxX:-Infinity, maxY:-Infinity };
+  $("#padwrap").classList.remove("filled");
+  $("#hint").style.display = "";
+}
+/* Crop to the ink, same as the app does — a whole blank canvas is ~50KB of
+   nothing, and this has to travel over somebody's phone signal. */
+function exportSig(){
+  if (!Pad || !Pad.dirty) return null;
+  const { cv, dpr, b, cssW, cssH } = Pad, pad = 8;
+  const x = Math.max(0, b.minX - pad), y = Math.max(0, b.minY - pad);
+  const w = Math.min(cssW - x, (b.maxX - b.minX) + pad*2);
+  const h = Math.min(cssH - y, (b.maxY - b.minY) + pad*2);
+  if (!(w > 0 && h > 0)) return cv.toDataURL("image/png");
+  const scale = Math.min(dpr, 2, 900 / w);
+  const out = document.createElement("canvas");
+  out.width = Math.max(1, Math.round(w * scale));
+  out.height = Math.max(1, Math.round(h * scale));
+  out.getContext("2d").drawImage(cv, x*dpr, y*dpr, w*dpr, h*dpr, 0, 0, out.width, out.height);
+  return out.toDataURL("image/png");
+}
+
+async function submit(){
+  const name = $("#nm").value.trim();
+  const sig = exportSig();
+  $("#nm-err").classList.toggle("on", !name);
+  $("#nm").classList.toggle("bad", !name);
+  $("#sig-err").classList.toggle("on", !sig);
+  if (!name || !sig) return;
+
+  const go = $("#go");
+  go.disabled = true; go.textContent = "Sending…";
+  $("#go-err").classList.remove("on");
+  try {
+    const r = await rpc("sign_estimate", {
+      p_token: TOKEN, p_name: name, p_role: $("#role").value, p_signature: sig
+    });
+    if (!r || !r.ok) throw new Error((r && r.reason) || "that didn't go through");
+    state("✓", "Approved — thank you",
+      "We've got it. You'll hear from us to get a time booked in.", "ok");
+  } catch(err){
+    go.disabled = false; go.textContent = "Approve this estimate";
+    const e = $("#go-err");
+    e.textContent = /Failed to fetch|NetworkError|Load failed/i.test(err.message || "")
+      ? "No connection. Try again when you've got signal — nothing was lost."
+      : (err.message || "Something went wrong.");
+    e.classList.add("on");
+  }
+}
+
+/* A link that differs only after the # is a same-document navigation, so the
+   page would sit there showing the previous estimate. Someone sent two links
+   and tapping the second does nothing. Start over instead. */
+window.addEventListener("hashchange", () => location.reload());
+
+/* ---- go ---- */
+(async () => {
+  if (!TOKEN || !BASE || !KEY){
+    state("🔗", "That link isn't complete",
+      "Ask whoever sent it to send the whole thing — some apps cut long links short.");
+    return;
+  }
+  try {
+    const d = await rpc("estimate_for_signing", { p_token: TOKEN });
+    if (!d) {
+      state("⌛", "This link has expired",
+        "Or it was already dealt with. Get in touch and we'll send a fresh one.");
+      return;
+    }
+    render(d);
+  } catch(err){
+    state("⚠", "Couldn't load it",
+      /Failed to fetch|NetworkError|Load failed/i.test(err.message || "")
+        ? "Looks like there's no connection. Try again in a moment."
+        : esc(err.message || "Something went wrong."));
+  }
+})();
+</script>
+</body>
+</html>
