@@ -2857,14 +2857,29 @@ const Store = {
   /* An inquiry is from somebody who may already be a customer. Match on the
      digits of the phone — people type their own number three different ways
      and none of them match a string compare. */
+  /* The same number is usually the same person, and matching on it is what
+     stops a regular turning into four customer records. But it is not always
+     the same person: a couple, an office line, a landlord and their tenant
+     all share a number. Two people sharing a line is commoner than one
+     customer changing their name, so a number that matches while the name
+     plainly disagrees is somebody new — not a rename. Filing their job under
+     the other person's name is how work ends up on the wrong customer. */
   customerForLead(lead){
-    const d = String(lead.phone || "").replace(/\D/g, "").slice(-10);
+    const tenDigits = v => String(v || "").replace(/\D/g, "").slice(-10);
+    const norm = v => String(v || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const d = tenDigits(lead.phone), n = norm(lead.name);
+
+    // "Bob" and "Bob Down" are one man; "Bob Down" and "Daryl" are two.
+    const agrees = a => !a || !n || a === n ||
+                        a.startsWith(n + " ") || n.startsWith(a + " ");
+
     if (d.length === 10){
-      const hit = this.data.customers.find(c => String(c.phone || "").replace(/\D/g, "").slice(-10) === d);
-      if (hit) return hit;
+      const sameNumber = this.data.customers.filter(c => tenDigits(c.phone) === d);
+      const both = sameNumber.find(c => agrees(norm(c.name)));
+      if (both) return both;
+      if (sameNumber.length && !n) return sameNumber[0];   // no name to go on
     }
-    const n = String(lead.name || "").trim().toLowerCase();
-    return n ? this.data.customers.find(c => String(c.name || "").trim().toLowerCase() === n) || null : null;
+    return n ? this.data.customers.find(c => norm(c.name) === n) || null : null;
   },
   customerFromLead(lead){
     const found = this.customerForLead(lead);
