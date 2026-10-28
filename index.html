@@ -556,6 +556,34 @@ textarea.input{resize:vertical;min-height:76px}
 .minicard .mc-cust{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .minicard .mc-type{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+.daygrid-wrap{overflow-x:auto;padding-bottom:10px}
+.daygrid{display:grid;gap:1px;background:#dfe6ed;border:1px solid #dfe6ed;border-radius:9px;
+  overflow:hidden;min-width:max-content}
+.dg-corner{background:#f2f6fa}
+.dg-head{background:#f2f6fa;display:flex;align-items:center;gap:7px;padding:9px 10px}
+.dg-head.unassigned{background:var(--amber-soft)}
+.dg-head .nm{font-weight:650;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dg-head .ct{margin-left:auto;font-size:11px;color:var(--muted);font-weight:600;
+  background:#fff;padding:1px 7px;border-radius:10px}
+.dg-time{background:#f2f6fa;font-size:12px;font-weight:650;color:var(--muted);
+  display:flex;align-items:center;justify-content:center;text-align:center;padding:8px 4px;
+  font-variant-numeric:tabular-nums}
+.dg-time.urgent{color:#a4442c}
+.dg-time.loose{color:var(--muted);font-weight:600}
+.dg-cell{background:#fff;min-height:62px;padding:6px}
+.dg-cell.unassigned{background:#fffaf3}
+.dg-cell.urgent{background:#fdf4f1}
+.dg-cell.dragover{outline:2px dashed var(--blue);outline-offset:-3px;background:#e2eef7}
+.dg-cell .minicard{margin-bottom:6px}
+.dg-cell .minicard:last-child{margin-bottom:0}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .daygrid{background:var(--line);border-color:var(--line)}
+  :root:not([data-theme="light"]) .dg-corner,
+  :root:not([data-theme="light"]) .dg-head,
+  :root:not([data-theme="light"]) .dg-time{background:#16222f}
+  :root:not([data-theme="light"]) .dg-cell{background:var(--card)}
+}
+
 .board{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
 .col{
   flex:1 1 238px;min-width:238px;max-width:340px;background:#eaeff4;border-radius:8px;padding:8px;min-height:180px;
@@ -3072,6 +3100,13 @@ const Store = {
     this.save();
   },
 
+  setWindow(job, w){
+    if (!w || job.window === w) return;
+    job.window = w;
+    this.addLog(job, `Arrival window set to ${w}`);
+    this.save();
+  },
+
   setDate(job, dateStr){
     const prev = job.scheduledDate;
     if (prev === dateStr) return;
@@ -4324,7 +4359,7 @@ function scheduleHint(mode){
   const n = (list) => list.length;
   if (mode === "day"){
     const c = n(Store.data.jobs.filter(j => j.scheduledDate === App.date));
-    return `${c} job${c===1?"":"s"} · drag a card onto a technician to assign`;
+    return `${c} job${c===1?"":"s"} · drag a card into a time slot to book it in`;
   }
   if (mode === "week"){
     const days = weekDays(App.date);
@@ -4355,25 +4390,50 @@ function dayBoard(){
     { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
     ...Store.activeTechs().map(t => ({ key:t.id, name:t.name, color:t.color, skill:t.skill }))
   ];
+
+  /* The day reads as a timetable: the hours he works down the side, who is
+     working across the top. Dropping a job into a square sets both the slot
+     and the technician at once, so an empty square is an hour he can sell
+     rather than something to work out from a stack of cards. */
+  const SLOTS = WINDOWS.filter(w => /^\d/.test(w));          // the five two-hour slots
+  const rows = [
+    { w:"ASAP / Emergency", label:"ASAP",  urgent:true },
+    ...SLOTS.map(w => ({ w, label: slotLabel(w) })),
+    { w:"Anytime",          label:"Any time", loose:true }
+  ];
+  const known = rows.map(r => r.w);
+  const bucket = j => known.includes(j.window) ? j.window : "Anytime";
+
   return `
-  <div class="board">
-    ${cols.map(c => {
-      const list = sortForBoard(dayJobs.filter(j => (j.techId||"") === c.key));
-      return `
-      <div class="col ${c.unassigned?'unassigned':''}" data-drop data-drop-tech="${esc(c.key)}" data-drop-date="${esc(d)}">
-        <div class="col-head">
+  <div class="daygrid-wrap">
+    <div class="daygrid" style="grid-template-columns:72px repeat(${cols.length},minmax(168px,1fr))">
+      <div class="dg-corner"></div>
+      ${cols.map(c => `
+        <div class="dg-head${c.unassigned?" unassigned":""}">
           <span class="avatar" style="background:${esc(c.color)}">${c.unassigned?"?":esc(initials(c.name))}</span>
-          <div>
-            <div class="nm">${esc(c.name)}</div>
-            ${c.skill?`<div class="t-sub" style="font-size:11px">${esc(c.skill)}</div>`:""}
-          </div>
-          <span class="ct">${list.length}</span>
-        </div>
-        ${list.length ? list.map(j => jobCardHtml(j)).join("")
-          : `<div class="col-empty">${c.unassigned?"Nothing waiting":"Open day"}</div>`}
-      </div>`;
-    }).join("")}
+          <div class="nm">${esc(c.name)}</div>
+          <span class="ct">${dayJobs.filter(j => (j.techId||"") === c.key).length}</span>
+        </div>`).join("")}
+
+      ${rows.map(r => `
+        <div class="dg-time${r.urgent?" urgent":""}${r.loose?" loose":""}">${esc(r.label)}</div>
+        ${cols.map(c => {
+          const list = sortForBoard(dayJobs.filter(j =>
+            (j.techId||"") === c.key && bucket(j) === r.w));
+          return `<div class="dg-cell${c.unassigned?" unassigned":""}${r.urgent?" urgent":""}"
+                       data-drop data-drop-tech="${esc(c.key)}"
+                       data-drop-date="${esc(d)}" data-drop-window="${esc(r.w)}">
+            ${list.map(j => miniCard(j, { showDate:false, showTech:false, showWindow:false })).join("")}
+          </div>`;
+        }).join("")}`).join("")}
+    </div>
   </div>`;
+}
+
+/* "8:00–10:00" is three times longer than the column needs. */
+function slotLabel(w){
+  const m = /^(\d+):\d+.(\d+):/.exec(w);
+  return m ? m[1] + "–" + m[2] : w;
 }
 
 /* ---------- Week: technicians down, days across ---------- */
@@ -4451,7 +4511,8 @@ function miniCard(j, opts){
   return `
   <div class="minicard pri-${esc(j.priority)} st-${esc(j.status)}" draggable="true" data-job="${j.id}">
     <div class="mc-top">
-      <span class="mc-win">${esc(opts.compact ? shortWindow(j.window) : j.window)}</span>
+      ${opts.showWindow === false ? `<span class="mc-win">#${j.no}</span>`
+        : `<span class="mc-win">${esc(opts.compact ? shortWindow(j.window) : j.window)}</span>`}
       ${opts.showTech === false ? "" :
         (tech ? `<span class="mc-dot" style="background:${esc(tech.color)}" title="${esc(tech.name)}"></span>`
               : `<span class="mc-dot" style="background:#c3ccd6" title="Unassigned"></span>`)}
@@ -4532,17 +4593,21 @@ function wireBoard(){
       const newDate = cell.dataset.dropDate;
       const hasTech = Object.prototype.hasOwnProperty.call(cell.dataset, "dropTech");
       const newTech = hasTech ? (cell.dataset.dropTech || null) : job.techId;
+      const newWin  = cell.dataset.dropWindow;
 
       const dateChanged = newDate != null && newDate !== job.scheduledDate;
       const techChanged = hasTech && (newTech || "") !== (job.techId || "");
-      if (!dateChanged && !techChanged) return;
+      const winChanged  = newWin != null && newWin !== job.window;
+      if (!dateChanged && !techChanged && !winChanged) return;
 
       if (dateChanged) Store.setDate(job, newDate);
       if (techChanged) Store.assign(job, newTech);
+      if (winChanged)  Store.setWindow(job, newWin);
       render();
 
       const bits = [];
       if (techChanged) bits.push(newTech ? Store.tech(newTech).name : "Unassigned");
+      if (winChanged)  bits.push(newWin);
       if (dateChanged) bits.push(fmtDate(newDate));
       toast(`#${job.no} → ${bits.join(" · ")}`, "ok");
     });
