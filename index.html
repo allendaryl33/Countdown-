@@ -8321,10 +8321,15 @@ async function sendInvoiceLink(id){
   const url = invoiceLinkUrl(token);
   const first = String(c.name).trim().split(/\s+/)[0] || "there";
   const owed = Store.balance(j);
-  const note = `Hi ${first} — invoice for the ${String(j.type).toLowerCase()}, ` +
-    `${money(owed)}. Everything's on here including the photos, and you can pay from ` +
-    `the same page. Need a copy for your records? There's a Save a copy button at ` +
-    `the bottom.\n\n${url}`;
+  const work = String(j.type).toLowerCase();
+  const settled = Store.payState(j) === "paid" || owed <= 0.005;
+  const note = settled
+    ? `Hi ${first} — receipt for the ${work}, ${money(Store.invoiceTotal(j))}, paid in ` +
+      `full. Everything's on here including the photos. Need a copy for your records? ` +
+      `There's a Save a copy button at the bottom.\n\n${url}`
+    : `Hi ${first} — invoice for the ${work}, ${money(owed)}. Everything's on here ` +
+      `including the photos, and you can pay from the same page. Need a copy for your ` +
+      `records? There's a Save a copy button at the bottom.\n\n${url}`;
 
   const fresh = !j.payment || j.payment.status === "unbilled";
   Store.markInvoiced(j);
@@ -8335,13 +8340,15 @@ async function sendInvoiceLink(id){
   openModal(`
     <div class="modal-head">
       <div><div class="t-sub">INV-${esc(j.invoiceNo)} · ${esc(c.name)}</div>
-        <h2>Send the invoice</h2></div>
+        <h2>${settled ? "Send the receipt" : "Send the invoice"}</h2></div>
       <div class="spacer"></div><button class="x" data-close>&times;</button>
     </div>
     <div class="modal-body">
       <p class="t-sub" style="margin:0 0 12px">
         They open it on their phone and see the lot &mdash; letterhead, the work,
-        before and after, what they signed, the total &mdash; and pay from the same page.
+        before and after, what they signed, the total${settled
+          ? ". It already says paid in full."
+          : " &mdash; and pay from the same page."}
       </p>
       <div class="field"><label>The message</label>
         <textarea class="msg-prev" id="iv-note" style="min-height:130px">${esc(note)}</textarea></div>
@@ -8351,6 +8358,7 @@ async function sendInvoiceLink(id){
         <button class="btn" data-copy-invoice="${esc(token)}">📋 Copy the link</button>
       </div>
       ${(() => {
+        if (settled) return "";
         const st = Store.data.settings;
         const ways = [];
         if ((j.payment && j.payment.url) || st.payStripeUrl) ways.push("card");
