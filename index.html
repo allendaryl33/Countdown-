@@ -8322,9 +8322,9 @@ async function sendInvoiceLink(id){
   const first = String(c.name).trim().split(/\s+/)[0] || "there";
   const owed = Store.balance(j);
   const note = `Hi ${first} — invoice for the ${String(j.type).toLowerCase()}, ` +
-    `${money(owed)}. Everything's on here including the photos, and you can pay from the ` +
-    `same page: ${url}\n\n(Need a copy for your records? There's a Save a copy button ` +
-    `at the bottom of that page.)`;
+    `${money(owed)}. Everything's on here including the photos, and you can pay from ` +
+    `the same page. Need a copy for your records? There's a Save a copy button at ` +
+    `the bottom.\n\n${url}`;
 
   const fresh = !j.payment || j.payment.status === "unbilled";
   Store.markInvoiced(j);
