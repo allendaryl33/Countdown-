@@ -574,6 +574,39 @@ textarea.input{resize:vertical;min-height:76px}
 .dg-cell.unassigned{background:#fffaf3}
 .dg-cell.urgent{background:#fdf4f1}
 .dg-cell.dragover{outline:2px dashed var(--blue);outline-offset:-3px;background:#e2eef7}
+/* Anytime is a parking bay, not a thin strip — work with no fixed hour
+   needs somewhere it can pile up and still be read. */
+.dg-cell.loose{min-height:128px;background:#fcfdfe}
+.dg-cell.loose.unassigned{background:#fffaf3}
+.dg-time.loose{align-items:flex-start;padding-top:12px}
+
+.weekhours .wt-corner{background:#f2f6fa}
+.weekhours .wt-day{background:#f2f6fa;display:flex;align-items:center;justify-content:center;
+  gap:6px;padding:8px 6px;cursor:pointer;font-weight:650;font-size:12px}
+.weekhours .wt-day:hover{background:#e8eff6}
+.weekhours .wt-day.today{background:var(--blue);color:#fff}
+.weekhours .wt-day .dn{text-transform:uppercase;letter-spacing:.4px;opacity:.75}
+.weekhours .wt-day .dd{font-size:14px;font-variant-numeric:tabular-nums}
+.weekhours .wt-tech{background:#f7fafc;display:flex;align-items:center;justify-content:center;padding:5px}
+.weekhours .wt-tech.unassigned{background:var(--amber-soft)}
+.weekhours .avatar.sm{width:19px;height:19px;font-size:9px}
+.weekhours .dg-cell{min-height:50px;padding:4px}
+.weekhours .dg-cell.loose{min-height:104px}
+.weekhours .dg-cell.today{box-shadow:inset 0 0 0 1px #d6e4f2}
+.weekhours .minicard{font-size:11px;padding:5px 6px;min-width:0;overflow:hidden}
+.weekhours .minicard .mc-cust,
+.weekhours .minicard .mc-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.weekhours .minicard .mc-win{font-size:10px}
+@media (max-width:560px){
+  .weekhours .minicard{font-size:10px;padding:4px 5px}
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .dg-cell.loose{background:#131f2c}
+  :root:not([data-theme="light"]) .weekhours .wt-corner,
+  :root:not([data-theme="light"]) .weekhours .wt-day{background:#16222f}
+  :root:not([data-theme="light"]) .weekhours .wt-tech{background:#132030}
+}
+
 .dg-cell .minicard{margin-bottom:6px}
 .dg-cell .minicard:last-child{margin-bottom:0}
 @media (prefers-color-scheme:dark){
@@ -4395,12 +4428,7 @@ function dayBoard(){
      working across the top. Dropping a job into a square sets both the slot
      and the technician at once, so an empty square is an hour he can sell
      rather than something to work out from a stack of cards. */
-  const SLOTS = WINDOWS.filter(w => /^\d/.test(w));          // the five two-hour slots
-  const rows = [
-    { w:"ASAP / Emergency", label:"ASAP",  urgent:true },
-    ...SLOTS.map(w => ({ w, label: slotLabel(w) })),
-    { w:"Anytime",          label:"Any time", loose:true }
-  ];
+  const rows = boardRows();
   const known = rows.map(r => r.w);
   const bucket = j => known.includes(j.window) ? j.window : "Anytime";
 
@@ -4430,6 +4458,18 @@ function dayBoard(){
   </div>`;
 }
 
+/* The hours of a working day, in the order they happen. ASAP rides at the
+   top because an emergency is not a 2pm problem; Anytime sits at the bottom
+   as the parking bay for work with no fixed hour. */
+function boardRows(){
+  const SLOTS = WINDOWS.filter(w => /^\d/.test(w));          // the five two-hour slots
+  return [
+    { w:"ASAP / Emergency", label:"ASAP",     urgent:true },
+    ...SLOTS.map(w => ({ w, label: slotLabel(w) })),
+    { w:"Anytime",          label:"Any time", loose:true }
+  ];
+}
+
 /* "8:00–10:00" is three times longer than the column needs. */
 function slotLabel(w){
   const m = /^(\d+):\d+.(\d+):/.exec(w);
@@ -4446,31 +4486,44 @@ function weekGrid(){
     ...Store.activeTechs().map(t => ({ key:t.id, name:t.name, color:t.color, skill:t.skill }))
   ];
 
-  const head = `<div class="wk-corner"></div>` + days.map(d => {
+  /* A week he can actually sell into: the same hours as the day board, run
+     across every day at once, so a free Tuesday afternoon is visible without
+     opening Tuesday. Each date spans its own technician columns. */
+  const slots = boardRows();
+  const known = slots.map(r => r.w);
+  const bucket = j => known.includes(j.window) ? j.window : "Anytime";
+  const sub = rows.length;
+
+  const dateHead = `<div class="wt-corner"></div>` + days.map(d => {
     const dt = parseYmd(d);
-    return `<div class="wk-day ${d===today?"today":""}">
-      <div class="dn">${esc(dt.toLocaleDateString(undefined,{weekday:"short"}))}</div>
-      <div class="dd">${dt.getDate()}</div>
+    return `<div class="wt-day${d===today?" today":""}" style="grid-column:span ${sub}"
+                 data-goday="${esc(d)}" title="Open ${esc(fmtDate(d))}">
+      <span class="dn">${esc(dt.toLocaleDateString(undefined,{weekday:"short"}))}</span>
+      <span class="dd">${dt.getDate()}</span>
     </div>`;
   }).join("");
 
-  const body = rows.map(r => {
-    const mine = inWeek.filter(j => (j.techId||"") === r.key);
-    return `<div class="wk-techcell">
-        <span class="avatar" style="background:${esc(r.color)}">${r.unassigned?"?":esc(initials(r.name))}</span>
-        <div><div class="nm">${esc(r.name)}</div>
-          <div class="t-sub" style="font-size:11px">${mine.length} this week</div></div>
-      </div>` +
-      days.map(d => {
-        const list = sortForBoard(mine.filter(j => j.scheduledDate === d));
-        return `<div class="wk-cell ${d===today?"today":""}" data-drop
-                     data-drop-tech="${esc(r.key)}" data-drop-date="${esc(d)}">
-          ${list.map(j => miniCard(j, { showTech:false })).join("")}
-        </div>`;
-      }).join("");
-  }).join("");
+  const techHead = `<div class="wt-corner"></div>` + days.map(() =>
+    rows.map(r => `<div class="wt-tech${r.unassigned?" unassigned":""}" title="${esc(r.name)}">
+      <span class="avatar sm" style="background:${esc(r.color)}">${r.unassigned?"?":esc(initials(r.name))}</span>
+    </div>`).join("")).join("");
 
-  return `<div class="weekwrap"><div class="weekgrid">${head}${body}</div></div>`;
+  const body = slots.map(sl => `
+    <div class="dg-time${sl.urgent?" urgent":""}${sl.loose?" loose":""}">${esc(sl.label)}</div>
+    ${days.map(d => rows.map(r => {
+      const list = sortForBoard(inWeek.filter(j =>
+        j.scheduledDate === d && (j.techId||"") === r.key && bucket(j) === sl.w));
+      return `<div class="dg-cell${r.unassigned?" unassigned":""}${sl.urgent?" urgent":""}${sl.loose?" loose":""}${d===today?" today":""}"
+                   data-drop data-drop-tech="${esc(r.key)}"
+                   data-drop-date="${esc(d)}" data-drop-window="${esc(sl.w)}">
+        ${list.map(j => miniCard(j, { compact:true, showDate:false, showTech:false, showWindow:false })).join("")}
+      </div>`;
+    }).join("")).join("")}`).join("");
+
+  return `<div class="daygrid-wrap">
+    <div class="daygrid weekhours" style="grid-template-columns:58px repeat(${days.length*sub},104px)">
+      ${dateHead}${techHead}${body}
+    </div></div>`;
 }
 
 /* ---------- Month: a calendar, colour-coded by technician ---------- */
