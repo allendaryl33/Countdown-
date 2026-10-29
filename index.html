@@ -2696,6 +2696,31 @@ const Store = {
   zones(){ return this.data.settings.zones || defaultZones(); },
   zone(id){ return this.zones().find(z => z.id === id) || this.zones()[0]; },
   messages(){ return this.data.settings.messages || defaultMessages(); },
+
+  /* The work types are his to curate — the trade he does changes. JOB_TYPES
+     is only the list the app shipped with. "Other" is always on the end
+     whatever he does: the matcher falls back to it and the customer wording
+     special-cases it, so it is not his to delete. */
+  jobTypes(){
+    const list = (this.data.settings.jobTypes || JOB_TYPES)
+      .map(t => String(t || "").trim()).filter(Boolean);
+    const out = list.filter(t => t !== "Other");
+    return [...new Set(out), "Other"];
+  },
+  /* Which waivers a type suggests. Kept beside the names so renaming a type
+     carries its waivers with it instead of quietly unhooking them. */
+  typeWaivers(type){
+    const map = this.data.settings.typeWaivers || JOB_TYPE_WAIVERS;
+    return (map[type] || []).slice();
+  },
+  /* Everywhere a type is offered in a dropdown. A record written before he
+     edited the list keeps a name the list no longer has; offering it too is
+     what stops the select silently rewriting the record on the next save. */
+  typeChoices(current){
+    const list = this.jobTypes();
+    const cur = String(current || "").trim();
+    return cur && !list.includes(cur) ? [cur, ...list] : list;
+  },
   message(id){ return this.messages().find(m => m.id === id) || this.messages()[0]; },
 
   /* "today" and "tomorrow" read better in a text than a date does. */
@@ -3114,7 +3139,8 @@ const Store = {
     const want = this.typeWords(lead.service);
     if (!want.length) return "Other";
 
-    const exact = JOB_TYPES.find(t => t.toLowerCase() === String(lead.service||"").toLowerCase().trim());
+    const all = this.jobTypes();
+    const exact = all.find(t => t.toLowerCase() === String(lead.service||"").toLowerCase().trim());
     if (exact) return exact;
 
     // a word counts as shared if either is a prefix of the other, which
@@ -3123,7 +3149,7 @@ const Store = {
       (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
 
     let best = null, bestScore = 0;
-    for (const t of JOB_TYPES){
+    for (const t of all){
       if (t === "Other") continue;
       const mine = this.typeWords(t);
       const score = mine.filter(m => want.some(w => near(w, m))).length;
@@ -3170,7 +3196,7 @@ const Store = {
 
   /* Which templates this job would normally want, and which are still missing. */
   recommendedFor(job){
-    const keys = JOB_TYPE_WAIVERS[job.type] || [];
+    const keys = this.typeWaivers(job.type);
     return keys.map(k => this.templateByKey(k)).filter(Boolean);
   },
   missingFor(job){
@@ -5670,7 +5696,7 @@ function viewJobs(){
     </select>
     <select id="f-status">${opt("","Any status",f.status)}${STATUSES.map(s=>opt(s.id,s.label,f.status)).join("")}</select>
     <select id="f-tech">${opt("","Any technician",f.techId)}${opt("none","— Unassigned —",f.techId)}${Store.data.techs.map(x=>opt(x.id,x.name,f.techId)).join("")}</select>
-    <select id="f-type">${opt("","Any job type",f.type)}${JOB_TYPES.map(x=>opt(x,x,f.type)).join("")}</select>
+    <select id="f-type">${opt("","Any job type",f.type)}${Store.jobTypes().map(x=>opt(x,x,f.type)).join("")}</select>
     <button class="btn sm ghost" data-action="clear-filters">Clear</button>
     <div style="flex:1"></div>
     <span class="filter-note">${list.length} job${list.length===1?"":"s"}${
@@ -5937,6 +5963,18 @@ function viewData(){
             late, finished — and the travel time for each zone. Your phone sends them, from your
             own number.</p>
           <button class="btn" data-action="edit-messages">Edit templates &amp; zones</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Work types</h3></div>
+        <div class="card-body">
+          <p class="t-sub" style="margin-top:0">The ${Store.jobTypes().length} kinds of work you
+            file jobs and estimates under${(() => {
+              const w = Store.jobTypes().filter(t => Store.typeWaivers(t).length).length;
+              return w ? `, ${w} of them set to suggest a waiver` : "";
+            })()}. Add your own, rename one, drop what you don't do.</p>
+          <button class="btn" data-action="edit-types">Edit work types</button>
         </div>
       </div>
 
@@ -6390,7 +6428,7 @@ function openJobForm(id){
 
       <div class="row2">
         <div class="field"><label>Job type</label>
-          <select class="input" id="f-type">${JOB_TYPES.map(t=>`<option${sel(t,j?j.type:"Other")}>${esc(t)}</option>`).join("")}</select></div>
+          <select class="input" id="f-type">${Store.typeChoices(j&&j.type).map(t=>`<option${sel(t,j?j.type:"Other")}>${esc(t)}</option>`).join("")}</select></div>
         <div class="field"><label>Priority</label>
           <select class="input" id="f-priority">${PRIORITIES.map(p=>`<option${sel(p,j?j.priority:"Normal")}>${esc(p)}</option>`).join("")}</select></div>
       </div>
@@ -6800,7 +6838,7 @@ function openEstimateForm(id){
 
       <div class="row2">
         <div class="field"><label>Work type</label>
-          <select class="input" id="e-type">${JOB_TYPES.map(t=>`<option${sel(t,e?e.type:"Other")}>${esc(t)}</option>`).join("")}</select></div>
+          <select class="input" id="e-type">${Store.typeChoices(e&&e.type).map(t=>`<option${sel(t,e?e.type:"Other")}>${esc(t)}</option>`).join("")}</select></div>
         <div class="field"><label>Valid for (days)</label>
           <input class="input" id="e-valid" type="number" min="1" step="1" value="${esc(e?(e.validDays||30):30)}"></div>
       </div>
@@ -7996,6 +8034,157 @@ function saveMessageSetup(){
   toast("Messages saved", "ok");
 }
 
+/* ---------- Work types ----------
+   Held open in a working copy. The modal is rebuilt whenever a row is added,
+   removed or moved, and renderQuiet does not cover modals, so anything typed
+   is read back into the working copy first or it would be thrown away. */
+let TypeEdit = null;
+
+function typeUseCount(name){
+  const n = String(name || "");
+  return Store.data.jobs.filter(j => j.type === n).length
+       + Store.data.estimates.filter(e => e.type === n).length;
+}
+
+function openTypeSetup(){
+  TypeEdit = Store.jobTypes().map(name => ({
+    name, orig: name, waivers: Store.typeWaivers(name)
+  }));
+  renderTypeSetup();
+}
+
+function syncTypeEdit(){
+  if (!TypeEdit) return;
+  TypeEdit.forEach((t, i) => {
+    const el = $(`[data-type-name="${i}"]`);
+    if (el) t.name = el.value;
+    // only the open drawer has checkboxes; the rest keep what they hold
+    const boxes = document.querySelectorAll(`[data-type-waiver="${i}"]`);
+    if (boxes.length) t.waivers = [...boxes].filter(b => b.checked).map(b => b.value);
+  });
+}
+
+function renderTypeSetup(){
+  const tpls = Store.activeTemplates();
+  const rows = TypeEdit.map((t, i) => {
+    const locked = t.orig === "Other";
+    const used = t.orig ? typeUseCount(t.orig) : 0;
+    const notes = [
+      used ? `${used} record${used===1?"":"s"}` : "",
+      locked ? "always here — where an unrecognised inquiry lands" : ""
+    ].filter(Boolean).join(" · ");
+    return `
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+      <input class="input" style="flex:1;min-width:0" data-type-name="${i}"
+             value="${esc(t.name)}" ${locked ? "disabled" : ""}
+             placeholder="e.g. Shower &amp; Tub">
+      <button class="btn sm ghost" data-type-move="${i}" data-dir="-1"
+              title="Move up" ${i===0?"disabled":""}>↑</button>
+      <button class="btn sm ghost" data-type-move="${i}" data-dir="1"
+              title="Move down" ${i===TypeEdit.length-1?"disabled":""}>↓</button>
+      <button class="btn sm ghost" data-type-del="${i}"
+              title="Remove" ${locked?"disabled":""}>✕</button>
+    </div>
+    <div class="t-sub" style="margin:0 0 14px 2px;font-size:12.5px">
+      ${notes ? `${esc(notes)}${tpls.length ? " · " : ""}` : ""}
+      ${tpls.length ? `<a href="#" data-type-waivers="${i}">waivers${
+        t.waivers.length ? ` (${t.waivers.length})` : ""}</a>` : ""}
+      ${TypeEdit.open === i && tpls.length ? `
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 2px">
+        ${tpls.map(w => `
+          <label style="display:flex;gap:6px;align-items:center">
+            <input type="checkbox" data-type-waiver="${i}" value="${esc(w.key)}"
+                   ${t.waivers.includes(w.key) ? "checked" : ""}>${esc(w.title)}</label>`).join("")}
+      </div>` : ""}
+    </div>`;
+  }).join("");
+
+  openModal(`
+    <div class="modal-head"><h2>Work types</h2>
+      <div class="spacer"></div><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <p class="t-sub" style="margin-top:0">What shows in the Work type box on a job or an
+        estimate, and what a website inquiry is matched against. Rename one and the jobs and
+        estimates already on that name come with it.</p>
+      ${rows}
+      <button class="btn sm" data-type-add>+ Add a type</button>
+      <p class="t-sub" style="margin:16px 0 0">Your website form is a separate list that Victor
+        keeps. These do not have to match word for word — an inquiry is matched on the words in
+        it, and anything it cannot place arrives as Other rather than a guess.</p>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Cancel</button>
+      <button class="btn primary" data-save-types>Save</button>
+    </div>`, { wide:true });
+}
+
+function toggleTypeWaivers(i){
+  syncTypeEdit();
+  TypeEdit.open = TypeEdit.open === i ? null : i;
+  renderTypeSetup();
+}
+
+function addType(){
+  syncTypeEdit(); TypeEdit.open = null;
+  TypeEdit.splice(TypeEdit.length - 1, 0, { name:"", orig:null, waivers:[] });
+  renderTypeSetup();
+}
+
+function moveType(i, dir){
+  syncTypeEdit();
+  const j = i + dir;
+  if (j < 0 || j >= TypeEdit.length) return;
+  if (TypeEdit[i].orig === "Other" || TypeEdit[j].orig === "Other") return;
+  [TypeEdit[i], TypeEdit[j]] = [TypeEdit[j], TypeEdit[i]];
+  TypeEdit.open = null;
+  renderTypeSetup();
+}
+
+function removeType(i){
+  syncTypeEdit();
+  const t = TypeEdit[i];
+  if (!t || t.orig === "Other") return;
+  const used = t.orig ? typeUseCount(t.orig) : 0;
+  if (used && !confirm(
+    `${used} job${used===1?"":"s"} or estimate${used===1?" is":"s are"} on "${t.orig}".\n\n` +
+    `They keep that name — nothing is lost and nothing is retyped — but it stops being ` +
+    `offered for new work. Remove it?`)) return;
+  TypeEdit.splice(i, 1);
+  TypeEdit.open = null;
+  renderTypeSetup();
+}
+
+function saveTypeSetup(){
+  syncTypeEdit();
+  const seen = new Set(), list = [], waivers = {}, renames = [];
+  for (const t of TypeEdit){
+    const name = String(t.name || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;          // two rows typed to the same thing
+    seen.add(key);
+    list.push(name);
+    if (t.waivers.length) waivers[name] = t.waivers.slice();
+    if (t.orig && t.orig !== name) renames.push([t.orig, name]);
+  }
+  if (!list.includes("Other")) list.push("Other");
+
+  // A rename is him relabelling a category, so the work already filed under
+  // it moves too. That is his edit, not the app guessing on his behalf.
+  let moved = 0;
+  for (const [from, to] of renames){
+    [...Store.data.jobs, ...Store.data.estimates].forEach(r => {
+      if (r.type === from){ r.type = to; moved++; }
+    });
+  }
+
+  Store.data.settings.jobTypes = list;
+  Store.data.settings.typeWaivers = waivers;
+  Store.save(); TypeEdit = null; closeModal(); render();
+  toast(moved ? `Work types saved · ${moved} record${moved===1?"":"s"} renamed`
+              : "Work types saved", "ok");
+}
+
 /* ---------- Go live: clear the demo and set the shop up ---------- */
 function openGoLive(){
   const st = Store.data.settings;
@@ -8557,7 +8746,7 @@ function openManualLead(){
         <div class="field"><label>What do they need</label>
           <select class="input" id="ml-service">
             <option value="">—</option>
-            ${JOB_TYPES.map(t => `<option>${esc(t)}</option>`).join("")}
+            ${Store.jobTypes().map(t => `<option>${esc(t)}</option>`).join("")}
           </select></div>
       </div>
       <div class="field"><label>What's going on</label>
@@ -9539,6 +9728,16 @@ document.addEventListener("click", e => {
   }
   if (hit("[data-save-messages]")) return saveMessageSetup();
 
+  /* --- work types --- */
+  if (hit("[data-save-types]")) return saveTypeSetup();
+  if (hit("[data-type-add]"))   return addType();
+  const wtW = hit("[data-type-waivers]");
+  if (wtW){ e.preventDefault(); return toggleTypeWaivers(Number(wtW.dataset.typeWaivers)); }
+  const wtMove = hit("[data-type-move]");
+  if (wtMove) return moveType(Number(wtMove.dataset.typeMove), Number(wtMove.dataset.dir));
+  const wtDel = hit("[data-type-del]");
+  if (wtDel) return removeType(Number(wtDel.dataset.typeDel));
+
   const savePay = hit("[data-save-pay]");
   if (savePay){
     const j = Store.job(savePay.dataset.savePay);
@@ -9866,6 +10065,7 @@ document.addEventListener("click", e => {
       break;
     }
     case "edit-messages": openMessageSetup(); break;
+    case "edit-types": openTypeSetup(); break;
     case "export-waivers": exportWaiversCsv(); break;
     case "new-customer": openCustomerForm(null); break;
     case "new-tech":     openTechForm(null); break;
