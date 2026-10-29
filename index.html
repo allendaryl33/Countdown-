@@ -1898,7 +1898,12 @@ const Cloud = {
         customer: c.name,
         address: [c.address, c.city].filter(Boolean).join(", "),
         description: e.description || "",
-        items: (e.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
+        // flat rate ships the scope without per-line money; the page reads
+        // the absent price as "no figure against this line"
+        flat: Store.estIsFlat(e),
+        items: (e.items || []).map(i => Store.estIsFlat(e)
+          ? ({ desc: i.desc })
+          : ({ desc:i.desc, qty:i.qty, price:i.price })),
         taxLabel: Store.taxLabel(),
         tax, total: Store.estimateGross(e),
         validDays: days,
@@ -2270,8 +2275,24 @@ const Store = {
     const c = e.customerId ? this.customer(e.customerId) : null;
     return c || e.lead || { name:"(no contact)", phone:"", email:"", address:"", city:"" };
   },
-  estimateTotal(e){
+  /* Flat rate is how he prices: the customer wants to read what is included,
+     not what each part of it costs. So the lines can carry a scope with no
+     money on them at all and one price covers the lot. A flat price set here
+     wins over whatever the lines add up to. */
+  estIsFlat(e){ return Number(e && e.flatPrice) > 0; },
+  estLineSum(e){
     return (e.items || []).reduce((s,i) => s + (Number(i.qty)||0) * (Number(i.price)||0), 0);
+  },
+  estimateTotal(e){
+    return this.estIsFlat(e) ? Number(e.flatPrice) : this.estLineSum(e);
+  },
+  setFlatPrice(e, v){
+    const n = Math.max(0, Number(v) || 0);
+    const was = Number(e.flatPrice) || 0;
+    if (n === was) return;
+    e.flatPrice = n || null;
+    this.addEstLog(e, n ? `Flat price set to ${money(n)}` : "Flat price cleared — back to the line totals");
+    this.save();
   },
 
   /* An estimate's tax, worked out the same way an invoice's is. estimateTotal
@@ -6523,6 +6544,18 @@ function openEstimate(id){
             </td>
           </tr>
           <tr>
+            <td colspan="4" style="text-align:right">
+              <label for="est-flat" class="t-strong">Flat price for the whole job</label>
+              <div class="t-sub" style="font-size:11px;margin-top:2px">
+                ${Store.estIsFlat(e)
+                  ? "The lines are the scope; this is the price."
+                  : "Leave it empty and the lines are added up instead."}</div>
+            </td>
+            <td class="num"><input class="input li-edit num" type="number" step="0.01" min="0"
+                 id="est-flat" data-est-flat="${e.id}" placeholder="0.00"
+                 value="${esc(Store.estIsFlat(e) ? Number(e.flatPrice) : "")}"></td><td></td>
+          </tr>
+          <tr>
             <td colspan="4" class="t-strong" style="text-align:right">Estimate total</td>
             <td class="num money-lg" data-est-total>${esc(money(total))}</td><td></td>
           </tr>
@@ -8264,6 +8297,18 @@ function estimateDocHtml(e){
       <tr><td valign="top"><strong>Scope</strong></td><td>${esc(e.description)}</td></tr>
     </table>
 
+    ${Store.estIsFlat(e) ? `
+    <table>
+      <thead><tr><th style="text-align:left">What's included</th></tr></thead>
+      <tbody>
+        ${(e.items||[]).map(i => `<tr><td>${esc(i.desc)}</td></tr>`).join("")}
+        ${Store.taxRate() ? `<tr>
+          <td style="text-align:right">Subtotal &nbsp; ${esc(money(total))}</td></tr>
+        <tr>
+          <td style="text-align:right">${esc(Store.taxLabel())} &nbsp; ${esc(money(Store.estimateTax(e)))}</td></tr>` : ""}
+        <tr class="tot"><td style="text-align:right">Total &nbsp; ${esc(money(Store.estimateGross(e)))}</td></tr>
+      </tbody>
+    </table>` : `
     <table>
       <thead><tr>
         <th style="text-align:left">Description</th>
@@ -8289,7 +8334,7 @@ function estimateDocHtml(e){
           <td style="text-align:right">${esc(money(Store.estimateGross(e)))}</td>
         </tr>
       </tbody>
-    </table>
+    </table>`}
 
     <div class="terms">
       Valid for ${esc(valid)} days from the date above. Price covers the scope described;
@@ -8699,10 +8744,10 @@ function openEstimateSign(id){
       <div class="card" style="margin-bottom:16px">
         <table class="inv-meta" style="width:100%;border-collapse:collapse">
           ${items.map(i => `<tr>
-            <td style="padding:7px 12px;border-bottom:1px solid var(--line)">
-              ${i.qty > 1 ? esc(i.qty) + " &times; " : ""}${esc(i.desc)}</td>
-            <td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
-              ${esc(money(i.qty * i.price))}</td></tr>`).join("")}
+            <td style="padding:7px 12px;border-bottom:1px solid var(--line)"${Store.estIsFlat(e) ? ' colspan="2"' : ''}>
+              ${Store.estIsFlat(e) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${esc(i.desc)}</td>
+            ${Store.estIsFlat(e) ? "" : `<td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
+              ${esc(money(i.qty * i.price))}</td>`}</tr>`).join("")}
         </table>
         ${Store.taxRate() ? `
         <div class="money-row"><span class="mr-label">Subtotal</span>
@@ -8797,7 +8842,9 @@ function sendEstimate(id){
 
 Thanks for getting in touch. Here's the estimate for the ${String(e.type).toLowerCase()}:
 
-${(e.items || []).map(i => `  ${i.qty > 1 ? i.qty + " x " : ""}${i.desc} — ${money(i.qty * i.price)}`).join("\n")}
+${(e.items || []).map(i => Store.estIsFlat(e)
+  ? `  ${i.desc}`
+  : `  ${i.qty > 1 ? i.qty + " x " : ""}${i.desc} — ${money(i.qty * i.price)}`).join("\n")}
 
 ${st.gst ? `Subtotal: ${money(total)}
 ${Store.taxLabel()}: ${money(Store.estimateTax(e))}
@@ -9802,6 +9849,16 @@ document.addEventListener("change", e => {
   const t = e.target;
 
   if (t.dataset && t.dataset.lineEdit) return saveLineEdit(t);
+
+  if (t.dataset && t.dataset.estFlat){
+    const est = Store.estimate(t.dataset.estFlat);
+    if (!est) return;
+    Store.setFlatPrice(est, t.value);
+    const tot = document.querySelector("[data-est-total]");
+    if (tot) tot.textContent = money(Store.estimateTotal(est));
+    renderQuiet();
+    return;
+  }
 
   // Show the day count only when days are what he's chosen. Done here rather
   // than by re-rendering, because a rebuild would throw away everything else
