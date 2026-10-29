@@ -139,7 +139,8 @@ function render(p){
         <div><h2>Billed to</h2>${[p.customer, p.address, p.city, p.phone]
           .filter(Boolean).map(x => `<div>${esc(x)}</div>`).join("")}</div>
         <div><h2>Work done</h2>
-          <div>${esc(p.type || "")}${p.jobNo ? " · Job #" + esc(p.jobNo) : ""}</div>
+          <div>${[p.type || "", p.jobNo ? "Job #" + p.jobNo : ""]
+                   .filter(Boolean).map(x => esc(x)).join(" · ")}</div>
           ${p.when ? `<div>${esc(p.when)}</div>` : ""}
           ${p.terms ? `<div style="margin-top:4px"><strong>${esc(p.terms)}</strong></div>` : ""}</div>
       </div>
