@@ -2001,19 +2001,43 @@ const Cloud = {
       // No order parameter: the column names are the website's, not ours, and
       // PostgREST rejects an order on a column that isn't there. Sort locally.
       const rows = await this.call("/rest/v1/inquiries?select=*&limit=500");
+      const before = this.inqStamp();
       this.inquiries = Array.isArray(rows) ? rows : [];
       this.inqError = "";
+      const first = !this.inqLoaded;
       this.inqLoaded = true;
+      /* emit only moves the sync pill — nothing listening to it redraws the
+         view. Without this the leads land in memory and the screen carries
+         on saying it is still looking for them. */
+      if (first || before !== this.inqStamp()) renderQuiet();
     } catch(err){
       // A missing table or a refused read is not a sync failure — the shop is
       // fine. It gets said on the Leads screen and nowhere else.
       this.inquiries = [];
+      const first = !this.inqLoaded;
       this.inqLoaded = true;
       this.inqError = err.offline ? "offline"
         : (err.status === 404 || /relation|does not exist|schema cache/i.test(err.message || ""))
           ? "no-table" : (err.message || "could not read the table");
+      if (first) renderQuiet();
     }
     this.emit();
+  },
+
+  inqStamp(){ return (this.inquiries || []).map(r => r.id).join(","); },
+
+  /* While he is sitting on the Leads screen a new inquiry should turn up
+     without him doing anything. Nothing else polls that table — a lead
+     arriving mid-shift waited for the next sync, which might be the next
+     time he edited something. */
+  watchInquiries(){
+    clearInterval(this._inqTimer);
+    this._inqTimer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (App.view !== "leads" && App.view !== "today") return;
+      if (!this.configured() || !this.cfg.refreshToken) return;
+      this.pullInquiries();
+    }, 45000);
   },
 
   /* Resume a session on open, then catch up. */
@@ -2025,6 +2049,7 @@ const Cloud = {
       await this.refresh();
       await this.syncNow();
       this.watchSignatures();
+      this.watchInquiries();
     } catch(err){
       if (err.offline) this.set("error", "no connection — saved on this device");
       else { this.signOut(); this.set("signed-out", "sign in again"); }
@@ -3759,6 +3784,9 @@ function go(view){
   rememberPlace(null);
   render();
   window.scrollTo(0,0);
+  // Opening Leads is him asking "has anything come in?" — so go and look,
+  // rather than showing whatever was in memory from the last sync.
+  if (view === "leads") Cloud.pullInquiries();
 }
 
 function render(){
