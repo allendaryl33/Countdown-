@@ -1074,6 +1074,32 @@ const JOB_TYPE_WAIVERS = {
   "Well / Pump":          ["access-entry"]
 };
 
+/* What people actually type, against what he files it under. Seeded with
+   the obvious ones; the list is his to extend from Data & Setup as he sees
+   what comes through the form. */
+function defaultAliases(){
+  return {
+    "Drain Cleaning":       ["blocked drain","clogged drain","slow drain","backed up",
+                             "plugged","snake","drainage","drain"],
+    "Leak Repair":          ["plumbing - leaks","leaks","leaking","dripping","burst pipe",
+                             "water damage","leak"],
+    "Water Heater":         ["hot water tank","no hot water","water tank","hot water heater",
+                             "tankless"],
+    "Furnace":              ["no heat","furnace not working","heater not working","furnace"],
+    "Boiler / Radiant Heat":["in floor heat","in-floor heating","radiant","hydronic","boiler"],
+    "Frozen Pipe":          ["frozen pipes","pipe froze","thaw","frozen"],
+    "Fixture Install":      ["toilet install","faucet","tap","sink install","vanity",
+                             "install a fixture","fixture"],
+    "Sewer / Camera":       ["sewer backup","main line","camera inspection","scope the line",
+                             "sewer"],
+    "Remodel Rough-in":     ["renovation","remodel","reno","bathroom remodel","shower rebuild",
+                             "rough in","rough-in"],
+    "Backflow Test":        ["backflow testing","backflow test","back flow","backflow"],
+    "Gas Line":             ["gas fitting","gas line","bbq line","gas hookup","gasfitting","gas"],
+    "Well / Pump":          ["sump pump","well pump","pressure tank","cistern","pump"]
+  };
+}
+
 /* Merge fields a waiver body can use. Filled from the job when one is attached. */
 const MERGE_FIELDS = [
   ["{{company}}",        "Your company name"],
@@ -2707,6 +2733,12 @@ const Store = {
     const out = list.filter(t => t !== "Other");
     return [...new Set(out), "Other"];
   },
+  /* The words people use for this kind of work, which is not what he calls
+     it. His list, edited from Data & Setup. */
+  typeAliases(type){
+    const map = this.data.settings.typeAliases || defaultAliases();
+    return (map[type] || []).slice();
+  },
   /* Which waivers a type suggests. Kept beside the names so renaming a type
      carries its waivers with it instead of quietly unhooking them. */
   typeWaivers(type){
@@ -3102,9 +3134,17 @@ const Store = {
     if (!bits.length) bits.push("Website inquiry — no detail given.");
     return bits.join("\n\n");
   },
-  typeWords(s){
+  /* Every word, in order. Phrases are matched with these: dropping the short
+     ones would turn "no heat" into "heat", and a trigger phrase that loses a
+     word stops meaning what he typed. */
+  typeTokens(s){
     return String(s || "").toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ")
-      .filter(w => w.length > 2);
+      .filter(Boolean);
+  },
+  /* The same, minus the filler. Only for loose overlap, where short words
+     match everything and carry no signal. */
+  typeWords(s){
+    return this.typeTokens(s).filter(w => w.length > 2);
   },
   /* How the type reads to a customer, always after the word "the". The
      two-sided types lose the slash. "Other" is honest on his screen but
@@ -3135,27 +3175,86 @@ const Store = {
     const own = String(service || "").trim();
     return own ? own.charAt(0).toUpperCase() + own.slice(1) : "Service call";
   },
-  leadJobType(lead){
-    const want = this.typeWords(lead.service);
-    if (!want.length) return "Other";
+  /* A word counts as shared if either is a prefix of the other, which carries
+     plurals and -ing endings: leaks/leak, heating/heat. The endings it is
+     there for add three letters at most, and without that bound a prefix
+     swallows whole different words — "back", in "the back door", matching
+     "backflow". */
+  typeNear(a, b){
+    if (a === b) return true;
+    if (Math.abs(a.length - b.length) > 3) return false;
+    return (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
+  },
+  /* Does this phrase appear in that text, as consecutive words? Phrase-level,
+     so "gas line" does not fire on "the gas was off and the line to the
+     garage is separate". */
+  typeSaid(textWords, phraseWords){
+    if (!phraseWords.length || phraseWords.length > textWords.length) return false;
+    for (let i = 0; i <= textWords.length - phraseWords.length; i++){
+      if (phraseWords.every((w, k) => this.typeNear(w, textWords[i + k]))) return true;
+    }
+    return false;
+  },
+  /* The best type whose trigger words — or whose own name — is said in this
+     text. Scored by how many words long the hit is, so the most specific
+     phrase wins: "hot water tank" beats a bare "water". Two different types
+     tying means it is genuinely ambiguous, and a guess there is the bug this
+     whole thing came from, so it returns nothing. */
+  typeBySaying(text){
+    const words = this.typeTokens(text);
+    if (!words.length) return null;
+    let best = null, score = 0, tied = false;
+    for (const t of this.jobTypes()){
+      if (t === "Other") continue;
+      const phrases = [...this.typeAliases(t), t];
+      for (const p of phrases){
+        const pw = this.typeTokens(p);
+        if (!this.typeSaid(words, pw)) continue;
+        if (pw.length > score){ best = t; score = pw.length; tied = false; }
+        else if (pw.length === score && best !== t) tied = true;
+      }
+    }
+    return tied ? null : best;
+  },
+  /* Loose word overlap. Good enough for a dropdown answer, which is short and
+     deliberate; too loose for a paragraph, which is why the description does
+     not get this. */
+  typeByOverlap(text){
+    const want = this.typeWords(text);
+    if (!want.length) return null;
+    let best = null, score = 0, tied = false;
+    for (const t of this.jobTypes()){
+      if (t === "Other") continue;
+      const n = this.typeWords(t).filter(m => want.some(w => this.typeNear(w, m))).length;
+      if (n > score){ best = t; score = n; tied = false; }
+      else if (n === score && n > 0 && best !== t) tied = true;
+    }
+    return tied ? null : best;
+  },
 
+  /* What they picked on the form, then what they wrote.
+
+     The dropdown is a deliberate answer and wins whenever it says anything
+     usable — someone who picked Water Heater and then mentioned a slow drain
+     in passing still has a water heater job. Only when the dropdown gives
+     nothing does their description get read, and then only on his trigger
+     words or a type's own name said as a phrase. Loose word overlap on a
+     paragraph would pick a winner out of noise, which is exactly the
+     confident wrong answer this all started with. */
+  leadJobType(lead){
+    const svc = String(lead && lead.service || "").trim();
     const all = this.jobTypes();
-    const exact = all.find(t => t.toLowerCase() === String(lead.service||"").toLowerCase().trim());
+
+    const exact = all.find(t => t.toLowerCase() === svc.toLowerCase());
     if (exact) return exact;
 
-    // a word counts as shared if either is a prefix of the other, which
-    // carries plurals and -ing endings: leaks/leak, heating/heat
-    const near = (a, b) => a === b ||
-      (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
+    const said = this.typeBySaying(svc);
+    if (said) return said;
 
-    let best = null, bestScore = 0;
-    for (const t of all){
-      if (t === "Other") continue;
-      const mine = this.typeWords(t);
-      const score = mine.filter(m => want.some(w => near(w, m))).length;
-      if (score > bestScore){ best = t; bestScore = score; }
-    }
-    return best || "Other";
+    const over = this.typeByOverlap(svc);
+    if (over) return over;
+
+    return this.typeBySaying(String(lead && lead.what || "")) || "Other";
   },
 
   nextWaiverNo(){
@@ -5970,10 +6069,10 @@ function viewData(){
         <div class="card-head"><h3>Work types</h3></div>
         <div class="card-body">
           <p class="t-sub" style="margin-top:0">The ${Store.jobTypes().length} kinds of work you
-            file jobs and estimates under${(() => {
-              const w = Store.jobTypes().filter(t => Store.typeWaivers(t).length).length;
-              return w ? `, ${w} of them set to suggest a waiver` : "";
-            })()}. Add your own, rename one, drop what you don't do.</p>
+            file jobs and estimates under, and the ${
+              Store.jobTypes().reduce((n,t) => n + Store.typeAliases(t).length, 0)
+            } words that put a website inquiry on the right one. Add your own, rename one,
+            drop what you don't do.</p>
           <button class="btn" data-action="edit-types">Edit work types</button>
         </div>
       </div>
@@ -8048,7 +8147,8 @@ function typeUseCount(name){
 
 function openTypeSetup(){
   TypeEdit = Store.jobTypes().map(name => ({
-    name, orig: name, waivers: Store.typeWaivers(name)
+    name, orig: name, waivers: Store.typeWaivers(name),
+    alias: Store.typeAliases(name).join(", ")
   }));
   renderTypeSetup();
 }
@@ -8058,6 +8158,8 @@ function syncTypeEdit(){
   TypeEdit.forEach((t, i) => {
     const el = $(`[data-type-name="${i}"]`);
     if (el) t.name = el.value;
+    const al = $(`[data-type-alias="${i}"]`);
+    if (al) t.alias = al.value;
     // only the open drawer has checkboxes; the rest keep what they hold
     const boxes = document.querySelectorAll(`[data-type-waiver="${i}"]`);
     if (boxes.length) t.waivers = [...boxes].filter(b => b.checked).map(b => b.value);
@@ -8085,6 +8187,10 @@ function renderTypeSetup(){
       <button class="btn sm ghost" data-type-del="${i}"
               title="Remove" ${locked?"disabled":""}>✕</button>
     </div>
+    ${locked ? "" : `
+    <input class="input" data-type-alias="${i}" value="${esc(t.alias)}"
+           style="margin-bottom:4px;font-size:13px"
+           placeholder="words people use for it — blocked drain, backed up, snake">`}
     <div class="t-sub" style="margin:0 0 14px 2px;font-size:12.5px">
       ${notes ? `${esc(notes)}${tpls.length ? " · " : ""}` : ""}
       ${tpls.length ? `<a href="#" data-type-waivers="${i}">waivers${
@@ -8104,8 +8210,11 @@ function renderTypeSetup(){
       <div class="spacer"></div><button class="x" data-close>×</button></div>
     <div class="modal-body">
       <p class="t-sub" style="margin-top:0">What shows in the Work type box on a job or an
-        estimate, and what a website inquiry is matched against. Rename one and the jobs and
-        estimates already on that name come with it.</p>
+        estimate. Rename one and the jobs and estimates already on that name come with it.</p>
+      <p class="t-sub" style="margin:0 0 14px">Under each is what people actually call it,
+        separated by commas. An inquiry is matched on what they picked from your website's
+        dropdown first; if that lands on nothing, what they wrote is read for these same
+        words. Anything still unplaced arrives as Other rather than a guess.</p>
       ${rows}
       <button class="btn sm" data-type-add>+ Add a type</button>
       <p class="t-sub" style="margin:16px 0 0">Your website form is a separate list that Victor
@@ -8156,7 +8265,7 @@ function removeType(i){
 
 function saveTypeSetup(){
   syncTypeEdit();
-  const seen = new Set(), list = [], waivers = {}, renames = [];
+  const seen = new Set(), list = [], waivers = {}, aliases = {}, renames = [];
   for (const t of TypeEdit){
     const name = String(t.name || "").trim();
     if (!name) continue;
@@ -8165,6 +8274,9 @@ function saveTypeSetup(){
     seen.add(key);
     list.push(name);
     if (t.waivers.length) waivers[name] = t.waivers.slice();
+    const words = String(t.alias || "").split(",")
+      .map(w => w.trim().toLowerCase()).filter(Boolean);
+    if (words.length) aliases[name] = [...new Set(words)];
     if (t.orig && t.orig !== name) renames.push([t.orig, name]);
   }
   if (!list.includes("Other")) list.push("Other");
@@ -8180,6 +8292,7 @@ function saveTypeSetup(){
 
   Store.data.settings.jobTypes = list;
   Store.data.settings.typeWaivers = waivers;
+  Store.data.settings.typeAliases = aliases;
   Store.save(); TypeEdit = null; closeModal(); render();
   toast(moved ? `Work types saved · ${moved} record${moved===1?"":"s"} renamed`
               : "Work types saved", "ok");
