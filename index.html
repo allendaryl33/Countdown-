@@ -616,6 +616,11 @@ textarea.input{resize:vertical;min-height:76px}
   background:#fff;border:1px solid var(--line);border-radius:7px;padding:10px;margin-bottom:8px;
   cursor:grab;box-shadow:0 1px 2px rgba(16,36,56,.07);border-left:3px solid var(--blue);
 }
+.li-edit{padding:6px 8px;font-size:13px;width:100%}
+.li-desc{resize:vertical;min-height:34px;line-height:1.35;font-family:inherit}
+.li-edit.num{text-align:right;font-variant-numeric:tabular-nums}
+tr[data-line-row] td{vertical-align:top;padding:6px}
+
 .jobcard:hover{border-color:#c6d2de;box-shadow:0 2px 8px rgba(16,36,56,.1)}
 .jobcard:active{cursor:grabbing}
 .jobcard.dragging{opacity:.4}
@@ -1357,7 +1362,12 @@ const Photos = {
     } catch(e){
       try { bmp = await createImageBitmap(file); } catch(e2){ bmp = null; }
     }
-    if (!bmp) return { blob: file, w: 0, h: 0 };
+    /* No decoder for it here. Handing the original back would upload a file
+       that this browser cannot draw either — a blank square on the record and
+       a blank square on the customer's invoice, uploaded and synced and
+       entirely invisible. Better to refuse it where he can still do something
+       about it. */
+    if (!bmp) return { blob: file, w: 0, h: 0, unreadable: true };
 
     const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
     const w = Math.max(1, Math.round(bmp.width * scale));
@@ -6469,12 +6479,17 @@ function openEstimate(id){
           <th class="num" style="width:110px">Unit price</th><th class="num" style="width:110px">Line</th><th style="width:40px"></th>
         </tr></thead>
         <tbody>
-          ${items.map((it,i) => `<tr>
-            <td>${esc(it.desc)}</td>
-            <td class="t-sub">${esc((LINE_KINDS.find(k=>k.id===it.kind)||{}).label || it.kind || "")}</td>
-            <td class="num">${esc(it.qty)}</td>
-            <td class="num">${esc(money(it.price))}</td>
-            <td class="num">${esc(money((Number(it.qty)||0)*(Number(it.price)||0)))}</td>
+          ${items.map((it,i) => `<tr data-line-row="${i}">
+            <td><textarea class="input li-edit li-desc" rows="1"
+                  data-line-edit="${e.id}:${i}:desc">${esc(it.desc)}</textarea></td>
+            <td><select class="input li-edit" data-line-edit="${e.id}:${i}:kind">
+                  ${LINE_KINDS.map(k => `<option value="${esc(k.id)}"${k.id===it.kind?" selected":""}>${esc(k.label)}</option>`).join("")}
+                </select></td>
+            <td><input class="input li-edit num" type="number" step="0.5" min="0"
+                  data-line-edit="${e.id}:${i}:qty" value="${esc(it.qty)}"></td>
+            <td><input class="input li-edit num" type="number" step="0.01" min="0"
+                  data-line-edit="${e.id}:${i}:price" value="${esc(Number(it.price) || 0)}"></td>
+            <td class="num t-strong" data-line-total="${i}">${esc(money((Number(it.qty)||0)*(Number(it.price)||0)))}</td>
             <td class="num"><button class="btn sm ghost" data-del-line="${e.id}:${i}" title="Remove">×</button></td>
           </tr>`).join("")}
           ${items.length ? "" : `<tr><td colspan="6"><div class="empty" style="padding:18px">No lines yet — pick from the price book below.</div></td></tr>`}
@@ -6509,7 +6524,7 @@ function openEstimate(id){
           </tr>
           <tr>
             <td colspan="4" class="t-strong" style="text-align:right">Estimate total</td>
-            <td class="num money-lg">${esc(money(total))}</td><td></td>
+            <td class="num money-lg" data-est-total>${esc(money(total))}</td><td></td>
           </tr>
         </tbody>
       </table>
@@ -7359,11 +7374,12 @@ async function takePhotos(kind, id, files){
   const host = $(`[data-ph-host="${kind}:${id}"]`);
   if (host) host.classList.add("busy");
 
-  let added = 0, failed = 0;
+  let added = 0, failed = 0, unreadable = [];
   for (const file of Array.from(files)){
     if (!/^image\//.test(file.type || "")){ failed++; continue; }
     try {
-      const { blob, w, h } = await Photos.shrink(file);
+      const { blob, w, h, unreadable: bad } = await Photos.shrink(file);
+      if (bad){ unreadable.push(file.name || "that photo"); continue; }
       const meta = Store.addPhoto(kind, id, { w, h, size: blob.size, name: file.name || "" });
       await Photos.put(meta.id, blob);
       added++;
@@ -7374,7 +7390,44 @@ async function takePhotos(kind, id, files){
   refreshPhotos(kind, id);
   if (added) toast(added === 1 ? "Photo saved" : added + " photos saved", "ok");
   if (failed) toast(failed + " couldn't be read", "err");
+  if (unreadable.length) explainUnreadable(unreadable);
   if (added) Cloud.flushPhotos().then(n => { if (n) Cloud.markDirty(); });
+}
+
+/* An iPhone shoots HEIC. Safari can read it because macOS and iOS carry the
+   codec; Chrome and Firefox cannot, and nor can most of the phones a customer
+   will open an invoice on. Converting it here would mean shipping a megabyte
+   of decoder into an app that has no dependencies at all, to rescue a file
+   the Mac itself converts in two clicks. */
+function explainUnreadable(names){
+  const heic = names.some(n => /\.hei[cf]$/i.test(n));
+  openModal(`
+    <div class="modal-head"><h2>${names.length === 1 ? "That photo" : "Those photos"} won't open here</h2>
+      <div class="spacer"></div><button class="x" data-close>&times;</button></div>
+    <div class="modal-body">
+      <p style="margin-top:0">${esc(names.slice(0,4).join(", "))}${names.length > 4
+        ? ` and ${names.length - 4} more` : ""} ${names.length === 1 ? "is" : "are"}
+        in a format this browser can't read${heic ? " — <strong>HEIC</strong>, what an iPhone shoots by default" : ""}.
+        Nothing was attached, on purpose: it would have uploaded as a blank
+        square here and on the customer's invoice.</p>
+
+      <div class="section-title">Right now</div>
+      <p style="margin:0 0 10px;max-width:60ch">In Finder, right-click the photo →
+        <strong>Quick Actions</strong> → <strong>Convert Image</strong> → JPEG. Two clicks,
+        then drop it in here.</p>
+
+      <div class="section-title">So it stops happening</div>
+      <p style="margin:0 0 10px;max-width:60ch">On your phone:
+        <strong>Settings → Camera → Formats → Most Compatible</strong>.
+        Every photo after that is a JPEG and this never comes up again.</p>
+
+      <p class="t-sub" style="margin:14px 0 0;max-width:60ch">
+        Photos taken with <strong>Photograph it</strong> are already fine — the phone
+        converts those on the way in. So is anything a customer sends through the
+        website form.</p>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn primary" data-close>Got it</button></div>`);
 }
 
 async function openPhoto(pid){
@@ -9720,8 +9773,35 @@ document.addEventListener("click", e => {
   }
 });
 
+/* Editing a line used to mean deleting it and typing it again. It saves on
+   blur and patches only the two numbers that changed — rebuilding the record
+   here would throw away the scroll position and whatever else is half-typed
+   further down it. */
+function saveLineEdit(t){
+  const [eid, idx, field] = String(t.dataset.lineEdit).split(":");
+  const est = Store.estimate(eid);
+  const it  = est && (est.items || [])[Number(idx)];
+  if (!it) return;
+
+  const was = it[field];
+  if (field === "desc" || field === "kind") it[field] = t.value.trim();
+  else it[field] = Math.max(0, Number(t.value) || 0);
+  if (String(was) === String(it[field])) return;
+
+  Store.save();
+
+  const row = t.closest("tr");
+  const cell = row && row.querySelector("[data-line-total]");
+  if (cell) cell.textContent = money((Number(it.qty)||0) * (Number(it.price)||0));
+  const tot = document.querySelector("[data-est-total]");
+  if (tot) tot.textContent = money(Store.estimateTotal(est));
+  renderQuiet();
+}
+
 document.addEventListener("change", e => {
   const t = e.target;
+
+  if (t.dataset && t.dataset.lineEdit) return saveLineEdit(t);
 
   // Show the day count only when days are what he's chosen. Done here rather
   // than by re-rendering, because a rebuild would throw away everything else
