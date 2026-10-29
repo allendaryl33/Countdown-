@@ -2398,6 +2398,7 @@ const Store = {
       // the van list comes with it, unticked items and all
       materials: (e.materials || []).map(m => Object.assign({}, m, { id: uid("mat") })),
       estimateId: e.id, quotedTotal: total,
+      flatPrice: this.estIsFlat(e) ? Number(e.flatPrice) : null,
       log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no} · quoted ${money(total)}` }]
     };
     this.data.jobs.push(job);
@@ -2824,6 +2825,11 @@ const Store = {
   /* Parts and labour as one list. The printed invoice builds this inline;
      the page the customer opens needs the same thing as data. */
   invoiceLines(job){
+    // Flat: the lines are the scope, the price sits on the job, and hours
+    // are his own record rather than something the customer is billed for.
+    if (this.jobIsFlat(job))
+      return (job.parts || []).map(p => ({ desc: p.desc || p.name || "", qty: 0, price: 0 }))
+                              .filter(l => l.desc);
     const lines = (job.parts || []).map(p => ({
       desc: p.desc || p.name || "", qty: Number(p.qty) || 0, price: Number(p.price) || 0
     })).filter(l => l.desc);
@@ -3196,10 +3202,26 @@ const Store = {
     this.save();
   },
 
-  jobTotal(job){
+  /* Work quoted flat is billed flat. The lines came off the estimate as
+     scope with no money on them, so adding them up gives nothing — which is
+     how a $2,800 job turned into a $0.00 invoice. The price rides across
+     with the job and hours still get logged, for Time & Money rather than
+     for the bill. */
+  jobIsFlat(job){ return Number(job && job.flatPrice) > 0; },
+  jobLineSum(job){
     const parts = (job.parts || []).reduce((s,p) => s + (Number(p.qty)||0) * (Number(p.price)||0), 0);
     const labor = (Number(job.laborHours)||0) * (Number(job.laborRate)|| this.data.settings.laborRate || 0);
     return parts + labor;
+  },
+  jobTotal(job){
+    return this.jobIsFlat(job) ? Number(job.flatPrice) : this.jobLineSum(job);
+  },
+  setJobFlatPrice(job, v){
+    const n = Math.max(0, Number(v) || 0);
+    if (n === (Number(job.flatPrice) || 0)) return;
+    job.flatPrice = n || null;
+    this.addLog(job, n ? `Flat price set to ${money(n)}` : "Flat price cleared — back to the line totals");
+    this.save();
   }
 };
 
@@ -6082,6 +6104,18 @@ function openJob(id){
           <tr>
             <td colspan="3" class="t-strong" style="text-align:right">Job total</td>
             <td class="num t-strong">${esc(money(partsTotal + laborTotal))}</td><td></td>
+          </tr>
+          <tr>
+            <td colspan="2" style="text-align:right">
+              <label for="job-flat" class="t-strong">Flat price for the whole job</label>
+              <div class="t-sub" style="font-size:11px;margin-top:2px">
+                ${Store.jobIsFlat(j)
+                  ? "Quoted flat — the lines above are the scope."
+                  : "Leave it empty and the lines above are added up."}</div></td>
+            <td class="num"><input class="input num" type="number" min="0" step="0.01"
+                 id="job-flat" data-job-flat="${j.id}" placeholder="0.00" style="width:90px"
+                 value="${esc(Store.jobIsFlat(j) ? Number(j.flatPrice) : "")}"></td>
+            <td class="num t-sub">${Store.jobIsFlat(j) ? "what they owe" : ""}</td><td></td>
           </tr>
           <tr>
             <td colspan="2" class="t-sub" style="text-align:right">
@@ -9875,6 +9909,29 @@ document.addEventListener("change", e => {
   const t = e.target;
 
   if (t.dataset && t.dataset.lineEdit) return saveLineEdit(t);
+
+  if (t.dataset && t.dataset.jobFlat){
+    const j = Store.job(t.dataset.jobFlat);
+    if (!j) return;
+    Store.setJobFlatPrice(j, t.value);
+    render(); openJob(j.id);
+    return;
+  }
+
+  /* It had a tick button and nothing else, so typing a figure and moving on
+     left it unsaved with no sign either way. */
+  if (t.id === "mat-cost"){
+    const row = t.closest("tr");
+    const btn = row && row.querySelector("[data-save-matcost]");
+    const j = btn && Store.job(btn.dataset.saveMatcost);
+    if (!j) return;
+    const n = Math.max(0, Number(t.value) || 0);
+    if (n === (Number(j.materialCost) || 0)) return;
+    j.materialCost = n || null;
+    Store.save(); render(); openJob(j.id);
+    toast(n ? `Parts cost ${money(n)} recorded` : "Parts cost cleared", "ok");
+    return;
+  }
 
   if (t.dataset && t.dataset.estFlat){
     const est = Store.estimate(t.dataset.estFlat);
