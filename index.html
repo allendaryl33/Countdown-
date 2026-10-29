@@ -1800,7 +1800,7 @@ const Cloud = {
       no: "INV-" + Store.invoiceNoFor(job),
       date: fmtDate(job.invoicedOn || todayStr(), { month:"long", day:"numeric", year:"numeric" }),
       customer: c.name || "", address: c.address || "", city: c.city || "", phone: c.phone ? fmtPhone(c.phone) : "",
-      type: job.type, jobNo: job.no,
+      type: Store.workLabel(job.type, job.service), jobNo: job.no,
       when: job.scheduledDate ? fmtDateLong(job.scheduledDate) : "",
       terms: Store.termsLine(job),
       description: job.description || "",
@@ -2095,6 +2095,23 @@ const Store = {
     this.data.estimates  = this.data.estimates  || [];
     this.data.priceBook  = this.data.priceBook  || seedPriceBook();
     this.data.counterEst = this.data.counterEst || 2000;
+    this.data.jobs  = this.data.jobs  || [];
+    this.data.leads = this.data.leads || [];
+    /* Added when the job type stopped being a guess. Records made before
+       that never kept what the customer ticked on the form, so take it back
+       off the lead where the lead is still around. The type itself is left
+       alone — some of it he set by hand, and that is his to change. */
+    this.data.leads.forEach(l => {
+      const own = String(l.service || ""); if (!own) return;
+      [...this.data.jobs, ...this.data.estimates].forEach(r => {
+        if (r.fromLead === l.id && r.service == null) r.service = own;
+      });
+    });
+    (this.data.estimates || []).forEach(e => {
+      if (e.jobId == null || !e.service) return;
+      const j = this.job(e.jobId);
+      if (j && j.service == null) j.service = e.service;
+    });
     // Added with waivers.
     this.data.waiverTemplates = this.data.waiverTemplates || seedWaiverTemplates();
     this.data.signedWaivers   = this.data.signedWaivers   || [];
@@ -2387,7 +2404,8 @@ const Store = {
     const job = {
       id: uid("job"), no: this.nextJobNo(), createdAt: Date.now(),
       customerId: opts.customerId,
-      type: e.type, priority: opts.priority || "Normal",
+      type: e.type, service: String(e.service || ""),
+      priority: opts.priority || "Normal",
       description: e.description,
       scheduledDate: opts.scheduledDate || null,
       window: opts.window || "Anytime",
@@ -2722,7 +2740,7 @@ const Store = {
       eta: this.bumpEta(z.eta, bumpMins),
       day: this.dayWord(job && job.scheduledDate),
       window: job ? fieldWindow(job.window) : "",
-      work: job ? String(job.type).toLowerCase() : "the work",
+      work: job ? "the " + this.workPhrase(job.type, job.service) : "the work",
       pay_link: pay.url ? ` Pay here: ${pay.url}` : ""
     };
   },
@@ -3012,7 +3030,7 @@ const Store = {
     const j = {
       id: uid("job"), no: this.nextJobNo(), createdAt: Date.now(),
       customerId: c.id,
-      type: this.leadJobType(lead),
+      type: this.leadJobType(lead), service: String(lead.service || ""),
       priority: "Normal",
       description: this.leadStory(lead),
       scheduledDate: null, window: "Anytime",
@@ -3034,7 +3052,8 @@ const Store = {
       customerId: found ? found.id : null,
       lead: found ? null : { name: lead.name, phone: lead.phone, email: lead.email,
                              address: lead.address, city: "Edmonton" },
-      type: this.leadJobType(lead), status: "draft",
+      type: this.leadJobType(lead), service: String(lead.service || ""),
+      status: "draft",
       description: this.leadStory(lead),
       validDays: 30, createdAt: Date.now(), sentAt: null, decidedAt: null, jobId: null,
       items: [], materials: [], fromLead: lead.id,
@@ -3051,18 +3070,66 @@ const Store = {
     const bits = [];
     if (lead.what) bits.push(lead.what);
     if (lead.timing) bits.push(`They said they're free: ${lead.timing}.`);
-    if (!bits.length) bits.push(lead.service || "Website inquiry — no detail given.");
+    // What they ticked on the form stays on the record even when they also
+    // wrote a description. The type is a guess off this; if the guess is
+    // wrong he can only see that if their own answer is still here.
+    if (lead.service) bits.push(`Picked on the form: ${lead.service}.`);
+    if (!bits.length) bits.push("Website inquiry — no detail given.");
     return bits.join("\n\n");
   },
-  /* The form's own service wording rarely matches a job type exactly. Take
-     the closest one we have and leave it editable rather than guessing hard. */
+  typeWords(s){
+    return String(s || "").toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ")
+      .filter(w => w.length > 2);
+  },
+  /* How the type reads to a customer, always after the word "the". The
+     two-sided types lose the slash. "Other" is honest on his screen but
+     useless in a sentence — "the estimate for the other" — so their own
+     words off the form stand in, and a shower rebuild reads as a shower
+     rebuild. */
+  workPhrase(type, service){
+    const t = String(type || "").trim();
+    if (t && t !== "Other") return t.split("/")[0].trim().toLowerCase();
+    const own = String(service || "").trim()
+      .replace(/\s*[-\u2013\u2014/]\s*/g, " ").replace(/\s+/g, " ");
+    return own ? own.toLowerCase() : "work you asked about";
+  },
+  /* The form's own wording rarely matches a job type exactly, so this
+     matches on words rather than whole strings: "leaks" is Leak Repair,
+     "drains" is Drain Cleaning, "heating" is the boiler.
+
+     What it will not do is guess. The old fallback was JOB_TYPES[0], which
+     happens to be Drain Cleaning — so anything it could not place came out
+     labelled a drain job with complete confidence, and that is what went
+     out in a text to a customer about her shower. Unknown is "Other". */
+  /* The same thing title-cased for the head of an invoice, where "Other"
+     would read like a filing error. "Service call" is what the trade calls
+     a job it has no better name for. */
+  workLabel(type, service){
+    const t = String(type || "").trim();
+    if (t && t !== "Other") return t;
+    const own = String(service || "").trim();
+    return own ? own.charAt(0).toUpperCase() + own.slice(1) : "Service call";
+  },
   leadJobType(lead){
-    const want = String(lead.service || "").toLowerCase();
-    if (!want) return JOB_TYPES[0];
-    const exact = JOB_TYPES.find(t => t.toLowerCase() === want);
+    const want = this.typeWords(lead.service);
+    if (!want.length) return "Other";
+
+    const exact = JOB_TYPES.find(t => t.toLowerCase() === String(lead.service||"").toLowerCase().trim());
     if (exact) return exact;
-    const near = JOB_TYPES.find(t => want.includes(t.toLowerCase()) || t.toLowerCase().includes(want));
-    return near || JOB_TYPES[0];
+
+    // a word counts as shared if either is a prefix of the other, which
+    // carries plurals and -ing endings: leaks/leak, heating/heat
+    const near = (a, b) => a === b ||
+      (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
+
+    let best = null, bestScore = 0;
+    for (const t of JOB_TYPES){
+      if (t === "Other") continue;
+      const mine = this.typeWords(t);
+      const score = mine.filter(m => want.some(w => near(w, m))).length;
+      if (score > bestScore){ best = t; bestScore = score; }
+    }
+    return best || "Other";
   },
 
   nextWaiverNo(){
@@ -6323,7 +6390,7 @@ function openJobForm(id){
 
       <div class="row2">
         <div class="field"><label>Job type</label>
-          <select class="input" id="f-type">${JOB_TYPES.map(t=>`<option${sel(t,j?j.type:"Drain Cleaning")}>${esc(t)}</option>`).join("")}</select></div>
+          <select class="input" id="f-type">${JOB_TYPES.map(t=>`<option${sel(t,j?j.type:"Other")}>${esc(t)}</option>`).join("")}</select></div>
         <div class="field"><label>Priority</label>
           <select class="input" id="f-priority">${PRIORITIES.map(p=>`<option${sel(p,j?j.priority:"Normal")}>${esc(p)}</option>`).join("")}</select></div>
       </div>
@@ -6733,7 +6800,7 @@ function openEstimateForm(id){
 
       <div class="row2">
         <div class="field"><label>Work type</label>
-          <select class="input" id="e-type">${JOB_TYPES.map(t=>`<option${sel(t,e?e.type:"Water Heater")}>${esc(t)}</option>`).join("")}</select></div>
+          <select class="input" id="e-type">${JOB_TYPES.map(t=>`<option${sel(t,e?e.type:"Other")}>${esc(t)}</option>`).join("")}</select></div>
         <div class="field"><label>Valid for (days)</label>
           <input class="input" id="e-valid" type="number" min="1" step="1" value="${esc(e?(e.validDays||30):30)}"></div>
       </div>
@@ -8626,7 +8693,7 @@ async function sendInvoiceLink(id){
   const url = invoiceLinkUrl(token);
   const first = String(c.name).trim().split(/\s+/)[0] || "there";
   const owed = Store.balance(j);
-  const work = String(j.type).toLowerCase();
+  const work = Store.workPhrase(j.type, j.service);
   const settled = Store.payState(j) === "paid" || owed <= 0.005;
   const note = settled
     ? `Hi ${first} — receipt for the ${work}, ${money(Store.invoiceTotal(j))}, paid in ` +
@@ -8769,7 +8836,7 @@ async function sendForSignature(id){
   const url = signLinkUrl(token);
   const first = String(c.name).trim().split(/\s+/)[0] || "there";
   const gst = Store.data.settings.gst;
-  const note = `Hi ${first} — here's the estimate for the ${String(e.type).toLowerCase()}, ` +
+  const note = `Hi ${first} — here's the estimate for the ${Store.workPhrase(e.type, e.service)}, ` +
     `${money(gst ? Store.estimateGross(e) : Store.estimateTotal(e))}` +
     `${gst ? ` (incl. ${Store.taxLabel()})` : ""}. ` +
     `Have a look and approve it here when you're happy: ${url}`;
@@ -8944,7 +9011,7 @@ function sendEstimate(id){
   const note =
 `Hi ${String(c.name).trim().split(/\s+/)[0] || "there"},
 
-Thanks for getting in touch. Here's the estimate for the ${String(e.type).toLowerCase()}:
+Thanks for getting in touch. Here's the estimate for the ${Store.workPhrase(e.type, e.service)}:
 
 ${(e.items || []).map(i => Store.estIsFlat(e)
   ? `  ${i.desc}`
