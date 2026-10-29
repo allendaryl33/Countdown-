@@ -5029,7 +5029,17 @@ function viewEstimates(){
           </td>
           <td><div>${esc(e.type)}</div><div class="t-sub">${(e.items||[]).length} line${(e.items||[]).length===1?"":"s"}</div></td>
           <td class="t-sub">${esc(fmtStamp(e.createdAt).split(" · ")[0])}</td>
-          <td>${estBadge(e.status)}${job?`<div class="t-sub" style="margin-top:3px">→ job #${job.no}</div>`:""}</td>
+          <td>${estBadge(e.status)}${job?`<div class="t-sub" style="margin-top:3px">→ job #${job.no}</div>`:""}
+            ${(() => {
+              if (e.status !== "sent") return "";
+              const lk = (Cloud.signLinks || [])
+                .filter(l => l.estimate_id === e.id && !l.signed_at)
+                .sort((a,b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+              if (!lk) return "";
+              return `<div class="t-sub" style="margin-top:3px;font-weight:600;color:${
+                lk.viewed_at ? "#2d6a4a" : "var(--muted)"}">${
+                lk.viewed_at ? "👀 " : ""}${esc(openedNote(lk))}</div>`;
+            })()}</td>
           <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
           <td class="num" style="white-space:nowrap">
             ${e.status === "approved" && !e.jobId
