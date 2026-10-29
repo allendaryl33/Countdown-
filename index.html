@@ -2758,8 +2758,13 @@ const Store = {
       (!j.payment || j.payment.status === "unbilled"));
   },
   /* Billed and still waiting on the money. */
+  /* Cancelled work is not owed and was not collected. Leaving it in the
+     invoice lists meant a cancelled job still reading as $680 out there,
+     which is the one number on that screen he has to be able to trust.
+     The payment record is left alone, so un-cancelling restores it whole. */
   outstanding(){
-    return this.data.jobs.filter(j => j.payment && j.payment.status === "invoiced");
+    return this.data.jobs.filter(j => j.status !== "cancelled"
+      && j.payment && j.payment.status === "invoiced");
   },
   setPayment(job, fields){
     const prev = job.payment ? job.payment.status : "unbilled";
@@ -2852,7 +2857,8 @@ const Store = {
       (!j.payment || j.payment.status === "unbilled") && this.jobTotal(j) > 0);
   },
   invPaid(){
-    return this.data.jobs.filter(j => j.payment && j.payment.status === "paid");
+    return this.data.jobs.filter(j => j.status !== "cancelled"
+      && j.payment && j.payment.status === "paid");
   },
   /* How long it's been out. Falls back to the timestamp for anything
      invoiced before invoice numbers existed. */
@@ -4455,15 +4461,15 @@ function viewSchedule(){
 function scheduleHint(mode){
   const n = (list) => list.length;
   if (mode === "day"){
-    const c = n(Store.data.jobs.filter(j => j.scheduledDate === App.date));
+    const c = n(Store.data.jobs.filter(j => j.scheduledDate === App.date && j.status !== "cancelled"));
     return `${c} job${c===1?"":"s"} · drag a card into a time slot to book it in`;
   }
   if (mode === "week"){
     const days = weekDays(App.date);
-    const c = n(Store.data.jobs.filter(j => days.includes(j.scheduledDate)));
+    const c = n(Store.data.jobs.filter(j => days.includes(j.scheduledDate) && j.status !== "cancelled"));
     return `${c} job${c===1?"":"s"} this week · drag to change the day or the tech`;
   }
-  const c = n(Store.data.jobs.filter(j => sameMonth(j.scheduledDate, App.date)));
+  const c = n(Store.data.jobs.filter(j => sameMonth(j.scheduledDate, App.date) && j.status !== "cancelled"));
   return `${c} job${c===1?"":"s"} this month · click a day to open it`;
 }
 
@@ -4482,7 +4488,7 @@ function dayBoard(){
       <div style="font-weight:600;color:var(--text);margin-bottom:4px">No technicians yet.</div>
       <div>Add yourself under Technicians and the board fills in.</div></div>`;
   }
-  const dayJobs = Store.data.jobs.filter(j => j.scheduledDate === d);
+  const dayJobs = Store.data.jobs.filter(j => j.scheduledDate === d && j.status !== "cancelled");
   const cols = [
     { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
     ...Store.activeTechs().map(t => ({ key:t.id, name:t.name, color:t.color, skill:t.skill }))
@@ -4544,7 +4550,7 @@ function slotLabel(w){
 function weekGrid(){
   const days = weekDays(App.date);
   const today = todayStr();
-  const inWeek = Store.data.jobs.filter(j => days.includes(j.scheduledDate));
+  const inWeek = Store.data.jobs.filter(j => days.includes(j.scheduledDate) && j.status !== "cancelled");
   const rows = [
     { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
     ...Store.activeTechs().map(t => ({ key:t.id, name:t.name, color:t.color, skill:t.skill }))
@@ -4605,7 +4611,8 @@ function monthGrid(){
   <div class="monthgrid">
     ${names.map(n => `<div class="mo-head">${esc(n)}</div>`).join("")}
     ${cells.map(d => {
-      const list = sortForBoard(Store.data.jobs.filter(j => j.scheduledDate === d));
+      const list = sortForBoard(Store.data.jobs.filter(j =>
+        j.scheduledDate === d && j.status !== "cancelled"));
       const shown = list.slice(0, PER_CELL);
       const rest = list.length - shown.length;
       return `<div class="mo-cell ${sameMonth(d, App.date)?"":"out"} ${d===today?"today":""}"
