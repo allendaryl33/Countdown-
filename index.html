@@ -1898,11 +1898,9 @@ const Cloud = {
         customer: c.name,
         address: [c.address, c.city].filter(Boolean).join(", "),
         description: e.description || "",
-        // flat rate ships the scope without per-line money; the page reads
-        // the absent price as "no figure against this line"
         flat: Store.estIsFlat(e),
         items: (e.items || []).map(i => Store.estIsFlat(e)
-          ? ({ desc: i.desc })
+          ? ({ desc: i.desc, qty: 0, price: 0 })
           : ({ desc:i.desc, qty:i.qty, price:i.price })),
         taxLabel: Store.taxLabel(),
         tax, total: Store.estimateGross(e),
