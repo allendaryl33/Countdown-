@@ -167,7 +167,9 @@ function render(d){
       ${p.description ? `<h2>The work</h2><p class="desc">${esc(p.description)}</p>` : ""}
 
       <table>
-        ${items.map(i => `<tr>
+        ${items.map(i => p.flat
+          ? `<tr><td colspan="2">${esc(i.desc)}</td></tr>`
+          : `<tr>
           <td>${i.qty > 1 ? esc(i.qty) + " &times; " : ""}${esc(i.desc)}</td>
           <td class="n">${esc(money(i.qty * i.price))}</td></tr>`).join("")}
         ${p.taxLabel ? `<tr><td>${esc(p.taxLabel)}</td><td class="n">${esc(money(p.tax))}</td></tr>` : ""}
