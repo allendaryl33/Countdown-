@@ -1922,7 +1922,7 @@ const Cloud = {
   async fetchSignLinks(){
     await this.ensureToken();
     const rows = await this.call(
-      "/rest/v1/estimate_links?select=token,estimate_id,signer_name,signer_role,signature,signed_at,expires_at,created_at");
+      "/rest/v1/estimate_links?select=token,estimate_id,signer_name,signer_role,signature,signed_at,expires_at,created_at,viewed_at,view_count");
     return Array.isArray(rows) ? rows : [];
   },
 
@@ -4649,6 +4649,28 @@ function fieldWindow(w){
 }
 
 /* "8:00–10:00" is too wide for a month cell; "8a" is enough. */
+/* "Sent three days ago, never opened" and "opened four times, no answer"
+   are two different phone calls. It says the page was opened on a device
+   holding the link — not that anybody read it, and the first view is often
+   his own when he checks the link works. */
+function openedNote(link){
+  if (!link) return "";
+  if (!link.viewed_at) return "Not opened yet";
+  const n = Number(link.view_count) || 1;
+  return `Opened ${sinceShort(link.viewed_at)}${n > 1 ? ` · ${n} times` : ""}`;
+}
+function sinceShort(ts){
+  const ms = Date.now() - Date.parse(ts);
+  if (!(ms >= 0)) return "just now";
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1)  return "just now";
+  if (mins < 60) return mins + (mins === 1 ? " minute ago" : " minutes ago");
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)  return hrs + (hrs === 1 ? " hour ago" : " hours ago");
+  const days = Math.floor(hrs / 24);
+  return days + (days === 1 ? " day ago" : " days ago");
+}
+
 function shortWindow(w){
   if (!w) return "";
   if (w.startsWith("ASAP")) return "ASAP";
@@ -5211,6 +5233,8 @@ function viewInvoices(){
       when   = days == null ? "sent" : days === 0 ? "sent today"
              : `sent ${days} day${days===1?"":"s"} ago`;
       if (due && !over) when += ` · due ${fmtDate(due)}`;
+      const seen = (Cloud.invoiceLinks || []).find(l => l.job_id === j.id);
+      if (seen) when += ` · ${seen.viewed_at ? "👀 " : ""}${openedNote(seen)}`;
       // Both facts can be true at once — an invoice can be part paid and
       // still overdue — and the one that got dropped was the one he'd want.
       const bits = [];
@@ -6488,6 +6512,9 @@ function openEstimate(id){
             ? "Send a fresh one when you're ready."
             : `Sent ${sent === 0 ? "today" : sent === 1 ? "yesterday" : sent + " days ago"} —
                waiting on them. It lands here the moment they sign.`}</div>
+          <div class="oc-s" style="margin-top:4px;font-weight:600;color:${
+            out.viewed_at ? "var(--green-ink,#2d6a4a)" : "var(--muted)"}">
+            ${out.viewed_at ? "👀 " : ""}${esc(openedNote(out))}</div>
           <div style="margin-top:9px;display:flex;gap:8px;flex-wrap:wrap">
             ${dead ? "" : check}
             <button class="btn sm" data-copy-link="${esc(out.token)}">Copy the link again</button></div>

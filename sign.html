@@ -329,6 +329,8 @@ window.addEventListener("hashchange", () => location.reload());
       return;
     }
     render(d);
+    // Tell him it was opened. Never block the page on it.
+    rpc("mark_estimate_viewed", { p_token: TOKEN }).catch(() => {});
   } catch(err){
     state("⚠", "Couldn't load it",
       /Failed to fetch|NetworkError|Load failed/i.test(err.message || "")
