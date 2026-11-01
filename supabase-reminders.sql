@@ -58,5 +58,11 @@ revoke all on function drop_push_sub(text) from public, anon;
 grant execute on function save_push_sub(text,text,text,text) to authenticated;
 grant execute on function drop_push_sub(text) to authenticated;
 
--- The Edge Function reads and prunes the table as service_role.
+-- The Edge Function runs as service_role: it prunes dead subscriptions, and
+-- reads the shop to find tomorrow's unconfirmed jobs. This project does not
+-- hand service_role privileges on new tables by default, so both are needed
+-- explicitly — without the second one the function only fails once somebody
+-- has actually subscribed, because until then it returns before reading the
+-- shop at all.
 grant select, delete on push_subs to service_role;
+grant select on public.shops to service_role;
