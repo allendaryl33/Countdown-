@@ -48,7 +48,15 @@ begin
   delete from push_subs where endpoint = p_endpoint;
 end $$;
 
-revoke all on function save_push_sub(text,text,text,text) from public;
-revoke all on function drop_push_sub(text) from public;
-grant execute on function save_push_sub(text,text,text,text) to anon;
-grant execute on function drop_push_sub(text) to anon;
+-- The app is signed in when it saves a subscription, so PostgREST runs these
+-- as `authenticated`, not `anon`. Granting anon instead was the mistake the
+-- first time round: the app got "permission denied for function
+-- save_push_sub", and anyone holding the public key could have written rows.
+-- Only the signed-in app ever calls these.
+revoke all on function save_push_sub(text,text,text,text) from public, anon;
+revoke all on function drop_push_sub(text) from public, anon;
+grant execute on function save_push_sub(text,text,text,text) to authenticated;
+grant execute on function drop_push_sub(text) to authenticated;
+
+-- The Edge Function reads and prunes the table as service_role.
+grant select, delete on push_subs to service_role;
