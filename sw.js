@@ -31,9 +31,17 @@ self.addEventListener("activate", e => {
   })());
 });
 
+/* Supabase traffic is never cached. An offline fallback of the last shop
+   read would hand him yesterday's jobs looking like today's, which is worse
+   than an honest failure — the app already knows how to say it is offline. */
+const PASS_THROUGH = /^\/(rest|auth|functions|storage)\//;
+
 self.addEventListener("fetch", e => {
   const req = e.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  if (PASS_THROUGH.test(url.pathname)) return;
   e.respondWith((async () => {
     try {
       const fresh = await fetch(req, { cache: "no-store" });
