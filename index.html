@@ -8062,7 +8062,7 @@ function openMessage(jobId, tplId){
   if (!job) return;
   const c = Store.customer(job.customerId);
   if (!c){ toast("No customer on this job.", "err"); return; }
-  MsgState = { tplId: tplId || "onway", bump: 0, jobId };
+  MsgState = { tplId: tplId || "onway", bump: 0, jobId, asking: null };
   renderMessageSheet();
 }
 
@@ -8103,6 +8103,16 @@ function renderMessageSheet(){
         <span id="msg-count">${body.length} characters</span>
       </div>
 
+      ${MsgState.asking ? `
+      <div class="section-title" style="margin-top:18px">Did it go?</div>
+      <div class="msg-send">
+        <button class="btn accent" data-msg-went="yes">Yes, it went</button>
+        <button class="btn" data-msg-went="no">No — I backed out</button>
+      </div>
+      <p class="t-sub" style="margin:12px 0 0">
+        The phone doesn't tell the app whether you pressed send, so nothing is written
+        down until you say. Backing out leaves the job exactly as it was.
+      </p>` : `
       <div class="section-title" style="margin-top:18px">Send it</div>
       <div class="msg-send">
         ${tel ? `<a class="btn accent" id="msg-sms" href="#" data-msg-send="text">💬 Text ${esc(fmtPhone(c.phone))}</a>`
@@ -8113,7 +8123,7 @@ function renderMessageSheet(){
       <p class="t-sub" style="margin:12px 0 0">
         Your phone sends it, from your own number — so if they reply, it comes to you.
         On a computer, use Copy.
-      </p>
+      </p>`}
     </div>
     <div class="modal-foot">
       <button class="btn sm ghost" data-action="edit-messages">Edit templates &amp; zones</button>
@@ -8135,6 +8145,43 @@ function renderMessageSheet(){
   };
   ta.addEventListener("input", sync);
   sync();
+}
+
+/* Handed to the phone, nothing recorded yet. Kept on disk as well as in
+   memory, because iOS can throw the page away while Messages is in front
+   and the question has to survive that. */
+function beginSend(how){
+  Store.data.settings.pendingSend =
+    { jobId: MsgState.jobId, tplId: MsgState.tplId, bump: MsgState.bump, how, at: Date.now() };
+  Store.save();
+  MsgState.asking = how;
+  renderMessageSheet();
+}
+
+function finishSend(){
+  const p = Store.data.settings.pendingSend;
+  const how = p ? p.how : (MsgState.asking || "text");
+  logMessageSent(how === "text" ? "Texted" : how === "email" ? "Emailed" : "Copied message for");
+  Store.data.settings.pendingSend = null;
+  Store.save();
+  MsgState.asking = null;
+  closeModal();
+  render();
+  toast("Marked as sent", "ok");
+}
+
+/* Coming back from Messages, or opening the app again after it was dropped
+   while Messages was in front: the question is still owed an answer. */
+function resumePendingSend(){
+  const p = Store.data.settings.pendingSend;
+  if (!p || !Store.job(p.jobId)) { 
+    if (p){ Store.data.settings.pendingSend = null; Store.save(); }
+    return;
+  }
+  openMessage(p.jobId, p.tplId);
+  MsgState.bump = p.bump || 0;
+  MsgState.asking = p.how;
+  renderMessageSheet();
 }
 
 function logMessageSent(how){
@@ -10020,7 +10067,7 @@ document.addEventListener("click", e => {
     if (how === "copy"){
       const ta = $("#msg-body");
       ta.select();
-      const done = () => { logMessageSent("Copied message for"); toast("Copied — paste it wherever", "ok"); };
+      const done = () => { beginSend("copy"); toast("Copied — paste it wherever", "ok"); };
       if (navigator.clipboard && navigator.clipboard.writeText){
         navigator.clipboard.writeText(ta.value).then(done, () => {
           try { document.execCommand("copy"); done(); } catch(_){ toast("Press Ctrl/Cmd+C to copy", "err"); }
@@ -10030,8 +10077,20 @@ document.addEventListener("click", e => {
       }
       return;
     }
-    // The anchor's own href does the opening; just record that it happened.
-    logMessageSent(how === "text" ? "Texted" : "Emailed");
+    // The anchor's own href hands it to the phone. Whether he then pressed
+    // send is not something the phone tells us, so it is not written down
+    // until he says it went — backing out used to count as sent.
+    beginSend(how);
+    return;
+  }
+
+  const went = hit("[data-msg-went]");
+  if (went){
+    if (went.dataset.msgWent === "yes") finishSend();
+    else {
+      Store.data.settings.pendingSend = null; Store.save();
+      MsgState.asking = null; renderMessageSheet();
+    }
     return;
   }
 
@@ -10703,7 +10762,10 @@ Cloud.boot();
 
 /* Coming back to the app is the moment another device's work should land. */
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") Cloud.syncNow({ quiet:true });
+  if (document.visibilityState !== "visible") return;
+  Cloud.syncNow({ quiet:true });
+  // back from Messages: ask whether it actually went
+  if (Store.data.settings.pendingSend && !(MsgState && MsgState.asking)) resumePendingSend();
 });
 window.addEventListener("online", () => Cloud.syncNow({ quiet:true }));
 
@@ -10711,6 +10773,9 @@ window.addEventListener("online", () => Cloud.syncNow({ quiet:true }));
    installed app serving yesterday's build. Registering it is harmless when
    reminders are off, so it goes up either way. */
 Nudge.register();
+
+/* Dropped while Messages was in front: pick the question back up. */
+if (Store.data.settings.pendingSend) resumePendingSend();
 </script>
 </body>
 </html>
