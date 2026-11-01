@@ -1037,6 +1037,8 @@ function defaultMessages(){
   return [
     { id:"confirm", label:"Booked",
       body:"Hi {{first_name}} — {{tech}} from {{company}}. You're booked in for {{day}}, {{window}}, for {{work}}. Any questions, call {{phone}}." },
+    { id:"reminder", label:"Reminder, night before",
+      body:"Hi {{first_name}} — {{tech}} from {{company}}. Just confirming we're booked in for {{day}}, {{window}}, for {{work}}. If anything's changed, give me a call on {{phone}}. See you then." },
     { id:"onway", label:"On my way",
       body:"Hi {{first_name}} — {{tech}} from {{company}}. Heading your way now, {{eta}} out. See you shortly." },
     { id:"late", label:"Running late",
@@ -2162,6 +2164,14 @@ const Store = {
     this.data.counterInv = this.data.counterInv || 1000;
     this.data.settings.zones    = this.data.settings.zones    || defaultZones();
     this.data.settings.messages = this.data.settings.messages || defaultMessages();
+    // Added with the night-before nudge. His own edits to the other four
+    // stay as they are; only what is missing is put back.
+    defaultMessages().forEach(d => {
+      if (!this.data.settings.messages.some(m => m.id === d.id)){
+        const at = d.id === "reminder" ? 1 : this.data.settings.messages.length;
+        this.data.settings.messages.splice(at, 0, Object.assign({}, d));
+      }
+    });
     this.data.customers.forEach(c => { if (!c.zone) c.zone = "city"; });
     // Added with time tracking.
     this.data.jobs.forEach(j => { if (!j.timeEntries) j.timeEntries = []; });
@@ -2722,6 +2732,22 @@ const Store = {
   zones(){ return this.data.settings.zones || defaultZones(); },
   zone(id){ return this.zones().find(z => z.id === id) || this.zones()[0]; },
   messages(){ return this.data.settings.messages || defaultMessages(); },
+
+  /* Tomorrow's work that has not been confirmed with the customer yet.
+     The stamp records the date it was sent *for*, so moving a job to another
+     day puts it back on the list rather than leaving them told the wrong
+     thing. */
+  remindDate(){ return addDays(todayStr(), 1); },
+  needsReminder(){
+    const d = this.remindDate();
+    return this.data.jobs.filter(j =>
+      j.scheduledDate === d && j.status !== "cancelled" &&
+      (j.reminded || {}).forDate !== d && this.customerPhone(j));
+  },
+  customerPhone(job){
+    const c = this.customer(job.customerId);
+    return c && c.phone ? c.phone : "";
+  },
 
   /* The work types are his to curate — the trade he does changes. JOB_TYPES
      is only the list the app shipped with. "Other" is always on the end
@@ -4342,6 +4368,32 @@ function viewToday(){
         <button class="btn sm accent" data-action="resync-demo">Move the sample to today</button>
       </div>
     </div>` : ""}
+
+  ${(() => {
+    const due = Store.needsReminder();
+    if (!due.length) return "";
+    const when = fmtDate(Store.remindDate(), { weekday:"long", month:"short", day:"numeric" });
+    return `
+    <div class="card" style="margin-bottom:14px;border-left:4px solid var(--amber)">
+      <div class="card-body" style="padding:14px 16px">
+        <strong>${due.length} job${due.length===1?"":"s"} tomorrow not confirmed yet</strong>
+        <div class="t-sub" style="margin:4px 0 10px">${esc(when)} — a line the night before
+          saves the empty driveway.</div>
+        ${due.map(j => {
+          const c = Store.customer(j.customerId);
+          return `
+          <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;
+                      padding:8px 0;border-top:1px solid var(--line)">
+            <div style="min-width:0">
+              <div style="font-weight:600">${esc(c ? c.name : "—")}</div>
+              <div class="t-sub">${esc(fieldWindow(j.window))} · ${esc(Store.workLabel(j.type, j.service))}</div>
+            </div>
+            <button class="btn sm accent" data-message="${esc(j.id)}:reminder">Confirm</button>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+  })()}
 
   <div class="today-head">
     <span class="big">${open.length ? open.length + " stop" + (open.length===1?"":"s") + " left" : "Day's done"}</span>
@@ -6062,6 +6114,32 @@ function viewData(){
             late, finished — and the travel time for each zone. Your phone sends them, from your
             own number.</p>
           <button class="btn" data-action="edit-messages">Edit templates &amp; zones</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Night-before reminder</h3></div>
+        <div class="card-body">
+          ${(() => {
+            const st = Nudge.state();
+            if (st === "unsupported") return `<p class="t-sub" style="margin-top:0">This browser
+              can't do notifications. Open the app on your phone to set it up.</p>`;
+            if (st === "on") return `<p class="t-sub" style="margin-top:0">On. In the evening,
+              when there are jobs booked for the next day you haven't confirmed, your phone
+              buzzes. Tapping it opens the list with a Confirm button beside each one —
+              the text still goes from your own number.</p>
+              <button class="btn" data-action="nudge-off">Turn it off</button>`;
+            if (st === "blocked") return `<p class="t-sub" style="margin-top:0">Notifications are
+              blocked for this app. iOS Settings → Notifications → Poseidon, switch them on, then
+              come back.</p>`;
+            return `<p class="t-sub" style="margin-top:0">Get a buzz in the evening when the next
+              day has jobs you haven't confirmed with the customer yet. Nothing is sent to anyone
+              but you, and nothing goes out on its own — you still tap send.</p>
+              ${Nudge.installed() ? "" : `<p class="t-sub"><strong>Add the app to your home
+                screen first.</strong> iOS only allows notifications from the installed app.</p>`}
+              <button class="btn primary" data-action="nudge-on"
+                ${Nudge.installed() ? "" : "disabled"}>Turn on reminders</button>`;
+          })()}
         </div>
       </div>
 
@@ -8064,6 +8142,11 @@ function logMessageSent(how){
   if (!job) return;
   const label = Store.message(MsgState.tplId).label;
   Store.addLog(job, `${how} customer: ${label}${MsgState.bump ? ` (+${MsgState.bump} min)` : ""}`);
+  // Stamped against the day it was sent for, so a job that moves is asked
+  // about again instead of leaving them expecting the old date.
+  if (MsgState.tplId === "reminder"){
+    job.reminded = { at: Date.now(), forDate: job.scheduledDate, how };
+  }
   Store.save();
 }
 
@@ -8132,6 +8215,124 @@ function saveMessageSetup(){
   Store.save(); closeModal(); render();
   toast("Messages saved", "ok");
 }
+
+/* ---------- The night-before buzz ----------
+
+   A push cannot be scheduled from the phone. The sequence is: this asks
+   iOS for permission and gets a subscription, Supabase keeps it, and a
+   job there sends the push in the evening. Everything below is only the
+   phone's half.
+
+   On iOS this works only in the installed home-screen app, and only from
+   a real tap — not on page load. Deleting the app throws the subscription
+   away, which is the other reason the service worker takes updates over
+   the network instead. */
+
+const VAPID_PUBLIC = "BMfeoozGYBjdOHKH8fybAbIkVQ10a7hNsAnLAl6E6W30PcZtvsbPxGRB2FBF97HYk0BGql7-lCI5QjcXL7Yy5cA";
+
+const Nudge = {
+  reg: null,
+
+  supported(){
+    return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  },
+  /* Safari only offers push to an app that was added to the home screen. */
+  installed(){
+    return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  },
+  state(){
+    if (!this.supported()) return "unsupported";
+    if (Notification.permission === "denied") return "blocked";
+    if (!Store.data.settings.pushSub) return "off";
+    return "on";
+  },
+
+  async register(){
+    if (!("serviceWorker" in navigator)) return null;
+    try { this.reg = await navigator.serviceWorker.register("sw.js"); return this.reg; }
+    catch (_){ return null; }
+  },
+
+  b64ToBytes(s){
+    const pad = "=".repeat((4 - s.length % 4) % 4);
+    const raw = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  },
+  bytesToB64(buf){
+    return btoa(String.fromCharCode(...new Uint8Array(buf)))
+      .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  },
+
+  async enable(){
+    if (!this.supported())
+      return { ok:false, why:"This browser can't do notifications." };
+    if (!this.installed())
+      return { ok:false, why:"Add the app to your home screen first — iOS only allows " +
+                            "notifications from the installed app, not from Safari." };
+    if (!Cloud.configured())
+      return { ok:false, why:"The buzz is sent from Supabase, so the app has to be connected first." };
+
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted")
+      return { ok:false, why: perm === "denied"
+        ? "Notifications are blocked for this app in iOS Settings."
+        : "Permission wasn't given." };
+
+    const reg = this.reg || await this.register();
+    if (!reg) return { ok:false, why:"The background worker wouldn't start." };
+    await navigator.serviceWorker.ready;
+
+    let sub;
+    try {
+      sub = await reg.pushManager.getSubscription()
+         || await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: this.b64ToBytes(VAPID_PUBLIC)
+            });
+    } catch (err){
+      return { ok:false, why:"The phone refused the subscription. " + (err.message || "") };
+    }
+
+    const json = sub.toJSON();
+    const row = {
+      endpoint: json.endpoint,
+      p256dh: json.keys && json.keys.p256dh,
+      auth: json.keys && json.keys.auth,
+      shop: Cloud.cfg.shop || "shop",
+      at: Date.now()
+    };
+    try { await this.save(row); }
+    catch (err){ return { ok:false, why:"Couldn't hand the subscription to Supabase. " +
+                                        (err.offline ? "No connection." : (err.message || "")) }; }
+
+    Store.data.settings.pushSub = row;
+    Store.save();
+    return { ok:true };
+  },
+
+  async save(row){
+    return Cloud.call("/rest/v1/rpc/save_push_sub", {
+      method: "POST",
+      body: { p_endpoint: row.endpoint, p_p256dh: row.p256dh,
+              p_auth: row.auth, p_shop: row.shop }
+    });
+  },
+
+  async disable(){
+    const reg = this.reg || await this.register();
+    try {
+      const sub = reg && await reg.pushManager.getSubscription();
+      if (sub){
+        await Cloud.call("/rest/v1/rpc/drop_push_sub", {
+          method:"POST", body:{ p_endpoint: sub.endpoint }
+        }).catch(() => {});
+        await sub.unsubscribe();
+      }
+    } catch (_){ /* gone either way */ }
+    delete Store.data.settings.pushSub;
+    Store.save();
+  }
+};
 
 /* ---------- Work types ----------
    Held open in a working copy. The modal is rebuilt whenever a row is added,
@@ -10179,6 +10380,15 @@ document.addEventListener("click", e => {
     }
     case "edit-messages": openMessageSetup(); break;
     case "edit-types": openTypeSetup(); break;
+    case "nudge-on": (async () => {
+      const r = await Nudge.enable();
+      r.ok ? toast("Reminders on — you'll get a buzz the evening before", "ok")
+           : toast(r.why, "err");
+      render();
+    })(); break;
+    case "nudge-off": (async () => {
+      await Nudge.disable(); render(); toast("Reminders off", "ok");
+    })(); break;
     case "export-waivers": exportWaiversCsv(); break;
     case "new-customer": openCustomerForm(null); break;
     case "new-tech":     openTechForm(null); break;
@@ -10496,6 +10706,11 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") Cloud.syncNow({ quiet:true });
 });
 window.addEventListener("online", () => Cloud.syncNow({ quiet:true }));
+
+/* The worker is what receives the night-before push, and what stops the
+   installed app serving yesterday's build. Registering it is harmless when
+   reminders are off, so it goes up either way. */
+Nudge.register();
 </script>
 </body>
 </html>
