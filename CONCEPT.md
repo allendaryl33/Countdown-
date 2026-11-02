@@ -161,6 +161,64 @@ calendar you already keep, and asks for one thing back — the write-up.
 Notes live in the Artifact's own store, which means Claude can read them back
 later — ask for last month's Men's Group notes and they're there.
 
+## The Poseidon shell
+
+The layout was rebuilt on the bones of Poseidon Dispatch, the plumbing
+business's own board, because the shape was already proven on a phone in a
+basement. Structure is borrowed; the palette is not — a plumbing company's navy
+would be fancy dress on a home calendar.
+
+- **A rail, not a row of tabs.** Views live down the left with live counts, so
+  three overdue to-dos are visible from the board without opening anything.
+  Grouped by how often you touch them: `Day to day` (Board, Notes, To-dos) and
+  `When it matters` (Tasks, Projects, People). On a phone it becomes a bottom
+  bar, badge riding the tab.
+- **One rule about colour, carried over whole.** Brand colours and meaning
+  colours never mix. Amber means *this needs you* — nothing else, anywhere.
+  Red means *this is wrong*, and is spent entirely on double bookings.
+- **A status line that answers for the view you're on**, replacing three header
+  statistics that answered for the board no matter where you were standing.
+- **A sync lamp** in the rail foot, where the old "Calendar as of…" line only
+  ever showed on the board.
+- **The tray.** A board organised by day cannot show work that has no day, so
+  undated to-dos sit in a tray above it. Drag one onto a day heading or a month
+  cell to land it; tap it on a phone, where drag events never fire at all.
+
+## Week and month are grids
+
+Day and 2-day stay as lists — at that length a list reads better than two
+near-empty columns. Week is seven columns starting today, which is exactly the
+window already being watched, so switching to it costs no extra fetch. Both
+grids take the full width, dropping the write-up panel below the board.
+
+## Notes: catching things before you know what they are
+
+The quickest capture is talking into Telegram, so that is the path. Victor
+transcribes and writes it to a calendar named `Notes`, or titles it
+`NOTE: …` on any calendar — the same trick to-dos already use, so nothing new
+had to be taught. The app adopts each one into an inbox of cards you sort:
+→ To-do, → Task, Keep, Discard. Filing reuses the to-do path, tags and all, so
+`#backyard call the fence guy` lands in the right project without retyping.
+
+**In-app recording is not possible.** The artifact frame refuses microphone
+access and this account has no capability that grants it. Not a gap to fill
+later — a wall. Telegram is the capture route.
+
+## Double bookings
+
+The one piece of work/life syncing actually wanted: not coordination, just
+"don't let me book an emergency call-out over a date with Shiloh". Any two
+overlapping timed blocks are flagged in red and *named*, so you see what
+collided rather than that something did. Touching end-to-start is not a clash,
+all-day blocks are not, and anything marked moved or missed drops out of the
+way.
+
+It works across any calendars the board is watching, which means it needs
+nothing from Poseidon to be useful today — it already catches life-on-life
+collisions. Poseidon's jobs live in Supabase and nowhere else, so for work to
+take part, something has to mirror them onto a Google Calendar. Victor doing
+that is the route that leaves the live plumbing app untouched.
+
 ## Where it goes next
 
 1. **Two-way with Victor.** Write the close-out into the calendar event's
@@ -173,8 +231,9 @@ later — ask for last month's Men's Group notes and they're there.
 3. **Rhythm adherence.** `Life Mapping` is on the board 5×/week — how many
    actually held? The gap between the standing rhythm and the cleared blocks is
    the most honest metric in the app.
-4. **Voice capture.** You already talk to Victor. "Victor, close out Men's
-   Group: talked about X, I owe Dave a call" should land here.
+4. **Voice capture, the rest of it.** Notes land here now. The close-out does
+   not: "Victor, close out Men's Group: talked about X, I owe Dave a call"
+   should write straight into the block's write-up.
 5. **Sunday mode.** Reshape the whole page for the `Plan/Assess` block: the
    week in review on the left, next week's board on the right.
 
@@ -186,3 +245,8 @@ later — ask for last month's Men's Group notes and they're there.
   before going further.
 - How much should Jess see? A shared board changes the design a lot.
 - Is "missed" a status worth having, or does it just accumulate guilt?
+- Who mirrors Poseidon's jobs onto a calendar — Victor reading Supabase, or the
+  plumbing app writing one out as it schedules? Victor changes nothing that is
+  already live, which is the argument for it.
+- Are deliberate overlaps common enough that clashes need dismissing? Shipped
+  without that on purpose; noise will say.

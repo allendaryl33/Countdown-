@@ -14,6 +14,7 @@
   --shadow:0 1px 2px rgba(19,27,30,.06), 0 8px 24px -12px rgba(19,27,30,.18);
   --stripe-boost:none;
   --focus:#1F6F78;
+  --rail:#121A1D; --rail-text:#C7D3D5; --rail-dim:#7D9197; --rail-line:rgba(255,255,255,.08);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -27,6 +28,7 @@
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
     --stripe-boost:saturate(1.15) brightness(1.45);
     --focus:#5FC8D3;
+  --rail:#0A1114; --rail-text:#C7D3D5; --rail-dim:#728690; --rail-line:rgba(255,255,255,.07);
   }
 }
 :root[data-theme="dark"]{
@@ -40,6 +42,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
   --stripe-boost:saturate(1.15) brightness(1.45);
   --focus:#5FC8D3;
+  --rail:#0A1114; --rail-text:#C7D3D5; --rail-dim:#728690; --rail-line:rgba(255,255,255,.07);
 }
 *{box-sizing:border-box}
 /* Several things here set display, which otherwise beats the hidden attribute
@@ -343,7 +346,7 @@ button{font:inherit; color:inherit}
 .pj-block .n{font-family:"Newsreader",Georgia,serif; font-size:14.5px; line-height:1.5; color:var(--ink-2); margin-top:3px}
 
 /* ---------- month grid ---------- */
-.mhead{display:flex; align-items:center; gap:12px; padding:16px 16px 10px 0}
+.mhead{display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:12px 16px 10px 0}
 .mhead .mn{
   font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:17px;
   letter-spacing:.05em; text-transform:uppercase; flex:1;
@@ -584,50 +587,327 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
 .calchip[aria-pressed="true"]{border-color:var(--ink); color:var(--ink); background:var(--surface-2)}
 .calchip .dot{width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.5}
 .calchip[aria-pressed="true"] .dot{opacity:1; background:var(--good)}
+
+/* ================= shell =================
+   Navigation moves out of the content column and down the side, so the five
+   views carry their own counts and the range switch stops competing with
+   them. Below 900px the rail becomes a bottom bar, which is also where the
+   console stacks to one column. */
+#app{display:flex; align-items:stretch; min-height:100vh}
+#rail{
+  width:214px; flex:0 0 214px; background:var(--rail); color:var(--rail-text);
+  display:flex; flex-direction:column; position:sticky; top:0; height:100vh;
+}
+#main{flex:1; min-width:0; padding:0 20px 56px; max-width:1180px}
+.rbrand{display:flex; align-items:center; gap:10px; padding:16px 15px 14px; border-bottom:1px solid var(--rail-line)}
+.rlogo{
+  width:30px; height:30px; flex:0 0 30px; border-radius:7px; background:var(--signal); color:var(--on-signal);
+  display:grid; place-items:center;
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:16px; line-height:1;
+}
+.rbrand .nm{color:#fff; font-weight:600; font-size:14px; line-height:1.15}
+.rbrand .sb{font-size:10px; color:var(--rail-dim); letter-spacing:.12em; text-transform:uppercase; margin-top:3px}
+#rail nav{padding:7px; flex:1; overflow-y:auto}
+#rail .grp{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:9.5px;
+  letter-spacing:.13em; text-transform:uppercase; color:var(--rail-dim); padding:13px 9px 5px;
+}
+#rail nav button{
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  background:none; border:0; color:var(--rail-text); padding:8px 10px; border-radius:6px;
+  font-size:13.5px; margin-bottom:1px; cursor:pointer;
+}
+#rail nav button:hover{background:rgba(255,255,255,.07); color:#fff}
+#rail nav button[aria-current="page"]{background:var(--focus); color:#fff; font-weight:600}
+#rail .ico{width:16px; text-align:center; font-size:12.5px; opacity:.92; flex:none}
+.ct{
+  margin-left:auto; background:rgba(255,255,255,.14); color:#fff; font-size:11px;
+  padding:1px 7px; border-radius:9px; font-weight:600; font-variant-numeric:tabular-nums;
+}
+#rail nav button[aria-current="page"] .ct{background:rgba(255,255,255,.26)}
+/* Amber is the one colour that means "needs you", here as everywhere else. */
+.ct.needs{background:var(--signal); color:var(--on-signal)}
+.railfoot{padding:11px 15px; border-top:1px solid var(--rail-line); font-size:11px; color:var(--rail-dim)}
+.sync{display:flex; align-items:center; gap:7px}
+.sync .d{width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:var(--good)}
+.sync.waiting .d{background:var(--rail-dim)}
+.sync.bad .d{background:var(--signal)}
+
+/* ---- unified view header ---- */
+.vhead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; padding:20px 16px 0 0}
+.vhead h1{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:25px;
+  letter-spacing:-.005em; line-height:1.1;
+}
+.vhead .when{color:var(--muted); font-size:14px}
+.statline{
+  color:var(--muted); font-size:13px; margin:4px 16px 0 0; min-height:19px;
+  display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+}
+.statline .sep{color:var(--faint); opacity:.5}
+.statline .nowttl{color:var(--ink-2); font-weight:500}
+.rangesw{margin-left:auto}
+
+/* ---- the tray: undated to-dos, which a board organised by day cannot show ---- */
+.tray{
+  background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--signal);
+  border-radius:5px; padding:10px 12px 11px; margin:16px 16px 0 0; box-shadow:var(--shadow);
+}
+.tray .h{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; margin-bottom:9px}
+.tray .h .nm{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:13px;
+  letter-spacing:.05em; text-transform:uppercase; color:var(--signal);
+}
+.tray .h .sb{font-size:12px; color:var(--faint)}
+.strip-h{display:flex; gap:8px; overflow-x:auto; padding-bottom:2px}
+.mini{
+  flex:0 0 auto; max-width:240px; min-width:0; background:var(--surface-2);
+  border:1px solid var(--line); border-radius:5px; padding:7px 10px;
+  display:flex; gap:9px; align-items:stretch; cursor:grab; text-align:left;
+  font:inherit; color:inherit;
+}
+.mini:hover{border-color:var(--muted)}
+.mini.dragging{opacity:.4; cursor:grabbing}
+.mini .sbar{
+  width:3px; flex:0 0 3px; align-self:stretch; border-radius:2px;
+  background:var(--c,#68797F); filter:var(--stripe-boost);
+}
+.mini .txt{min-width:0}
+.mini .t{display:block; font-family:"Newsreader",Georgia,serif; font-size:15px; line-height:1.3; overflow-wrap:anywhere}
+.mini .m{
+  display:block; font-family:"Saira Condensed",Arial,sans-serif; font-size:10.5px;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin-top:2px;
+}
+.dayzone{outline:2px dashed var(--focus); outline-offset:-2px; background:color-mix(in srgb, var(--focus) 12%, transparent)}
+
+/* ---- week grid: a column per day, same grid language as the month ----
+   Day and 2-day stay as lists, because at that length a list reads better
+   than two near-empty columns. Week and month are for seeing shape. */
+.console.wide{grid-template-columns:minmax(0,1fr)}
+.console.wide .board{border-right:0}
+.console.wide .panel{padding:8px 0 0; border-top:2px solid var(--ink); margin-top:24px}
+.wkwrap{overflow-x:auto; margin:14px 16px 0 0; padding-bottom:2px}
+.wkgrid{
+  display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:1px;
+  background:var(--line-2); border:1px solid var(--line-2); border-radius:4px; overflow:hidden;
+  min-width:700px;
+}
+.wkcol{background:var(--surface); display:flex; flex-direction:column; min-height:170px; min-width:0}
+.wkcol.past{background:var(--ground)}
+.wkhd{
+  display:flex; align-items:baseline; gap:5px; padding:6px 8px 5px;
+  border-bottom:1px solid var(--line-2); background:var(--surface-2);
+}
+.wkhd .wd{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:10.5px;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--faint);
+}
+.wkhd .dn{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:14px;
+  font-variant-numeric:tabular-nums; color:var(--ink-2); margin-left:auto;
+}
+.wkcol.today .wkhd{background:var(--signal)}
+.wkcol.today .wkhd .wd,.wkcol.today .wkhd .dn{color:var(--on-signal)}
+.wkbody{display:flex; flex-direction:column; gap:3px; padding:5px 5px 7px; flex:1}
+.wkev{
+  display:block; width:100%; text-align:left; border:0; border-left:3px solid var(--c,#68797F);
+  background:color-mix(in srgb, var(--c) var(--tint), var(--surface-2));
+  border-radius:0 3px 3px 0; padding:4px 6px; cursor:pointer; font:inherit; color:inherit;
+  filter:none; min-width:0;
+}
+.wkev:hover{background:color-mix(in srgb, var(--c) var(--tint-hover), var(--surface-2))}
+.wkev[aria-current="true"]{box-shadow:inset 0 0 0 2px var(--focus)}
+.wkev .tm{
+  display:block; font-family:"Saira Condensed",Arial,sans-serif; font-weight:600; font-size:10.5px;
+  letter-spacing:.04em; color:var(--muted); font-variant-numeric:tabular-nums;
+}
+.wkev .tt{
+  display:block; font-family:"Saira Condensed",Arial,sans-serif; font-weight:600;
+  font-size:12.5px; line-height:1.2; overflow-wrap:anywhere;
+}
+.wkev.cleared{opacity:.5}
+.wkev.cleared .tt{text-decoration:line-through}
+.wkev.live{box-shadow:inset 0 0 0 2px var(--signal)}
+.wkev .st{
+  display:inline-block; width:6px; height:6px; border-radius:50%; margin-left:4px;
+  vertical-align:1px; flex:none;
+}
+.wkev .st.await{background:var(--signal)}
+.wkev .st.missed{background:var(--miss)}
+.wktd{
+  display:flex; gap:4px; align-items:flex-start; font-size:11px; line-height:1.25;
+  color:var(--muted); padding:1px 2px; overflow-wrap:anywhere;
+}
+.wktd::before{content:"\2610"; flex:none; opacity:.7}
+.wktd.late{color:var(--miss)}
+.wkempty{color:var(--faint); font-size:11.5px; padding:4px 2px; font-style:italic}
+@media (max-width:900px){
+  .wkwrap{margin-right:0; padding-right:16px}
+}
+
+/* ---- clashes ----
+   Red, not amber. Amber already means "this needs you"; a double booking is
+   the one thing here that means "this is wrong", which is the same split
+   Poseidon uses between needs-attention and emergency. */
+.row .meta .clash{color:var(--miss); font-weight:600}
+.wkev.clash{box-shadow:inset 0 0 0 2px var(--miss)}
+.wkev .st.clash{background:var(--miss)}
+.statline .clash{
+  color:var(--miss); font-weight:600;
+  font-family:"Saira Condensed",Arial,sans-serif; letter-spacing:.03em;
+}
+.mev.clash .dot{box-shadow:0 0 0 2px var(--miss)}
+
+/* ---- inbox: whatever Victor caught, before you have decided what it is ---- */
+.ncard{
+  border:1px solid var(--line); border-left:3px solid var(--signal); background:var(--surface);
+  border-radius:0 5px 5px 0; padding:11px 13px 10px; margin:0 16px 8px 0; box-shadow:var(--shadow);
+}
+.ncard.kept{border-left-color:var(--line); box-shadow:none; background:var(--surface-2)}
+.ncard.gone{border-left-color:var(--line); box-shadow:none; background:none; opacity:.6}
+.ncard .tx{font-family:"Newsreader",Georgia,serif; font-size:16.5px; line-height:1.5; overflow-wrap:anywhere}
+.ncard .dt{font-family:"Newsreader",Georgia,serif; font-size:14px; line-height:1.5; color:var(--muted); margin-top:4px; white-space:pre-wrap}
+.ncard .mt{
+  font-family:"Saira Condensed",Arial,sans-serif; font-size:11px; letter-spacing:.07em;
+  text-transform:uppercase; color:var(--faint); margin-top:5px; display:flex; gap:8px; flex-wrap:wrap;
+}
+.ncard .mt .via{color:var(--signal)}
+.nacts{display:flex; gap:5px; flex-wrap:wrap; margin-top:9px}
+.nacts button{
+  background:var(--surface); border:1px solid var(--line); border-radius:3px; cursor:pointer;
+  padding:4px 9px; font-family:"Saira Condensed",Arial,sans-serif; font-weight:600;
+  font-size:11.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+}
+.nacts button:hover{border-color:var(--muted); color:var(--ink); background:var(--surface-2)}
+.nacts button.go{background:var(--ink); color:var(--ground); border-color:var(--ink)}
+.nacts button.go:hover{opacity:.88; color:var(--ground)}
+.nacts .bin:hover{color:var(--miss); border-color:currentColor}
+.nsec{padding:16px 16px 6px 0; display:flex; align-items:baseline; gap:10px}
+.nsec .d{
+  font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:15px;
+  letter-spacing:.06em; text-transform:uppercase;
+}
+.nsec .d.inbox{color:var(--signal)}
+.nsec .n{color:var(--faint); font-size:12.5px}
+.nhow{
+  margin:0 16px 0 0; padding:12px 14px; background:var(--surface-2); border:1px dashed var(--line);
+  border-radius:5px; font-size:13.5px; color:var(--muted); line-height:1.55;
+}
+.nhow b{font-family:"Saira Condensed",Arial,sans-serif; color:var(--ink-2); letter-spacing:.03em}
+.nhow code{
+  font-family:ui-monospace,Menlo,monospace; font-size:12.5px; background:var(--surface);
+  border:1px solid var(--line); border-radius:3px; padding:1px 5px;
+}
+
+/* ---- phone ---- */
+#tabbar{display:none}
+.phonetop{display:none}
+@media (max-width:900px){
+  #rail{display:none}
+  #main{padding:0 0 92px 16px; max-width:none}
+  body{padding-bottom:0}
+  .vhead{padding-top:14px}
+  .rangesw{margin-left:0; width:100%}
+  .rangesw button{flex:1}
+  #tabbar{
+    display:flex; position:fixed; left:0; right:0; bottom:0; z-index:45;
+    background:var(--rail); border-top:1px solid var(--rail-line);
+    padding-top:5px; padding-bottom:calc(6px + env(safe-area-inset-bottom,0px));
+    padding-left:max(4px, env(safe-area-inset-left,0px));
+    padding-right:max(4px, env(safe-area-inset-right,0px));
+  }
+  #tabbar button{
+    flex:1; min-width:0; background:none; border:0; color:var(--rail-dim); border-radius:7px;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    padding:7px 2px 5px; position:relative; cursor:pointer;
+  }
+  #tabbar .ico{font-size:16px; line-height:1}
+  #tabbar .nm{
+    font-family:"Saira Condensed",Arial,sans-serif; font-size:9.5px;
+    letter-spacing:.06em; text-transform:uppercase;
+  }
+  #tabbar button[aria-current="page"]{color:#fff}
+  #tabbar .dot{
+    position:absolute; top:3px; left:50%; margin-left:8px; min-width:15px; height:15px; padding:0 3px;
+    border-radius:8px; background:var(--signal); color:var(--on-signal);
+    font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:9.5px;
+    display:grid; place-items:center;
+  }
+  .phonetop{
+    display:flex; align-items:center; gap:9px; padding:12px 16px 0 0;
+  }
+  .phonetop .rlogo{width:26px; height:26px; flex:0 0 26px; font-size:14px; border-radius:6px}
+  .phonetop .nm{font-family:"Saira Condensed",Arial,sans-serif; font-weight:700; font-size:16px}
+  .phonetop .sync{margin-left:auto; color:var(--muted); font-size:11px}
+}
 </style>
 
-<div class="wrap">
-  <header class="strip">
-    <div class="brand">
-      <h1>Life Dispatch</h1>
-      <div class="sub">Victor schedules the work. This is where you close it out.</div>
-    </div>
-    <div class="stat">
-      <span class="eyebrow">On the board</span>
-      <span class="v num" id="s-count">—</span>
-    </div>
-    <div class="stat">
-      <span class="eyebrow">Closed out</span>
-      <span class="v num" id="s-closed">—</span>
-    </div>
-    <div class="stat" style="min-width:16ch">
-      <span class="eyebrow" id="s-now-lbl">Right now</span>
-      <span class="v dim" id="s-now">Connecting…</span>
-    </div>
-  </header>
-
-  <div class="console">
-    <section class="board" aria-label="Dispatch board">
-      <div class="boardhd">
-        <div class="viewsw" id="viewsw" role="group" aria-label="View">
-          <button type="button" data-view="board" aria-pressed="true">Board</button>
-          <button type="button" data-view="people" aria-pressed="false">People</button>
-          <button type="button" data-view="todos" aria-pressed="false">To-dos</button>
-          <button type="button" data-view="tasks" aria-pressed="false">Tasks</button>
-          <button type="button" data-view="projects" aria-pressed="false">Projects</button>
-        </div>
-        <div class="viewsw rangesw" id="rangesw" role="group" aria-label="How far ahead">
-          <button type="button" data-range="1">Today</button>
-          <button type="button" data-range="2">2 days</button>
-          <button type="button" data-range="7">Week</button>
-          <button type="button" data-range="0">Month</button>
-        </div>
+<div id="app">
+  <aside id="rail">
+    <div class="rbrand">
+      <span class="rlogo" aria-hidden="true">LD</span>
+      <div>
+        <div class="nm">Life Dispatch</div>
+        <div class="sb">Daryl</div>
       </div>
-      <div class="calbar" id="calbar"></div>
-      <div id="flash" role="status" aria-live="polite"></div>
+    </div>
+    <nav id="railnav" aria-label="Views">
+      <div class="grp">Day to day</div>
+      <button type="button" data-view="board" aria-current="page"><span class="ico" aria-hidden="true">&#9638;</span>Board<span class="ct num" data-ct="board" hidden></span></button>
+      <button type="button" data-view="notes"><span class="ico" aria-hidden="true">&#9776;</span>Notes<span class="ct num" data-ct="notes" hidden></span></button>
+      <button type="button" data-view="todos"><span class="ico" aria-hidden="true">&#9719;</span>To-dos<span class="ct num" data-ct="todos" hidden></span></button>
+      <div class="grp">When it matters</div>
+      <button type="button" data-view="tasks"><span class="ico" aria-hidden="true">&#10003;</span>Tasks<span class="ct num" data-ct="tasks" hidden></span></button>
+      <button type="button" data-view="projects"><span class="ico" aria-hidden="true">&#9672;</span>Projects<span class="ct num" data-ct="projects" hidden></span></button>
+      <button type="button" data-view="people"><span class="ico" aria-hidden="true">&#9677;</span>People<span class="ct num" data-ct="people" hidden></span></button>
+    </nav>
+    <div class="railfoot">
+      <span class="sync waiting" id="sync-rail"><span class="d" aria-hidden="true"></span><span class="tx">Connecting…</span></span>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div class="phonetop">
+      <span class="rlogo" aria-hidden="true">LD</span>
+      <span class="nm">Life Dispatch</span>
+      <span class="sync waiting" id="sync-phone"><span class="d" aria-hidden="true"></span><span class="tx">Connecting…</span></span>
+    </div>
+
+    <div class="vhead">
+      <h1 id="v-title">Today</h1>
+      <span class="when" id="v-when"></span>
+      <div class="viewsw rangesw" id="rangesw" role="group" aria-label="How far ahead">
+        <button type="button" data-range="1">Today</button>
+        <button type="button" data-range="2">2 days</button>
+        <button type="button" data-range="7">Week</button>
+        <button type="button" data-range="0">Month</button>
+      </div>
+    </div>
+    <p class="statline" id="statline"></p>
+
+    <section class="tray" id="tray" hidden aria-label="Undated to-dos">
+      <div class="h">
+        <span class="nm" id="tray-nm"></span>
+        <span class="sb" id="tray-sb"></span>
+      </div>
+      <div class="strip-h" id="tray-list"></div>
+    </section>
+
+    <div id="flash" role="status" aria-live="polite"></div>
+
+    <div class="console">
+      <section class="board" aria-label="Dispatch board">
+        <div class="calbar" id="calbar"></div>
       <div id="board-msg"></div>
       <div id="board"></div>
       <div id="people" hidden></div>
+      <div id="notes" hidden>
+        <div class="td-add">
+          <input type="text" id="nt-new" placeholder="Jot something down…" aria-label="Jot a note">
+          <button class="btn solid" type="button" id="nt-add">Add</button>
+        </div>
+        <div id="nt-list"></div>
+      </div>
       <div id="todos" hidden>
         <div class="td-add">
           <input type="text" id="td-new" placeholder="Add a to-do, or “task: … #project”" aria-label="Add a to-do">
@@ -742,7 +1022,7 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
     </div>
   </div>
 
-  <footer class="model">
+  <footer class="model" id="model-footer">
     <span class="eyebrow">Why it's shaped like a service dashboard</span>
     <div class="grid">
       <div class="pair"><span class="from">Dispatch board</span><span class="to">Today's blocks, straight off Google Calendar</span></div>
@@ -753,7 +1033,17 @@ textarea:focus,input:focus{background:var(--surface); border-color:var(--focus);
       <div class="pair"><span class="from">Dispatcher</span><span class="to">Victor, over on the calendar side</span></div>
     </div>
   </footer>
+  </main>
 </div>
+
+<nav id="tabbar" aria-label="Views">
+  <button type="button" data-view="board" aria-current="page"><span class="ico" aria-hidden="true">&#9638;</span><span class="nm">Board</span></button>
+  <button type="button" data-view="notes"><span class="ico" aria-hidden="true">&#9776;</span><span class="nm">Notes</span><span class="dot num" data-ct="notes" hidden></span></button>
+  <button type="button" data-view="todos"><span class="ico" aria-hidden="true">&#9719;</span><span class="nm">To-dos</span><span class="dot num" data-ct="todos" hidden></span></button>
+  <button type="button" data-view="tasks"><span class="ico" aria-hidden="true">&#10003;</span><span class="nm">Tasks</span></button>
+  <button type="button" data-view="projects"><span class="ico" aria-hidden="true">&#9672;</span><span class="nm">Proj</span></button>
+  <button type="button" data-view="people"><span class="ico" aria-hidden="true">&#9677;</span><span class="nm">People</span></button>
+</nav>
 
 <script>
 (function(){
@@ -866,6 +1156,7 @@ function makeStore(coll, lsKey, idField, defaults){
 var store = makeStore("blocks", "life-dispatch/records", "eventId", {loops: []});
 var todos = makeStore("todos", "life-dispatch/todos", "id", {done: false, dropped: false});
 var projects = makeStore("projects", "life-dispatch/projects", "id", {status: "active", plan: ""});
+var notes = makeStore("notes", "life-dispatch/notes", "id", {status: "inbox", text: ""});
 
 /* ---------- state ---------- */
 var state = {
@@ -877,7 +1168,7 @@ var state = {
   storedAt: null,
   selectedId: null,
   autoSelect: true,
-  pickerOpen: false, pickerMonth: null,
+  pickerOpen: false, pickerMonth: null, showGoneNotes: false,
   view: "board", personKey: null, projectId: null,
   todoCalIds: {}, todoDirty: false, projectDirty: false, taskDirty: false, showDroppedTasks: false,
   showDropped: false, editingTodo: null, dragTodo: null, moveKey: null, suppressClick: false,
@@ -927,6 +1218,19 @@ function normalize(payload, calId, calName, isTodoCal){
 /* Victor drops to-dos on a calendar; the dashboard adopts them and owns them from there. */
 function isTodoCalendar(name){ return /(^|\s|\b)(to[\s-]?dos?|tasks?)(\b|\s|$)/i.test(String(name || "")); }
 var TODO_PREFIX = /^\s*(?:(todo|to-do)|(task(?:\s*item)?))\s*[:\u2013\-]\s*(.+)$/i;
+/* A note is anything caught before you have decided what it is. Two ways in:
+   a calendar called Notes, or a NOTE: prefix on any calendar — same shape as
+   to-dos, so Victor needs no new trick to send one. */
+function isNotesCalendar(name){ return /(^|\s|\b)(notes?|memos?|inbox)(\b|\s|$)/i.test(String(name || "")); }
+var NOTE_PREFIX = /^\s*(?:note|memo|voice\s*note|vn)\s*[:\u2013\-]\s*(.+)$/i;
+function noteTextOf(ev){
+  var m = NOTE_PREFIX.exec(ev.title || "");
+  if (m) return m[1].replace(/^\s*[-\u2013\u2014]\s*/, "").trim();
+  return isNotesCalendar(ev.calName)
+    ? String(ev.title || "").replace(/^\s*[-\u2013\u2014]\s*/, "").trim()
+    : null;
+}
+function calendarNotes(){ return rawEvents().filter(function(e){ return noteTextOf(e) !== null; }); }
 function todoTitleOf(ev){
   var m = TODO_PREFIX.exec(ev.title || "");
   /* "TASK: - source flagstone" — the dash is how it gets dictated, not content. */
@@ -954,8 +1258,10 @@ function rawEvents(){
 function calendarTodos(){ return rawEvents().filter(function(e){ return todoTitleOf(e) !== null; }); }
 
 function allEvents(){
-  /* Blocks only — a to-do is not a time block, it belongs in the to-do list. */
-  return rawEvents().filter(function(e){ return todoTitleOf(e) === null; });
+  /* Blocks only — a to-do or a caught note is not a time block. */
+  return rawEvents().filter(function(e){
+    return todoTitleOf(e) === null && noteTextOf(e) === null;
+  });
 }
 
 /* ---------- status ---------- */
@@ -968,6 +1274,31 @@ function statusOf(ev){
   return "open";
 }
 var CHIP_LABEL = {open:"On board", live:"Live now", await:"Needs write-up", cleared:"Cleared", missed:"Missed", moved:"Moved"};
+
+/* Two timed blocks that genuinely overlap — touching end-to-start is not a
+   clash, and an all-day block covers the whole day by definition, so neither
+   counts. A block you have already moved or missed is not in the way either. */
+function inTheWay(ev){
+  var rec = store.get(ev.id);
+  var st = rec && rec.status;
+  return !ev.allDay && st !== "moved" && st !== "missed";
+}
+function clashMap(evs){
+  var live = evs.filter(inTheWay), map = {}, pairs = 0;
+  for (var i = 0; i < live.length; i++){
+    for (var j = i + 1; j < live.length; j++){
+      var a = live[i], b = live[j];
+      if (a.start < b.end && b.start < a.end){
+        pairs++;
+        (map[a.id] = map[a.id] || []).push(b);
+        (map[b.id] = map[b.id] || []).push(a);
+      }
+    }
+  }
+  CLASH_PAIRS = pairs;        /* collisions, not blocks involved in one */
+  return map;
+}
+var CLASHES = {}, CLASH_PAIRS = 0;
 
 /* ---------- board rendering ---------- */
 function todoStripHtml(){
@@ -996,7 +1327,6 @@ function renderMonth(){
   });
 
   var html = '<div class="mhead">' +
-    '<span class="mn">' + esc(first.toLocaleDateString([], {month:"long", year:"numeric"})) + "</span>" +
     '<button class="mnav" type="button" data-mstep="-1" aria-label="Previous month">&lsaquo;</button>' +
     '<button class="mnav" type="button" data-mstep="1" aria-label="Next month">&rsaquo;</button>' +
   '</div><div class="mgrid">';
@@ -1015,7 +1345,8 @@ function renderMonth(){
       '<span class="dn"' + (k === today ? ' title="Today"' : "") + ">" + d.getDate() + "</span>" +
       '<span class="mrow-dots">' +
         list.slice(0, 3).map(function(ev){
-          return '<span class="mev"><span class="dot" style="background:' + ev.color + '"></span>' +
+          return '<span class="mev' + (CLASHES[ev.id] ? " clash" : "") +
+                 '"><span class="dot" style="background:' + ev.color + '"></span>' +
                  '<span class="tt">' + esc(ev.title) + "</span></span>";
         }).join("") +
       "</span>" +
@@ -1048,8 +1379,62 @@ function renderMonth(){
   renderStrip(allEvents());
 }
 
+/* Seven columns starting today, which is also exactly the window already
+   being watched, so switching to the grid costs no extra fetch. */
+function renderWeek(){
+  var host = $("board"), evs = allEvents(), today = dayKey(new Date());
+
+  var byDay = {}, tdByDay = {};
+  evs.forEach(function(ev){ (byDay[dayKey(ev.start)] = byDay[dayKey(ev.start)] || []).push(ev); });
+  todoList().forEach(function(t){
+    if (t.day && !t.done) (tdByDay[t.day] = tdByDay[t.day] || []).push(t);
+  });
+
+  var html = '<div class="wkwrap"><div class="wkgrid">';
+  for (var i = 0; i < 7; i++){
+    var d = addDays(WIN_START, i), k = dayKey(d);
+    var list = byDay[k] || [], td = tdByDay[k] || [];
+    var cls = "wkcol" + (k === today ? " today" : "") + (k < today ? " past" : "");
+    html += '<div class="' + cls + '" data-day="' + k + '">' +
+      '<div class="wkhd"><span class="wd">' +
+        esc(d.toLocaleDateString([], {weekday:"short"})) + "</span>" +
+        '<span class="dn">' + d.getDate() + "</span></div>" +
+      '<div class="wkbody">';
+
+    list.forEach(function(ev){
+      var st = statusOf(ev);
+      var clash = CLASHES[ev.id] && CLASHES[ev.id].length;
+      var dot = clash ? '<span class="st clash"></span>'
+              : (st === "await" || st === "missed") ? '<span class="st ' + st + '"></span>' : "";
+      html += '<button class="wkev ' + st + (clash ? " clash" : "") +
+          '" type="button" title="' + (clash ? "Clashes with " +
+            esc(CLASHES[ev.id].map(function(x){ return x.title; }).join(", ")) : "") +
+          '" data-id="' + esc(ev.id) +
+          '" style="--c:' + ev.color + '" aria-current="' + (ev.id === state.selectedId) + '">' +
+        '<span class="tm">' + (ev.allDay ? "all day" : esc(hhmm(ev.start))) + "</span>" +
+        '<span class="tt">' + esc(ev.title) + dot + "</span></button>";
+    });
+
+    td.forEach(function(t){
+      html += '<span class="wktd' + (t.day < today ? " late" : "") + '">' + esc(t.title) + "</span>";
+    });
+
+    if (!list.length && !td.length) html += '<span class="wkempty">clear</span>';
+    html += "</div></div>";
+  }
+  html += "</div></div>";
+
+  if (!Object.keys(state.eventsByCal).length){
+    html += '<div class="empty">Waiting on Google Calendar…</div>';
+  }
+  host.innerHTML = html;
+  renderStrip(evs);
+}
+
 function renderBoard(){
+  CLASHES = clashMap(allEvents());
   if (state.view === "board" && state.range === MONTH) return renderMonth();
+  if (state.view === "board" && state.range === 7) return renderWeek();
   var evs = allEvents(), host = $("board"), now = Date.now(), strip = todoStripHtml();
   if (!evs.length){
     var span = state.range === 1 ? "today" : state.range === 2 ? "today or tomorrow"
@@ -1072,11 +1457,11 @@ function renderBoard(){
   var html = strip;
   if (!hasToday){
     /* Otherwise a clear day just vanishes and the board reads as broken. */
-    html += '<div class="daybar"><span class="d now">Today</span><span class="n num">clear</span></div>' +
+    html += '<div class="daybar" data-day="' + todayKey + '"><span class="d now">Today</span><span class="n num">clear</span></div>' +
             '<div class="empty">Nothing on the board today.</div>' + nowline;
   }
   groups.forEach(function(g){
-    html += '<div class="daybar"><span class="d' + (g.key === todayKey ? " now" : "") + '">' +
+    html += '<div class="daybar" data-day="' + g.key + '"><span class="d' + (g.key === todayKey ? " now" : "") + '">' +
             esc(dayLabel(g.date)) + "</span>" +
             '<span class="n num">' + g.items.length + " block" + (g.items.length===1?"":"s") + "</span></div>";
     var placed = (g.key !== todayKey);        /* the marker only belongs in today's group */
@@ -1097,6 +1482,11 @@ function rowHtml(ev){
   if (ev.calName) meta.push(esc(ev.calName));
   if (rec && rec.status === "moved" && rec.movedTo) meta.push('<span class="to">&rarr; ' + esc(shortDay(rec.movedTo)) + "</span>");
   if (rec && rec.note) meta.push("written up");
+  var hit = CLASHES[ev.id];
+  if (hit && hit.length){
+    meta.push('<span class="clash">\u26a0 clashes with ' +
+      esc(hit.map(function(x){ return x.title; }).join(", ")) + "</span>");
+  }
   if (openLoops) meta.push('<span class="loop">' + openLoops + " open loop" + (openLoops===1?"":"s") + "</span>");
   return '<button class="row" type="button" data-id="' + esc(ev.id) + '" style="--c:' + ev.color +
       '" aria-current="' + (ev.id===state.selectedId) + '">' +
@@ -1108,27 +1498,166 @@ function rowHtml(ev){
     '<span class="chip ' + st + '">' + CHIP_LABEL[st] + "</span></button>";
 }
 
+/* The three header stats collapse into one line under the heading: how much is
+   on the board, how much is still unwritten, and what is happening right now. */
 function renderStrip(evs){
+  if (state.view !== "board"){ return renderViewStat(); }
   var now = Date.now();
   var today = evs.filter(function(e){ return dayKey(e.start) === dayKey(new Date()); });
-  var closed = today.filter(function(e){ var s = statusOf(e); return s==="cleared"||s==="missed"||s==="moved"; }).length;
+  var unwritten = today.filter(function(e){
+    var st = statusOf(e);
+    return (st === "await" || st === "live") && !(store.get(e.id) || {}).note;
+  }).length;
   var haveData = Object.keys(state.eventsByCal).length > 0;
-  $("s-count").textContent = haveData ? today.length + " today" : "—";
-  $("s-closed").textContent = !haveData ? "—" : today.length ? closed + " of " + today.length : "nothing due";
+  var bits = [];
+
+  if (!haveData){
+    bits.push("Waiting on Google Calendar\u2026");
+  } else {
+    bits.push(today.length ? today.length + " block" + (today.length===1?"":"s") + " today" : "nothing on today");
+    if (unwritten) bits.push(unwritten + " still to write up");
+  }
+
   var live = evs.filter(function(e){ return !e.allDay && e.start<=now && now<e.end; })[0];
   var next = evs.filter(function(e){ return e.start > now; })[0];
+  var nowBit = "";
   if (live){
-    $("s-now-lbl").textContent = "Right now";
-    $("s-now").innerHTML = '<span class="live-dot"></span>'+esc(live.title);
-    $("s-now").classList.remove("dim");
+    nowBit = '<span class="live-dot"></span><span class="nowttl">' + esc(live.title) + "</span>";
   } else if (next){
-    $("s-now-lbl").textContent = "Next up";
-    $("s-now").textContent = hhmm(next.start) + " · " + next.title;
-    $("s-now").classList.remove("dim");
-  } else if (evs.length){
-    $("s-now-lbl").textContent = "Right now"; $("s-now").textContent = "Board's clear";
-    $("s-now").classList.add("dim");
+    var sameDay = dayKey(next.start) === dayKey(new Date());
+    nowBit = (sameDay ? "next " : esc(dayLabel(next.start)) + " ") +
+             esc(hhmm(next.start)) + ' <span class="nowttl">' + esc(next.title) + "</span>";
   }
+  if (CLASH_PAIRS) bits.unshift('<span class="clash">\u26a0 ' + CLASH_PAIRS +
+    " double booking" + (CLASH_PAIRS === 1 ? "" : "s") + "</span>");
+  if (nowBit) bits.push(nowBit);
+  if (haveData && evs.length && state.view === "board" && state.range !== MONTH){
+    bits.push("tap a block to write it up");
+  }
+
+  $("statline").innerHTML = bits.join('<span class="sep" aria-hidden="true">\u00b7</span>');
+  renderShell();
+}
+
+/* One line per view, answering the question that view is for. */
+function renderViewStat(){
+  var el = $("statline"); if (!el) return;
+  var today = dayKey(new Date()), bits = [];
+  try {
+    if (state.view === "notes"){
+      var ib = inboxCount(), kept = noteAll().filter(function(x){ return x.status === "kept"; }).length;
+      bits.push(ib ? ib + " to sort" : "inbox clear");
+      if (kept) bits.push(kept + " kept");
+    } else if (state.view === "todos"){
+      var td = todoList().filter(function(t){ return t.kind !== "task" && !t.done; });
+      var late = td.filter(function(t){ return t.day && t.day < today; }).length;
+      var none = td.filter(function(t){ return !t.day; }).length;
+      bits.push(td.length ? td.length + " open" : "all clear");
+      if (late) bits.push(late + " overdue");
+      if (none) bits.push(none + " with no date");
+    } else if (state.view === "tasks"){
+      var tk = todoAll().filter(function(t){ return t.kind === "task" && !t.dropped && !t.done; });
+      bits.push(tk.length ? tk.length + " open" : "nothing open");
+    } else if (state.view === "projects"){
+      var pr = projectList().filter(function(x){ return !x.parent && x.status !== "done"; });
+      bits.push(pr.length ? pr.length + " on the go" : "no projects yet");
+    } else if (state.view === "people"){
+      var pl = peopleIndex(), lp = pl.reduce(function(a, x){ return a + (x.openLoops || 0); }, 0);
+      bits.push(pl.length ? pl.length + " from your write-ups" : "nobody yet");
+      if (lp) bits.push(lp + " open loop" + (lp === 1 ? "" : "s"));
+    }
+  } catch(err){ bits = []; }
+  el.innerHTML = bits.join('<span class="sep" aria-hidden="true">\u00b7</span>');
+}
+
+/* ---------- the shell: nav counts, the sync lamp, the undated tray ----------
+   Each count is wrapped on its own, because a shell that throws would take the
+   whole app's chrome down with it over a number nobody needed. */
+function navCount(name){
+  var today = dayKey(new Date());
+  if (name === "board"){
+    if (!Object.keys(state.eventsByCal).length) return null;
+    var c = allEvents().filter(function(e){ return dayKey(e.start) === today; }).length;
+    return c ? {n: c} : null;
+  }
+  if (name === "todos"){
+    var due = todoList().filter(function(t){ return t.kind !== "task" && !t.done && t.day && t.day <= today; });
+    var late = due.filter(function(t){ return t.day < today; }).length;
+    return due.length ? {n: due.length, needs: !!late} : null;
+  }
+  if (name === "tasks"){
+    var open = todoAll().filter(function(t){ return t.kind === "task" && !t.dropped && !t.done; }).length;
+    return open ? {n: open} : null;
+  }
+  if (name === "projects"){
+    var live = projectList().filter(function(pr){ return !pr.parent && pr.status !== "done"; }).length;
+    return live ? {n: live} : null;
+  }
+  if (name === "notes"){
+    var ib = inboxCount();
+    return ib ? {n: ib, needs: true} : null;     /* an unsorted note is always "needs you" */
+  }
+  if (name === "people"){
+    var ppl = peopleIndex();
+    var loops = ppl.filter(function(x){ return x.openLoops; }).length;
+    return ppl.length ? {n: ppl.length, needs: !!loops} : null;
+  }
+  return null;
+}
+
+function renderShell(){
+  ["board","notes","todos","tasks","projects","people"].forEach(function(name){
+    var got = null;
+    try { got = navCount(name); } catch(err){ got = null; }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ct="' + name + '"]'), function(el){
+      if (!got){ el.hidden = true; return; }
+      el.hidden = false;
+      el.textContent = got.n;
+      el.classList.toggle("needs", !!got.needs);
+    });
+  });
+
+  /* The sync lamp replaces the old "Calendar as of" line: same fact, somewhere
+     it is always visible rather than only on the board. */
+  var bad = Object.keys(state.errorByCal).some(function(k){ return !!state.errorByCal[k]; });
+  var cls = bad ? "sync bad" : state.storedAt ? "sync" : "sync waiting";
+  var txt = bad ? "Calendar not answering"
+          : state.storedAt ? "Calendar synced " + hhmm(new Date(state.storedAt))
+          : "Connecting\u2026";
+  ["sync-rail","sync-phone"].forEach(function(id){
+    var el = $(id); if (!el) return;
+    el.className = cls;
+    el.querySelector(".tx").textContent = txt;
+  });
+
+  try { renderTray(); } catch(err){ console.warn("tray", err); }
+}
+
+/* Undated to-dos are invisible on a board organised by day, so they get a tray
+   of their own. Tasks are deliberately undated project steps and stay out of it. */
+function undatedTodos(){
+  return todoList().filter(function(t){ return t.kind !== "task" && !t.done && !t.day; });
+}
+
+function renderTray(){
+  var host = $("tray"), list = undatedTodos();
+  if (state.view !== "board" || !list.length){ host.hidden = true; return; }
+  host.hidden = false;
+  $("tray-nm").textContent = "\u26a0 " + list.length + " with no date";
+  $("tray-sb").textContent = "tap one to give it a date, or drag it onto a day";
+  $("tray-list").innerHTML = list.map(function(t){
+    var pid = (t.projects || [])[0];
+    var pr = pid ? projects.get(pid) : null;
+    var par = pid && parentOf(pid) ? projects.get(parentOf(pid)) : null;
+    var where = pid
+      ? (par ? (par.name || titleCase(parentOf(pid))) + " \u203a " : "") + ((pr && pr.name) || tagOf(pid))
+      : "No project";
+    var color = (pr && pr.color) || DEFAULT_COLOR;
+    return '<div class="mini tdrow" draggable="true" data-td="' + esc(t.key) + '" style="--c:' + esc(color) + '">' +
+      '<span class="sbar" aria-hidden="true"></span>' +
+      '<span class="txt"><span class="t">' + esc(t.title) + "</span>" +
+      '<span class="m">' + esc(where) + "</span></span></div>";
+  }).join("");
 }
 
 var narrow = function(){ return window.matchMedia("(max-width: 900px)").matches; };
@@ -1146,7 +1675,7 @@ $("board").addEventListener("click", function(e){
     renderBoard();
     return;
   }
-  var row = e.target.closest ? e.target.closest(".row") : null;
+  var row = e.target.closest ? e.target.closest(".row,.wkev") : null;
   if (!row) return;
   state.selectedId = row.getAttribute("data-id");
   state.autoSelect = false;
@@ -1839,33 +2368,66 @@ document.addEventListener("dragstart", function(e){
   } catch (err){}
 });
 document.addEventListener("dragend", function(){
-  state.dragTodo = null; clearDropzones();
+  state.dragTodo = null; clearDropzones(); clearDayzones();
   Array.prototype.forEach.call(document.querySelectorAll(".dragging"),
     function(el){ el.classList.remove("dragging"); });
 });
+/* Two kinds of target: a project or phase files it, a day schedules it. */
+var DROP_SEL = "[data-pj],[data-day]";
+function dropTarget(e){ return e.target.closest ? e.target.closest(DROP_SEL) : null; }
+function clearDayzones(){
+  Array.prototype.forEach.call(document.querySelectorAll(".dayzone"),
+    function(el){ el.classList.remove("dayzone"); });
+}
 document.addEventListener("dragover", function(e){
   if (!state.dragTodo) return;
-  var t = e.target.closest ? e.target.closest("[data-pj]") : null;
+  var t = dropTarget(e);
   if (!t) return;
   e.preventDefault();
   try { e.dataTransfer.dropEffect = "move"; } catch (err){}
-  if (!t.classList.contains("dropzone")){ clearDropzones(); t.classList.add("dropzone"); }
+  var isDay = t.hasAttribute("data-day");
+  var cls = isDay ? "dayzone" : "dropzone";
+  if (!t.classList.contains(cls)){
+    clearDropzones(); clearDayzones(); t.classList.add(cls);
+  }
 });
 document.addEventListener("dragleave", function(e){
-  var t = e.target.closest ? e.target.closest("[data-pj]") : null;
-  if (t && !t.contains(e.relatedTarget)) t.classList.remove("dropzone");
+  var t = dropTarget(e);
+  if (t && !t.contains(e.relatedTarget)){ t.classList.remove("dropzone"); t.classList.remove("dayzone"); }
 });
 document.addEventListener("drop", function(e){
-  var t = e.target.closest ? e.target.closest("[data-pj]") : null;
+  var t = dropTarget(e);
   var key = state.dragTodo || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
   if (!t || !key) return;
   e.preventDefault();
-  clearDropzones();
+  clearDropzones(); clearDayzones();
   var rec = todos.all()[key];
   state.dragTodo = null;
   if (!rec) return;
-  fileTodo(key, t.getAttribute("data-pj"));
+  if (t.hasAttribute("data-day")) dateTodo(key, t.getAttribute("data-day"));
+  else fileTodo(key, t.getAttribute("data-pj"));
 });
+
+/* Drag never fires on touch, so tapping a tray item has to go somewhere useful:
+   its own editor in To-dos, with the date field right there. */
+$("tray-list").addEventListener("click", function(e){
+  var mini = e.target.closest ? e.target.closest(".mini[data-td]") : null;
+  if (!mini || state.suppressClick) return;
+  var key = mini.dataset.td;
+  state.editingTodo = key;
+  setView("todos");
+  renderTodos();
+  var row = document.querySelector('#td-list .tdrow[data-td="' + key + '"]');
+  if (row) goTo(row);
+});
+
+/* Landing an undated to-do on a day. */
+function dateTodo(key, day){
+  var rec = todos.all()[key]; if (!rec || !day) return;
+  if (rec.day === day) return;
+  todos.put(rec.id || key, {day: day}).catch(function(){});
+  flash("<b>" + esc(rec.title || "That") + "</b> is on " + esc(longDay(day)) + ".");
+}
 
 /* ---------- long-press to move (touch, where drag events never fire) ---------- */
 function fileTodo(key, pid){
@@ -2476,6 +3038,7 @@ function setRange(n){
   });
   rewatch();
   renderMsg(); renderBoard(); renderCloseout();
+  setView(state.view);          /* the heading and the tray both follow the range */
 }
 
 /* A watch is keyed by its arguments, so a new window means re-registering each one. */
@@ -2495,7 +3058,7 @@ function stepMonth(n){
   var a = winStart();
   state.monthAnchor = new Date(a.getFullYear(), a.getMonth() + n, 1);
   state.pickedDay = null;
-  rewatch(); renderMsg(); renderBoard();
+  rewatch(); renderMsg(); renderBoard(); setView(state.view);
 }
 
 $("rangesw").addEventListener("click", function(e){
@@ -2503,14 +3066,20 @@ $("rangesw").addEventListener("click", function(e){
   if (b) setRange(Number(b.dataset.range));
 });
 
+var VIEW_TITLE = {board:"Today", notes:"Notes", people:"People", todos:"To-dos", tasks:"Tasks", projects:"Projects"};
+
 function setView(v){
   state.view = v;
-  document.querySelectorAll("#viewsw button").forEach(function(x){
-    x.setAttribute("aria-pressed", String(x.dataset.view === state.view));
-  });
-  var v = state.view, board = v === "board";
+  var board = v === "board";
+  Array.prototype.forEach.call(document.querySelectorAll("#railnav button[data-view], #tabbar button[data-view]"),
+    function(x){
+      if (x.dataset.view === v) x.setAttribute("aria-current", "page");
+      else x.removeAttribute("aria-current");
+    });
+
   $("board").hidden = !board;
   $("people").hidden = v !== "people";
+  $("notes").hidden = v !== "notes";
   $("todos").hidden = v !== "todos";
   $("tasks").hidden = v !== "tasks";
   $("projects").hidden = v !== "projects";
@@ -2518,16 +3087,164 @@ function setView(v){
   $("board-msg").hidden = !board;
   $("rangesw").hidden = !board;
   $("closeout").hidden = !board;
+  $("model-footer").hidden = !board;
+
+  /* A seven-column grid needs the whole width, so the write-up panel drops
+     below the board instead of sitting beside it. */
+  var grid = (board && (state.range === 7 || state.range === MONTH)) || v === "notes";
+  document.querySelector(".console").classList.toggle("wide", grid);
+
+  /* The heading names the view; only the board is a date, so only the board
+     gets one. On the board in month mode the month itself is the heading. */
+  $("v-title").textContent = board
+    ? (state.range === MONTH ? winStart().toLocaleDateString([], {month:"long", year:"numeric"})
+                             : (state.range === 1 ? "Today" : state.range === 2 ? "Today & tomorrow" : "This week"))
+    : (VIEW_TITLE[v] || "Life Dispatch");
+  $("v-when").textContent = board && state.range !== MONTH
+    ? (new Date()).toLocaleDateString([], {weekday:"long", month:"long", day:"numeric"})
+    : "";
+
   if (v === "people") renderPeople();
+  if (v === "notes") renderNotes();
   if (v === "todos") renderTodos();
   if (v === "tasks") renderTasks();
   if (v === "projects") renderProjects();
   renderPerson(); renderProject(); renderCloseout(); renderLoops(); renderBoard();
+  if (!board){ renderViewStat(); renderShell(); }
 }
 
-$("viewsw").addEventListener("click", function(e){
-  var b = e.target.closest ? e.target.closest("button[data-view]") : null;
+document.addEventListener("click", function(e){
+  var b = e.target.closest ? e.target.closest("#railnav button[data-view], #tabbar button[data-view]") : null;
   if (b) setView(b.dataset.view);
+});
+
+/* ---------- notes: the inbox you triage ---------- */
+function adoptNotes(){
+  if (!notes.ready) return;
+  calendarNotes().forEach(function(ev){
+    if (notes.get(ev.id)) return;
+    notes.put(ev.id, {
+      text: noteTextOf(ev) || "(empty note)",
+      detail: ev.note || "",
+      status: "inbox",
+      source: "calendar", calId: ev.calId, calName: ev.calName || "",
+      capturedAt: ev.start ? ev.start.getTime() : Date.now(),
+      createdAt: Date.now()
+    }).catch(function(){});
+  });
+}
+
+function noteAll(){
+  var all = notes.all();
+  return Object.keys(all).map(function(k){ return Object.assign({key: k}, all[k]); })
+    .filter(function(x){ return x && x.text; })
+    .sort(function(a, b){ return (b.capturedAt || b.createdAt || 0) - (a.capturedAt || a.createdAt || 0); });
+}
+function inboxCount(){ return noteAll().filter(function(x){ return x.status === "inbox"; }).length; }
+
+function noteCard(x){
+  var when = x.capturedAt ? new Date(x.capturedAt) : null;
+  var stamp = when ? (dayLabel(when) + " · " + hhmm(when)) : "";
+  var via = x.source === "calendar"
+    ? '<span class="via">via ' + esc(x.calName || "calendar") + "</span>"
+    : "<span>typed here</span>";
+  var acts = x.status === "inbox"
+    ? '<button type="button" class="go" data-nt="todo">→ To-do</button>' +
+      '<button type="button" data-nt="task">→ Task</button>' +
+      '<button type="button" data-nt="keep">Keep as note</button>' +
+      '<button type="button" class="bin" data-nt="drop">Discard</button>'
+    : x.status === "kept"
+    ? '<button type="button" data-nt="todo">→ To-do</button>' +
+      '<button type="button" data-nt="task">→ Task</button>' +
+      '<button type="button" class="bin" data-nt="drop">Discard</button>'
+    : '<button type="button" data-nt="back">Put back</button>';
+  var cls = x.status === "inbox" ? "" : x.status === "kept" ? " kept" : " gone";
+  return '<div class="ncard' + cls + '" data-nk="' + esc(x.key) + '">' +
+    '<div class="tx">' + esc(x.text) + "</div>" +
+    (x.detail ? '<div class="dt">' + esc(x.detail) + "</div>" : "") +
+    '<div class="mt">' + (stamp ? "<span>" + esc(stamp) + "</span>" : "") + via +
+      (x.filedAs ? "<span>filed as " + esc(x.filedAs) + "</span>" : "") + "</div>" +
+    '<div class="nacts">' + acts + "</div></div>";
+}
+
+function renderNotes(){
+  if (state.view !== "notes") return;
+  var all = noteAll(), host = $("nt-list");
+  var inbox = all.filter(function(x){ return x.status === "inbox"; });
+  var kept  = all.filter(function(x){ return x.status === "kept"; });
+  var gone  = all.filter(function(x){ return x.status === "dropped" || x.status === "filed"; });
+
+  var html = "";
+  if (inbox.length){
+    /* the count is already on the status line, directly above this */
+    html += '<div class="nsec"><span class="d inbox">Inbox</span></div>' +
+            inbox.map(noteCard).join("");
+  } else {
+    html += '<div class="nsec"><span class="d">Inbox</span></div>' +
+      '<p class="nhow">Nothing waiting. Send one from Telegram and it lands here: ' +
+      'Victor puts it on a calendar called <b>Notes</b>, or titles it ' +
+      "<code>NOTE: whatever you said</code> on any calendar. Then you sort it into a " +
+      "to-do, a task, or keep it.</p>";
+  }
+  if (kept.length){
+    html += '<div class="nsec"><span class="d">Kept</span><span class="n num">' + kept.length + "</span></div>" +
+            kept.map(noteCard).join("");
+  }
+  if (gone.length){
+    html += '<div class="nsec">' +
+      '<button type="button" class="dropbtn" id="nt-gone-toggle" aria-expanded="' + !!state.showGoneNotes + '">' +
+        (state.showGoneNotes ? "▾" : "▸") + " Sorted &amp; discarded</button>" +
+      '<span class="n num">' + gone.length + "</span></div>";
+    if (state.showGoneNotes) html += gone.map(noteCard).join("");
+  }
+  host.innerHTML = html;
+}
+
+/* Filing a note reuses the to-do path, tags and all, so "#backyard call the
+   fence guy" lands in the right project without retyping it. */
+function fileNote(key, how){
+  var x = notes.get(key); if (!x) return;
+  if (how === "back"){ notes.put(key, {status: "inbox", filedAs: ""}).catch(function(){}); return; }
+  if (how === "keep"){ notes.put(key, {status: "kept"}).catch(function(){}); return; }
+  if (how === "drop"){ notes.put(key, {status: "dropped"}).catch(function(){}); return; }
+
+  var body = x.text || "";
+  var names = tagsIn(body), map = {}, ids = [];
+  names.forEach(function(nm){ var k = resolveTag(nm); if (k && ids.indexOf(k) < 0){ ids.push(k); map[k] = nm; } });
+  var id = "t" + Date.now() + Math.floor(Math.random() * 999);
+  todos.put(id, {
+    title: stripTags(body) || body,
+    day: how === "task" ? null : dayKey(new Date()),
+    kind: how === "task" ? "task" : "todo",
+    note: x.detail || "",
+    projects: ids, projectNames: map,
+    done: false, dropped: false, source: "note", createdAt: Date.now()
+  }).catch(function(){});
+  notes.put(key, {status: "filed", filedAs: how === "task" ? "a task" : "a to-do"}).catch(function(){});
+  flash("Filed <b>" + esc(stripTags(body) || body) + "</b> as " + (how === "task" ? "a task" : "a to-do") + ".");
+}
+
+$("nt-list").addEventListener("click", function(e){
+  if (e.target.id === "nt-gone-toggle"){
+    state.showGoneNotes = !state.showGoneNotes; renderNotes(); return;
+  }
+  var b = e.target.closest ? e.target.closest("button[data-nt]") : null;
+  if (!b) return;
+  var card = b.closest(".ncard"); if (!card) return;
+  fileNote(card.dataset.nk, b.dataset.nt);
+});
+
+function newNote(){
+  var input = $("nt-new"), text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  var id = "n" + Date.now() + Math.floor(Math.random() * 999);
+  notes.put(id, {text: text, detail: "", status: "inbox", source: "app",
+                 capturedAt: Date.now(), createdAt: Date.now()}).catch(function(){});
+}
+$("nt-add").addEventListener("click", newNote);
+$("nt-new").addEventListener("keydown", function(e){
+  if (e.key === "Enter"){ e.preventDefault(); newNote(); }
 });
 
 /* ---------- open loops across every block ---------- */
@@ -2609,11 +3326,11 @@ function renderMsg(){
   });
   var keys = Object.keys(codes);
   if (!keys.length){
-    host.innerHTML = state.storedAt
-      ? '<div class="stale" style="padding:10px 16px 0 0">Calendar as of ' + esc(hhmm(new Date(state.storedAt))) + "</div>"
-      : "";
+    host.innerHTML = "";        /* the rail's sync lamp carries "as of" now */
+    renderShell();
     return;
   }
+  renderShell();
   host.innerHTML = keys.map(function(c){
     var copy = ERR_COPY[c] || ERR_COPY.upstream_error;
     var detail = copy[1] || esc(codes[c].message || "");
@@ -2636,7 +3353,7 @@ function watchCalendar(key, calendarId, label, opts){
     if (ev.type === "data"){
       delete state.errorByCal[key];
       state.eventsByCal[key] = normalize(ev.result && ev.result.payload, key, label, opts.isTodoCal);
-      adoptTodos();
+      adoptTodos(); adoptNotes();
       var c = ev.result && ev.result.cache;
       state.storedAt = c && c.storedAt ? c.storedAt : Date.now();
     } else {
@@ -2721,26 +3438,33 @@ document.querySelectorAll("#rangesw button").forEach(function(x){
   x.setAttribute("aria-pressed", String(Number(x.dataset.range) === state.range));
 });
 
-store.attachLocal(); todos.attachLocal(); projects.attachLocal();
+store.attachLocal(); todos.attachLocal(); projects.attachLocal(); notes.attachLocal();
+notes.ready = true;
 store.subscribe(function(){ renderBoard(); renderCloseout(); renderLoops(); renderPeople(); renderPerson();
                             ensureProjects(); renderProjects(); renderProject(); });
 todos.subscribe(function(){ renderTodos(); renderTasks(); renderBoard(); adoptTodos(); ensureProjects(); renderProjects(); renderProject(); });
-projects.subscribe(function(){ renderProjects(); renderProject(); renderTodos(); renderTasks(); });
+projects.subscribe(function(){ renderProjects(); renderProject(); renderTodos(); renderTasks(); renderShell(); });
+notes.subscribe(function(){ renderNotes(); renderShell(); });
+todos.subscribe(function(){ renderShell(); });
+store.subscribe(function(){ renderShell(); });
 /* Adopt anyway if the shared store never answers, so a local-only view still works. */
 setTimeout(function(){
   if (!todos.ready){ todos.ready = true; adoptTodos(); }
   if (!projects.ready){ projects.ready = true; ensureProjects(); }
+  notes.ready = true; adoptNotes();
 }, 6000);
-renderBoard(); renderCloseout();
+setView(state.view); renderCloseout();
 setInterval(function(){ renderBoard(); }, 60000);
 
 var claudeApi = (typeof claude !== "undefined" && claude && typeof claude.use === "function")
   ? claude : {use: function(){ return Promise.resolve(null); }};
 
 claudeApi.use("db").then(function(db){
-  if (db){ store.attachDb(db); todos.attachDb(db); projects.attachDb(db); }
+  if (db){ store.attachDb(db); todos.attachDb(db); projects.attachDb(db); notes.attachDb(db); }
   else { todos.ready = true; projects.ready = true; adoptTodos(); ensureProjects(); }
-}).catch(function(){ todos.ready = true; projects.ready = true; adoptTodos(); ensureProjects(); });
+  notes.ready = true; adoptNotes();
+}).catch(function(){ todos.ready = true; projects.ready = true; notes.ready = true;
+                     adoptTodos(); ensureProjects(); adoptNotes(); });
 claudeApi.use("sample").then(function(s){
   state.sample = s;
   if (!s) $("review-card").style.display = "none";
@@ -2762,10 +3486,12 @@ claudeApi.use("mcp").then(function(mcp){
     var pl = ev.result && ev.result.payload;
     state.calendars = (pl && pl.calendars) || [];
     state.calendars.forEach(function(c){
-      if (!isTodoCalendar(c.summary)) return;
-      state.todoCalIds[c.id] = true;
+      var isTd = isTodoCalendar(c.summary), isNt = isNotesCalendar(c.summary);
+      if (!isTd && !isNt) return;
+      if (isTd) state.todoCalIds[c.id] = true;
       state.selected[c.id] = true;
-      watchCalendar(c.id, c.id, c.summary || "To-dos", {days: 60, isTodoCal: true});
+      watchCalendar(c.id, c.id, c.summary || (isTd ? "To-dos" : "Notes"),
+                    {days: 60, isTodoCal: isTd});
     });
     var saved = loadSel();
     if (saved) saved.forEach(function(id){
@@ -2780,3 +3506,4 @@ claudeApi.use("mcp").then(function(mcp){
 
 })();
 </script>
+
