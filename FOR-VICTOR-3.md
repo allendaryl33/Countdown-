@@ -40,7 +40,7 @@ his phone has already made from decrypting.
 supabase secrets set \
   VAPID_PUBLIC=<the public value Daryl sends> \
   VAPID_PRIVATE=<the private value Daryl sends> \
-  VAPID_SUBJECT=mailto:allendaryl@hotmail.com
+  VAPID_SUBJECT=mailto:<YOUR-EMAIL>
 ```
 
 The public half is also visible in `index.html` as `VAPID_PUBLIC` if you want

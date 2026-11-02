@@ -13,7 +13,7 @@ no dependencies.
 Fill in the same two constants at the top of the `<script>` so links stay short:
 
 ```js
-const BAKED_URL = "https://oddfdrbyvgibklqdadrv.supabase.co";
+const BAKED_URL = "https://<PROJECT-REF>.supabase.co";
 const BAKED_KEY = "<the publishable key>";
 ```
 

@@ -1,7 +1,7 @@
 # Two things for the website
 
 Both are small and neither touches anything that's already working. The
-dispatch app reads from the same Supabase project (`oddfdrbyvgibklqdadrv`), so
+dispatch app reads from the same Supabase project (the project ref Daryl will give you), so
 there's nothing new to connect — only two things to add on the website side.
 
 ---
