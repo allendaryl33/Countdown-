@@ -1,3 +1,7 @@
+/* Paths resolve from this file, so the suites run wherever the repo is
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 const APP='http://127.0.0.1:54321/index.html', URL_='http://127.0.0.1:54321', KEY='sb_publishable_test';
 const errs=[];
@@ -279,7 +283,7 @@ const errs=[];
     // Stand up a copy of sign.html with the two values filled in, exactly as
     // whoever hosts it on the real domain would.
     const fs = require('fs');
-    const src = fs.readFileSync(`${APP}/sign.html`, 'utf8');
+    const src = fs.readFileSync(`${REPO_DIR}/sign.html`, 'utf8');
     const baked = src
       .replace('const BAKED_URL = "";', 'const BAKED_URL = ' + JSON.stringify(URL_) + ';')
       .replace('const BAKED_KEY = "";', 'const BAKED_KEY = ' + JSON.stringify(KEY) + ';');
@@ -320,7 +324,7 @@ const errs=[];
 
   await t('the repo copy keeps both constants empty', async () => {
     const fs = require('fs');
-    const src = fs.readFileSync(`${APP}/sign.html`, 'utf8');
+    const src = fs.readFileSync(`${REPO_DIR}/sign.html`, 'utf8');
     if (!/const BAKED_URL = "";/.test(src) || !/const BAKED_KEY = "";/.test(src))
       throw new Error('a key or project url got committed into sign.html');
   });

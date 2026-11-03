@@ -1,8 +1,9 @@
 /* The day should read as a timetable: hours down the side, who's working
    across the top, and an empty square is an hour he can still sell. */
 /* Paths resolve from this file, so the suites run wherever the repo is
-   checked out. APP_DIR overrides it if the app lives elsewhere. */
-const APP = process.env.APP_DIR || require('path').join(__dirname, '..');
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 const errs=[];
 (async () => {
@@ -11,7 +12,7 @@ const errs=[];
   const pg = await b.newPage({ viewport:{width:1280,height:1000} });
   pg.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   pg.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE: '+m.text())});
-  await pg.goto(`file://${APP}/index.html`); await pg.waitForTimeout(450);
+  await pg.goto(`file://${REPO_DIR}/index.html`); await pg.waitForTimeout(450);
 
   const today = await pg.evaluate(() => { App.view="schedule"; App.scheduleMode="day"; App.date=todayStr(); render(); return todayStr(); });
   await pg.waitForTimeout(400);
@@ -175,7 +176,7 @@ const errs=[];
   await t('nothing in the board renders dark text on a dark panel', async () => {
     const dark = await b.newPage({ viewport:{width:1500,height:1000}, colorScheme:'dark' });
     dark.on('pageerror',e=>errs.push('DARK PAGEERROR: '+e.message));
-    await dark.goto(`file://${APP}/index.html`); await dark.waitForTimeout(500);
+    await dark.goto(`file://${REPO_DIR}/index.html`); await dark.waitForTimeout(500);
     const bad = await dark.evaluate(() => {
       const lum = c => { const m = c.match(/\d+/g); if (!m) return 1;
         return (0.2126*m[0] + 0.7152*m[1] + 0.0722*m[2]) / 255; };

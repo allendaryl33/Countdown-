@@ -1,12 +1,13 @@
 /* Paths resolve from this file, so the suites run wherever the repo is
-   checked out. APP_DIR overrides it if the app lives elsewhere. */
-const APP = process.env.APP_DIR || require('path').join(__dirname, '..');
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 (async () => {
   const b = await chromium.launch({ executablePath:'/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args:['--no-sandbox'] });
   const pg = await b.newPage({ viewport:{width:430,height:930}, deviceScaleFactor:2 });
   pg.on('pageerror',e=>console.log('PAGEERROR '+e.message));
-  await pg.goto(`file://${APP}/index.html`); await pg.waitForTimeout(500);
+  await pg.goto(`file://${REPO_DIR}/index.html`); await pg.waitForTimeout(500);
   await pg.evaluate(() => {
     const j = Store.data.jobs.find(x => isOpen(x));
     ['Expansion tank, 2 gal','3/4 sharkbite coupling','Braided supply 20in',

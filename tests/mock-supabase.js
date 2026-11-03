@@ -2,8 +2,9 @@
    uses, with the same auth and the same rev guard. Lets the sync logic be
    tested without an account. Also serves index.html so fetch has an origin. */
 /* Paths resolve from this file, so the suites run wherever the repo is
-   checked out. APP_DIR overrides it if the app lives elsewhere. */
-const APP = process.env.APP_DIR || require('path').join(__dirname, '..');
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const http = require('http'); const fs = require('fs'); const url = require('url');
 
 const USERS = { 'allen@example.com': { pw:'correct-horse', id:'user-1' } };
@@ -104,20 +105,20 @@ const server = http.createServer((req, res) => {
   }
   if (u.pathname === '/invoice.html'){
     res.writeHead(200, {'Content-Type':'text/html'});
-    return res.end(fs.readFileSync(`${APP}/invoice.html`));
+    return res.end(fs.readFileSync(`${REPO_DIR}/invoice.html`));
   }
   if (u.pathname === '/sign.html'){
     res.writeHead(200, {'Content-Type':'text/html'});
-    return res.end(fs.readFileSync(`${APP}/sign.html`));
+    return res.end(fs.readFileSync(`${REPO_DIR}/sign.html`));
   }
   if (u.pathname === '/index.html' || u.pathname === '/'){
     res.writeHead(200, {'Content-Type':'text/html'});
-    return res.end(fs.readFileSync(`${APP}/index.html`));
+    return res.end(fs.readFileSync(`${REPO_DIR}/index.html`));
   }
   // sw.js among them: the real host serves it next to index.html, and
   // without it every page logs a failed registration
   if (/^\/[\w.-]+\.(png|json|ico|js)$/.test(u.pathname)){
-    const f = APP + u.pathname;
+    const f = REPO_DIR + u.pathname;
     if (fs.existsSync(f)){
       const type = u.pathname.endsWith('.json') ? 'application/json'
                  : u.pathname.endsWith('.js')   ? 'text/javascript'

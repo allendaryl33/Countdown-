@@ -1,7 +1,8 @@
 /* A typo in a line used to mean deleting it and typing the whole thing again. */
 /* Paths resolve from this file, so the suites run wherever the repo is
-   checked out. APP_DIR overrides it if the app lives elsewhere. */
-const APP = process.env.APP_DIR || require('path').join(__dirname, '..');
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 const errs=[];
 (async () => {
@@ -10,7 +11,7 @@ const errs=[];
   const pg = await b.newPage({ viewport:{width:1280,height:1000} });
   pg.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   pg.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE: '+m.text())});
-  await pg.goto(`file://${APP}/index.html`); await pg.waitForTimeout(450);
+  await pg.goto(`file://${REPO_DIR}/index.html`); await pg.waitForTimeout(450);
 
   const eid = await pg.evaluate(() => {
     const e = Store.data.estimates.find(x => (x.items||[]).length);

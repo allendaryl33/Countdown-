@@ -1,6 +1,7 @@
 /* Paths resolve from this file, so the suites run wherever the repo is
-   checked out. APP_DIR overrides it if the app lives elsewhere. */
-const APP = process.env.APP_DIR || require('path').join(__dirname, '..');
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 const errs=[];
 (async () => {
@@ -9,7 +10,7 @@ const errs=[];
   const pg = await b.newPage({ viewport:{width:1200,height:1000} });
   pg.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   pg.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE: '+m.text())});
-  await pg.goto(`file://${APP}/index.html`); await pg.waitForTimeout(450);
+  await pg.goto(`file://${REPO_DIR}/index.html`); await pg.waitForTimeout(450);
 
   // A finished job with money on it and nothing billed — the "to send" case.
   const jid = await pg.evaluate(() => {
@@ -28,7 +29,7 @@ const errs=[];
   console.log('--- the section exists and is reachable ---');
   await t('Invoices is on the phone bottom bar, beside Estimates', async () => {
     const ph = await b.newPage({ viewport:{width:390,height:844} });
-    await ph.goto(`file://${APP}/index.html`); await ph.waitForTimeout(400);
+    await ph.goto(`file://${REPO_DIR}/index.html`); await ph.waitForTimeout(400);
     const labels = await ph.$$eval('#mobile-nav button', bs => bs.map(x => x.textContent.trim()));
     if (!labels.some(l => /Invoices/.test(l))) throw new Error('not on the bar: ' + JSON.stringify(labels));
     // Six buttons across 390px: check none of them wrapped to two lines.
@@ -283,7 +284,7 @@ const errs=[];
   await t('nothing on the row clips its own label, and the page does not go sideways', async () => {
     const ph = await b.newPage({ viewport:{width:390,height:844} });
     ph.on('pageerror',e=>errs.push('PHONE PAGEERROR: '+e.message));
-    await ph.goto(`file://${APP}/index.html`); await ph.waitForTimeout(400);
+    await ph.goto(`file://${REPO_DIR}/index.html`); await ph.waitForTimeout(400);
     await ph.evaluate(() => {
       const j = Store.data.jobs[0];
       if (!(j.parts && j.parts.length)) j.parts = [{ id:'px', name:'Parts', qty:1, price:118 }];

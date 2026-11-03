@@ -1,3 +1,7 @@
+/* Paths resolve from this file, so the suites run wherever the repo is
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 const APP = 'http://127.0.0.1:54321/index.html';
 const URL_ = 'http://127.0.0.1:54321', KEY = 'sb_publishable_test';
@@ -153,7 +157,7 @@ const errs = [];
   console.log('--- keys stay out of the build ---');
   await t('no key or project URL is baked into the app itself', async () => {
     const fs = require('fs');
-    const src = fs.readFileSync(`${APP}/index.html`,'utf8');
+    const src = fs.readFileSync(`${REPO_DIR}/index.html`,'utf8');
     // real key material, not the placeholder and validation strings
     const bad = [
       [/sb_publishable_[A-Za-z0-9_-]{10,}/, 'a publishable key'],

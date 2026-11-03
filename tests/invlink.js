@@ -1,3 +1,7 @@
+/* Paths resolve from this file, so the suites run wherever the repo is
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 const APP='http://127.0.0.1:54321/index.html', URL_='http://127.0.0.1:54321', KEY='sb_publishable_test';
 const errs=[];
@@ -233,7 +237,7 @@ const errs=[];
   });
 
   await t('the repo copy carries no key', async () => {
-    const src = require('fs').readFileSync(`${APP}/invoice.html`,'utf8');
+    const src = require('fs').readFileSync(`${REPO_DIR}/invoice.html`,'utf8');
     if (!/const BAKED_URL = "";/.test(src) || !/const BAKED_KEY = "";/.test(src))
       throw new Error('a key got committed into invoice.html');
   });

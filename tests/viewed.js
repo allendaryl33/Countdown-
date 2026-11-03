@@ -1,8 +1,9 @@
 /* "Sent three days ago, never opened" is a different phone call from
    "opened four times, no answer". */
 /* Paths resolve from this file, so the suites run wherever the repo is
-   checked out. APP_DIR overrides it if the app lives elsewhere. */
-const APP = process.env.APP_DIR || require('path').join(__dirname, '..');
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 const errs=[];
 (async () => {
@@ -11,7 +12,7 @@ const errs=[];
   const pg = await b.newPage({ viewport:{width:1280,height:1000} });
   pg.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   pg.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE: '+m.text())});
-  await pg.goto(`file://${APP}/index.html`); await pg.waitForTimeout(450);
+  await pg.goto(`file://${REPO_DIR}/index.html`); await pg.waitForTimeout(450);
 
   await t('an unopened estimate says so plainly', async () => {
     const s = await pg.evaluate(() => openedNote({ viewed_at:null, view_count:0 }));
@@ -142,7 +143,7 @@ const errs=[];
 
   await t('the signing page asks the database to record the view', async () => {
     const fs = require('fs');
-    const sign = fs.readFileSync(`${APP}/sign.html`,'utf8');
+    const sign = fs.readFileSync(`${REPO_DIR}/sign.html`,'utf8');
     if (!/mark_estimate_viewed/.test(sign)) throw new Error('sign.html never records a view');
     if (!/\.catch\(/.test(sign.slice(sign.indexOf('mark_estimate_viewed') - 60,
                                    sign.indexOf('mark_estimate_viewed') + 120)))
@@ -150,7 +151,7 @@ const errs=[];
   });
 
   await t('the migration adds the columns and the function, re-runnably', async () => {
-    const sql = require('fs').readFileSync(`${APP}/supabase-viewed.sql`,'utf8');
+    const sql = require('fs').readFileSync(`${REPO_DIR}/supabase-viewed.sql`,'utf8');
     for (const want of ['add column if not exists viewed_at',
                         'add column if not exists view_count',
                         'create or replace function public.mark_estimate_viewed',

@@ -2,8 +2,9 @@
    tested here; this is the phone's half — who gets asked about, what the
    message says, and that confirming one stops it nagging. */
 /* Paths resolve from this file, so the suites run wherever the repo is
-   checked out. APP_DIR overrides it if the app lives elsewhere. */
-const APP = process.env.APP_DIR || require('path').join(__dirname, '..');
+   checked out. APP_DIR overrides it. Named REPO_DIR, not APP: sixty of
+   these already use APP for the app's URL. */
+const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
 const { chromium } = require(process.env.PW || 'playwright-core');
 const errs=[];
 (async () => {
@@ -12,7 +13,7 @@ const errs=[];
   const pg = await b.newPage({ viewport:{width:430,height:1000} });
   pg.on('pageerror',e=>errs.push('PAGEERROR: '+e.message));
   pg.on('console',m=>{if(m.type()==='error')errs.push('CONSOLE: '+m.text())});
-  await pg.goto(`file://${APP}/index.html`); await pg.waitForTimeout(500);
+  await pg.goto(`file://${REPO_DIR}/index.html`); await pg.waitForTimeout(500);
 
   // one job tomorrow for a reachable customer, nothing else on that day
   const jid = await pg.evaluate(() => {
