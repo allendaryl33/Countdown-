@@ -617,6 +617,15 @@ textarea.input{resize:vertical;min-height:76px}
   cursor:grab;box-shadow:0 1px 2px rgba(16,36,56,.07);border-left:3px solid var(--blue);
 }
 .li-edit{padding:6px 8px;font-size:13px;width:100%}
+/* The line table is wider than a phone, so it scrolls sideways inside its own
+   box. Without pinning, the buttons that reorder and remove a line sit off the
+   right edge — which is exactly where he needs them, on the phone, standing in
+   someone's bathroom. Stacked so the column stays narrow. */
+.li-act{position:sticky;right:0;background:var(--surface);z-index:2;
+        box-shadow:-6px 0 6px -6px rgba(19,27,30,.18);padding:4px 6px!important;
+        vertical-align:middle}
+.li-act .btn{display:block;width:28px;min-width:28px;height:28px;padding:0;
+             margin:3px 0;text-align:center;line-height:26px}
 .li-desc{resize:vertical;min-height:34px;line-height:1.35;font-family:inherit}
 .li-edit.num{text-align:right;font-variant-numeric:tabular-nums}
 tr[data-line-row] td{vertical-align:top;padding:6px}
@@ -6883,7 +6892,7 @@ function openEstimate(id){
       <table style="border:1px solid var(--line);border-radius:6px">
         <thead><tr>
           <th>Description</th><th style="width:90px">Kind</th><th class="num" style="width:70px">Qty</th>
-          <th class="num" style="width:110px">Unit price</th><th class="num" style="width:110px">Line</th><th style="width:40px"></th>
+          <th class="num" style="width:110px">Unit price</th><th class="num" style="width:110px">Line</th><th class="li-act" style="width:44px"></th>
         </tr></thead>
         <tbody>
           ${items.map((it,i) => `<tr data-line-row="${i}">
@@ -6897,7 +6906,12 @@ function openEstimate(id){
             <td><input class="input li-edit num" type="number" step="0.01" min="0"
                   data-line-edit="${e.id}:${i}:price" value="${esc(Number(it.price) || 0)}"></td>
             <td class="num t-strong" data-line-total="${i}">${esc(money((Number(it.qty)||0)*(Number(it.price)||0)))}</td>
-            <td class="num"><button class="btn sm ghost" data-del-line="${e.id}:${i}" title="Remove">×</button></td>
+            <td class="li-act">
+              <button class="btn sm ghost" data-line-move="${e.id}:${i}:-1"
+                      title="Move up" ${i===0?"disabled":""}>↑</button><button
+                      class="btn sm ghost" data-line-move="${e.id}:${i}:1"
+                      title="Move down" ${i===items.length-1?"disabled":""}>↓</button><button
+                      class="btn sm ghost" data-del-line="${e.id}:${i}" title="Remove">×</button></td>
           </tr>`).join("")}
           ${items.length ? "" : `<tr><td colspan="6"><div class="empty" style="padding:18px">No lines yet — pick from the price book below.</div></td></tr>`}
           <tr>
@@ -10290,6 +10304,23 @@ document.addEventListener("click", e => {
     Store.save(); openEstimate(e.id);
     return;
   }
+  /* Line order is the order of the work, and it is what the customer reads.
+     New lines land at the bottom, so without this the only way to fix a
+     sequence was to delete and retype the lot. Same splice-and-reopen as
+     the remove button; a line edit saves on blur, which happens before this
+     click, so nothing typed is lost to the rebuild. */
+  const lineMove = hit("[data-line-move]");
+  if (lineMove){
+    const [eid, idx, dir] = lineMove.dataset.lineMove.split(":");
+    const e = Store.estimate(eid);
+    const i = Number(idx), j = i + Number(dir);
+    if (e && e.items && j >= 0 && j < e.items.length){
+      [e.items[i], e.items[j]] = [e.items[j], e.items[i]];
+      Store.save(); openEstimate(eid);
+    }
+    return;
+  }
+
   const delLine = hit("[data-del-line]");
   if (delLine){
     const [eid, idx] = delLine.dataset.delLine.split(":");
