@@ -1,2 +1,7 @@
 node_modules/
 tests/node_modules
+
+# Shop exports written by the test run. The content is demo data today,
+# but the same test would write real customer records in a session that
+# had them loaded — and this repo is public.
+tests/pcp-dispatch-*.json
