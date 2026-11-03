@@ -236,10 +236,19 @@ const errs=[];
     if (!await pg.$(`[data-inv-print="${jid}"]`)) throw new Error('lost the PDF route');
   });
 
-  await t('the repo copy carries no key', async () => {
-    const src = require('fs').readFileSync(`${REPO_DIR}/invoice.html`,'utf8');
-    if (!/const BAKED_URL = "";/.test(src) || !/const BAKED_KEY = "";/.test(src))
-      throw new Error('a key got committed into invoice.html');
+  /* Was: assert invoice.html carries no key. That is what broke — the values
+     lived only in the deployed copy, a redeploy from the template wiped them,
+     and a customer got a dead link. They belong in the repo, and secret
+     material still must not. */
+  await t('the repo copy carries the project, and no secret material', async () => {
+    const fs = require('fs');
+    const src = fs.readFileSync(`${REPO_DIR}/invoice.html`, 'utf8');
+    if (!/const BAKED_URL = "https:\/\/[a-z0-9]+\.supabase\.co";/.test(src))
+      throw new Error('invoice.html lost its project URL — short links from it are dead');
+    if (!/const BAKED_KEY = "sb_publishable_[A-Za-z0-9_-]+";/.test(src))
+      throw new Error('invoice.html lost its publishable key — short links from it are dead');
+    if (/sb_secret_|eyJhbGciOi/.test(src))
+      throw new Error('secret material got committed into invoice.html');
   });
 
   await b.close();

@@ -284,10 +284,13 @@ const errs=[];
     // whoever hosts it on the real domain would.
     const fs = require('fs');
     const src = fs.readFileSync(`${REPO_DIR}/sign.html`, 'utf8');
+    // The repo copy now ships pointing at the real project, so these swap
+    // whatever is there for the mock's values rather than filling in blanks.
     const baked = src
-      .replace('const BAKED_URL = "";', 'const BAKED_URL = ' + JSON.stringify(URL_) + ';')
-      .replace('const BAKED_KEY = "";', 'const BAKED_KEY = ' + JSON.stringify(KEY) + ';');
-    if (baked === src) throw new Error('the two constants are not in sign.html to fill in');
+      .replace(/const BAKED_URL = "[^"]*";/, 'const BAKED_URL = ' + JSON.stringify(URL_) + ';')
+      .replace(/const BAKED_KEY = "[^"]*";/, 'const BAKED_KEY = ' + JSON.stringify(KEY) + ';');
+    if (baked === src) throw new Error('the two constants are not in sign.html to swap');
+    if (!baked.includes(JSON.stringify(URL_))) throw new Error('the project URL did not take');
     fs.writeFileSync(process.env.SP + '/sign-baked.html', baked);
 
     const e6 = await pg.evaluate(async () => {
@@ -322,11 +325,20 @@ const errs=[];
     console.log('       ' + shortLink.length + ' chars, loaded and signed');
   });
 
-  await t('the repo copy keeps both constants empty', async () => {
+  /* This used to assert the opposite — that the repo copy stayed empty and
+     whoever hosted the page filled it in. That is exactly what broke: the
+     values lived only in the deployed copy, a redeploy from the template
+     wiped them, and the next customer got a dead link. They belong in the
+     thing deploys come from. */
+  await t('the repo copy carries the project, so a redeploy cannot strip it', async () => {
     const fs = require('fs');
     const src = fs.readFileSync(`${REPO_DIR}/sign.html`, 'utf8');
-    if (!/const BAKED_URL = "";/.test(src) || !/const BAKED_KEY = "";/.test(src))
-      throw new Error('a key or project url got committed into sign.html');
+    if (!/const BAKED_URL = "https:\/\/[a-z0-9]+\.supabase\.co";/.test(src))
+      throw new Error('sign.html lost its project URL — short links sent from it are dead');
+    if (!/const BAKED_KEY = "sb_publishable_[A-Za-z0-9_-]+";/.test(src))
+      throw new Error('sign.html lost its publishable key — short links sent from it are dead');
+    if (/sb_secret_|eyJhbGciOi/.test(src))
+      throw new Error('secret material got committed into sign.html');
   });
 
   console.log('--- links that should not work ---');
@@ -338,9 +350,35 @@ const errs=[];
     if (/EST-/.test(tx)) throw new Error('leaked an estimate to a guessed token');
   });
 
-  await t('a truncated link says so instead of looking broken', async () => {
-    await cust.goto(link.split('&u=')[0]); await cust.waitForTimeout(700);
+  /* Cutting the &u= and &k= off used to break a link. Now the page holds
+     those itself, so that cut is survivable and the customer still gets
+     their estimate — which is the point of baking them in. */
+  await t('a link cut after the token still opens, because the page knows the project', async () => {
+    // Against the baked copy, because stripping &u= is the whole point: the
+    // page falls back to what it carries. The repo copy carries the real
+    // project, which the mock's tokens do not exist in.
+    const fresh = await pg.evaluate(async () => {
+      const e = Store.data.estimates.find(x => (x.items||[]).length && !x.approval);
+      return e ? await Cloud.publishSignLink(e) : null;
+    });
+    if (!fresh) { console.log('       (no spare estimate)'); return; }
+    await cust.goto('about:blank');
+    await cust.goto(URL_ + '/sign-baked.html#t=' + fresh); await cust.waitForTimeout(900);
     const tx = await cust.evaluate(() => document.querySelector('#root').textContent.replace(/\s+/g,' '));
+    if (/isn't complete/.test(tx)) throw new Error('a survivable cut was treated as broken');
+    if (!/EST-/.test(tx)) throw new Error('did not load: ' + tx.slice(0,160));
+  });
+
+  /* The cut that still matters. A token is 16 random bytes, always 32 hex
+     characters, so a short one means the link was clipped. Without checking
+     its shape this reads as "expired", which sends them chasing the wrong
+     thing — a fresh link they do not need. */
+  await t('a link cut mid-token says it is incomplete, not expired', async () => {
+    const clipped = link.split('&u=')[0].replace(/t=([0-9a-f]+)/, (m,t) => 't=' + t.slice(0, 20));
+    await cust.goto('about:blank');
+    await cust.goto(clipped); await cust.waitForTimeout(900);
+    const tx = await cust.evaluate(() => document.querySelector('#root').textContent.replace(/\s+/g,' '));
+    if (/expired/.test(tx)) throw new Error('a clipped token was reported as expired');
     if (!/isn't complete/.test(tx)) throw new Error(tx.slice(0,160));
   });
 
