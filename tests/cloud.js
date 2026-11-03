@@ -155,28 +155,63 @@ const errs = [];
   });
 
   console.log('--- keys stay out of the build ---');
-  await t('no key or project URL is baked into anything published', async () => {
+  await t('no secret key or token reaches anything published', async () => {
     const fs = require('fs');
-    const src = fs.readFileSync(`${REPO_DIR}/index.html`,'utf8');
-    // real key material, not the placeholder and validation strings
-    const bad = [
-      [/sb_publishable_[A-Za-z0-9_-]{10,}/, 'a publishable key'],
-      [/sb_secret_[A-Za-z0-9_-]{10,}/,      'a secret key'],
-      [/eyJhbGciOi[A-Za-z0-9_.-]{20,}/,     'a JWT'],
-      [/https:\/\/(?!abcdefgh)[a-z0-9]{15,}\.supabase\.co/, 'a real project URL']
+
+    /* Two different rules, because two different risks.
+
+       Secret material — the service_role key, anything sb_secret_, a JWT —
+       must never appear in any published file, full stop. Holding one lets a
+       stranger read and write the whole shop.
+
+       The publishable key and the project URL are a different thing. They
+       already travel in plain text inside every signing link he texts a
+       customer; Supabase calls that key publishable because it belongs in a
+       browser. The protection is that anon has no table rights and only
+       narrow security definer functions are reachable, not that the key is
+       hidden. They are baked into sign.html and invoice.html on purpose, so
+       a redeploy cannot silently strip them and leave customers holding a
+       dead link — which is exactly what happened once.
+
+       The app itself is still held to the strict rule. It takes its project
+       from the URL hash or what he typed, never from something compiled in. */
+    const SECRET = [
+      [/sb_secret_[A-Za-z0-9_-]{10,}/,  'a secret key'],
+      [/eyJhbGciOi[A-Za-z0-9_.-]{20,}/, 'a JWT']
     ];
-    const hit = bad.filter(([r]) => r.test(src)).map(([,n]) => n);
-    if (hit.length) throw new Error('found in source: '+hit.join(', '));
-    // Everything else the repo serves, not just the app. These go out over
-    // GitHub Pages to anyone who asks, so a key in any of them is published.
-    const others = fs.readdirSync(REPO_DIR)
-      .filter(f => /\.(html|json|js)$/.test(f) && f !== 'index.html');
-    for (const f of others){
-      const txt = fs.readFileSync(`${REPO_DIR}/${f}`, 'utf8');
-      const h = bad.filter(([r]) => r.test(txt)).map(([,n]) => n);
-      if (h.length) throw new Error(`found in ${f}: ` + h.join(', '));
+    /* Not the bare words "service_role". They appear in index.html in the
+       check that REFUSES a secret key if he ever pastes one, and in the SQL
+       comments explaining the grants. A service_role key is a JWT or an
+       sb_secret_ string, and both are caught above; banning the name would
+       only delete the guard that protects him. */
+    const PUBLIC_TOO = SECRET.concat([
+      [/sb_publishable_[A-Za-z0-9_-]{10,}/, 'a publishable key'],
+      [/https:\/\/(?!abcdefgh)[a-z0-9]{15,}\.supabase\.co/, 'a real project URL']
+    ]);
+    const MAY_CARRY_PUBLIC = new Set(['sign.html', 'invoice.html']);
+
+    const files = fs.readdirSync(REPO_DIR).filter(f => /\.(html|json|js)$/.test(f));
+    if (!files.includes('index.html')) throw new Error('index.html is not where it should be');
+
+    for (const f of files){
+      const txt  = fs.readFileSync(`${REPO_DIR}/${f}`, 'utf8');
+      const rule = MAY_CARRY_PUBLIC.has(f) ? SECRET : PUBLIC_TOO;
+      const hit  = rule.filter(([r]) => r.test(txt)).map(([,n]) => n);
+      if (hit.length) throw new Error(`found in ${f}: ` + hit.join(', '));
     }
-    console.log('       nothing but placeholders, across ' + (others.length + 1) + ' published files');
+    console.log('       no secret material across ' + files.length + ' published files');
+  });
+
+  await t('the two signing pages really do carry their project, so links survive a redeploy', async () => {
+    const fs = require('fs');
+    for (const f of ['sign.html', 'invoice.html']){
+      const txt = fs.readFileSync(`${REPO_DIR}/${f}`, 'utf8');
+      const url = /const BAKED_URL = "(https:\/\/[a-z0-9]+\.supabase\.co)"/.exec(txt);
+      const key = /const BAKED_KEY = "(sb_publishable_[A-Za-z0-9_-]+)"/.exec(txt);
+      if (!url) throw new Error(`${f} has no project URL baked in — a short link sent from it is dead`);
+      if (!key) throw new Error(`${f} has no publishable key baked in — a short link sent from it is dead`);
+    }
+    console.log('       both pages can stand on their own');
   });
 
   await t('the secret key is refused if it is ever pasted in', async () => {
