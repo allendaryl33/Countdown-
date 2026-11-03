@@ -155,7 +155,7 @@ const errs = [];
   });
 
   console.log('--- keys stay out of the build ---');
-  await t('no key or project URL is baked into the app itself', async () => {
+  await t('no key or project URL is baked into anything published', async () => {
     const fs = require('fs');
     const src = fs.readFileSync(`${REPO_DIR}/index.html`,'utf8');
     // real key material, not the placeholder and validation strings
@@ -167,11 +167,16 @@ const errs = [];
     ];
     const hit = bad.filter(([r]) => r.test(src)).map(([,n]) => n);
     if (hit.length) throw new Error('found in source: '+hit.join(', '));
-    // and nothing of the sort reached the published build either
-    const art = fs.readFileSync(process.env.SP + '/pcp-dispatch.html','utf8');
-    const hit2 = bad.filter(([r]) => r.test(art)).map(([,n]) => n);
-    if (hit2.length) throw new Error('found in the published build: '+hit2.join(', '));
-    console.log('       nothing but placeholders, in the source and the build');
+    // Everything else the repo serves, not just the app. These go out over
+    // GitHub Pages to anyone who asks, so a key in any of them is published.
+    const others = fs.readdirSync(REPO_DIR)
+      .filter(f => /\.(html|json|js)$/.test(f) && f !== 'index.html');
+    for (const f of others){
+      const txt = fs.readFileSync(`${REPO_DIR}/${f}`, 'utf8');
+      const h = bad.filter(([r]) => r.test(txt)).map(([,n]) => n);
+      if (h.length) throw new Error(`found in ${f}: ` + h.join(', '));
+    }
+    console.log('       nothing but placeholders, across ' + (others.length + 1) + ' published files');
   });
 
   await t('the secret key is refused if it is ever pasted in', async () => {

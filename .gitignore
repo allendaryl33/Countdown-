@@ -5,3 +5,10 @@ tests/node_modules
 # but the same test would write real customer records in a session that
 # had them loaded — and this repo is public.
 tests/pcp-dispatch-*.json
+
+# Written by the test run, not sources. Same hazard as the shop export: these
+# hold demo data today, and whatever is loaded if the suite is ever run against
+# the real shop. Screenshots of his customers, or a signing page with a live
+# key baked in, must not land in a public repo by accident.
+tests/shots/
+tests/sign-baked.html
