@@ -2942,9 +2942,22 @@ const Store = {
   invoiceLines(job){
     // Flat: the lines are the scope, the price sits on the job, and hours
     // are his own record rather than something the customer is billed for.
-    if (this.jobIsFlat(job))
-      return (job.parts || []).map(p => ({ desc: p.desc || p.name || "", qty: 0, price: 0 }))
-                              .filter(l => l.desc);
+    if (this.jobIsFlat(job)){
+      const all   = (job.parts || []).filter(p => (p.desc || p.name));
+      const extra = all.filter(p => (Number(p.qty)||0) * (Number(p.price)||0) > 0);
+      const scope = all.filter(p => !((Number(p.qty)||0) * (Number(p.price)||0) > 0))
+                       .map(p => ({ desc: p.desc || p.name, qty: 0, price: 0, scope: true }));
+      // With nothing added, the invoice reads as it always has: the scope,
+      // no prices against it, one total. The moment something priced is on
+      // there the agreed price has to appear as its own line, or the lines
+      // do not add up to the total and the customer is right to query it.
+      if (!extra.length) return scope;
+      return scope
+        .concat([{ desc: "Agreed price", qty: 1, price: Number(job.flatPrice) || 0 }])
+        .concat(extra.map(p => ({ desc: p.desc || p.name,
+                                  qty: Number(p.qty) || 0,
+                                  price: Number(p.price) || 0 })));
+    }
     const lines = (job.parts || []).map(p => ({
       desc: p.desc || p.name || "", qty: Number(p.qty) || 0, price: Number(p.price) || 0
     })).filter(l => l.desc);
@@ -3446,8 +3459,22 @@ const Store = {
     const labor = (Number(job.laborHours)||0) * (Number(job.laborRate)|| this.data.settings.laborRate || 0);
     return parts + labor;
   },
+  /* Parts only. Hours are deliberately excluded: on a flat job his clock is
+     for working out whether the price was right, not something the customer
+     is billed for. */
+  jobPartsSum(job){
+    return ((job && job.parts) || [])
+      .reduce((s,p) => s + (Number(p.qty)||0) * (Number(p.price)||0), 0);
+  },
+  /* A flat job is the agreed price plus anything priced that was added after.
+     The scope lines carry no price, so they add nothing and the agreed price
+     stands — but an extra he agreed on site, entered as a priced part, has to
+     reach the invoice. It used to be dropped: the flat price was returned and
+     every line ignored, so a $500 upgrade was simply never billed. */
   jobTotal(job){
-    return this.jobIsFlat(job) ? Number(job.flatPrice) : this.jobLineSum(job);
+    return this.jobIsFlat(job)
+      ? Number(job.flatPrice) + this.jobPartsSum(job)
+      : this.jobLineSum(job);
   },
   setJobFlatPrice(job, v){
     const n = Math.max(0, Number(v) || 0);

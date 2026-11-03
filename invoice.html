@@ -150,7 +150,9 @@ function render(p){
       <table>
         <thead><tr><th>Description</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Amount</th></tr></thead>
         <tbody>
-          ${lines.map(l => `<tr>
+          ${lines.map(l => l.scope
+            ? `<tr><td colspan="4">${esc(l.desc)}</td></tr>`
+            : `<tr>
             <td>${esc(l.desc)}</td><td class="n">${esc(l.qty)}</td>
             <td class="n">${esc(money(l.price))}</td>
             <td class="n">${esc(money(l.qty * l.price))}</td></tr>`).join("")}
