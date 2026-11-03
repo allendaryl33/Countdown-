@@ -21,7 +21,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const VAPID_PUBLIC  = Deno.env.get("VAPID_PUBLIC")!;
 const VAPID_PRIVATE = Deno.env.get("VAPID_PRIVATE")!;
-const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT") ?? "mailto:allendaryl@hotmail.com";
+// Required, like the keys. A default here would either bake an address into
+// a public repo or stand in a placeholder that push services reject at send
+// time — failing on the first line is better than failing in the evening.
+const VAPID_SUBJECT = Deno.env.get("VAPID_SUBJECT")!;
 
 /* His day, not UTC. A job on the 3rd is the 3rd in Edmonton. */
 const ZONE = Deno.env.get("SHOP_TZ") ?? "America/Edmonton";

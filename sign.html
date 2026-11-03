@@ -99,8 +99,8 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
    blank in the repository so the repository stays key-free. Whoever
    hosts this fills these two in.
    ------------------------------------------------------------------ */
-const BAKED_URL = "";
-const BAKED_KEY = "";
+const BAKED_URL = "https://oddfdrbyvgibklqdadrv.supabase.co";
+const BAKED_KEY = "sb_publishable_hCKcFSBbbrMqjCxEW4s0Nw_s_Qos1zF";
 
 const P = new URLSearchParams(location.hash.slice(1));
 const TOKEN = P.get("t") || "";
@@ -316,7 +316,14 @@ window.addEventListener("hashchange", () => location.reload());
 
 /* ---- go ---- */
 (async () => {
-  if (!TOKEN || !BASE || !KEY){
+  /* A token is always 32 hex characters — 16 random bytes. Before the project
+     details were baked into this page, a link cut short by a messaging app
+     lost its &u= and &k= and was caught that way. Now those come from the
+     page, so a truncated link looks exactly like a short one; checking the
+     token's own shape is what still tells them apart. Without this, a cut
+     link reads as "expired", which sends the customer chasing the wrong
+     thing. */
+  if (!TOKEN || !BASE || !KEY || !/^[0-9a-f]{32}$/.test(TOKEN)){
     state("🔗", "That link isn't complete",
       "Ask whoever sent it to send the whole thing — some apps cut long links short.");
     return;
