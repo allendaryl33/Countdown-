@@ -45,6 +45,8 @@ const { chromium } = require(process.env.PW || 'playwright-core');
   };
   await probe('local-desktop', `${REPO_DIR}/index.html`, {width:1400,height:900});
   await probe('local-phone',   `${REPO_DIR}/index.html`, {width:390,height:844});
-  await probe('artifact-phone', process.env.SP + '/pcp-dispatch.html', {width:390,height:844});
+  // the published app is index.html here; the old snapshot copy only ever
+  // existed in a scratchpad
+  await probe('artifact-phone', `${REPO_DIR}/index.html`, {width:390,height:844});
   await b.close();
 })();
