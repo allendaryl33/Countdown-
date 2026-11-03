@@ -1,0 +1,1226 @@
+{
+  "version": 2,
+  "demo": true,
+  "seededOn": "2026-11-03",
+  "counter": 1011,
+  "counterEst": 2004,
+  "settings": {
+    "company": "Poseidon Plumbing & Gasfitting Ltd.",
+    "laborRate": 145,
+    "phone": "(780) 555-0100",
+    "zones": [
+      {
+        "id": "city",
+        "label": "Edmonton",
+        "eta": "about 30 minutes"
+      },
+      {
+        "id": "greater",
+        "label": "Greater Edmonton",
+        "eta": "about 45 minutes"
+      },
+      {
+        "id": "out",
+        "label": "Out of area",
+        "eta": "about an hour"
+      }
+    ],
+    "messages": [
+      {
+        "id": "confirm",
+        "label": "Booked",
+        "body": "Hi {{first_name}} — {{tech}} from {{company}}. You're booked in for {{day}}, {{window}}, for {{work}}. Any questions, call {{phone}}."
+      },
+      {
+        "id": "reminder",
+        "label": "Reminder, night before",
+        "body": "Hi {{first_name}} — {{tech}} from {{company}}. Just confirming we're booked in for {{day}}, {{window}}, for {{work}}. If anything's changed, give me a call on {{phone}}. See you then."
+      },
+      {
+        "id": "onway",
+        "label": "On my way",
+        "body": "Hi {{first_name}} — {{tech}} from {{company}}. Heading your way now, {{eta}} out. See you shortly."
+      },
+      {
+        "id": "late",
+        "label": "Running late",
+        "body": "Hi {{first_name}} — {{tech}} from {{company}}. Running behind, sorry about that. Looking like {{eta}} now. I'll let you know if it shifts again."
+      },
+      {
+        "id": "done",
+        "label": "Finished",
+        "body": "Hi {{first_name}} — all finished at your place. Thanks for the business.{{pay_link}}"
+      }
+    ],
+    "email": "",
+    "website": "",
+    "address": "",
+    "gst": "",
+    "gstRate": 5,
+    "invoiceTerms": 15,
+    "invoiceTermsMode": "days",
+    "signBase": "",
+    "payStripeUrl": "",
+    "payEtransfer": "",
+    "payCash": true,
+    "signShort": false,
+    "invoiceNote": "Thanks very much for the work."
+  },
+  "counterWaiver": 5000,
+  "techs": [
+    {
+      "id": "tech_1",
+      "name": "Marco Reyes",
+      "phone": "7805550118",
+      "color": "#1668ab",
+      "skill": "Journeyman · Gasfitter B",
+      "active": true
+    },
+    {
+      "id": "tech_2",
+      "name": "Dana Whitfield",
+      "phone": "7805550142",
+      "color": "#0d7c8f",
+      "skill": "Journeyman · Service",
+      "active": true
+    },
+    {
+      "id": "tech_3",
+      "name": "Sam Okafor",
+      "phone": "5875550176",
+      "color": "#1f8a4c",
+      "skill": "Journeyman · Drains",
+      "active": true
+    },
+    {
+      "id": "tech_4",
+      "name": "Ellie Nakamura",
+      "phone": "7805550193",
+      "color": "#5b4bb5",
+      "skill": "Apprentice",
+      "active": true
+    }
+  ],
+  "customers": [
+    {
+      "id": "cus_1",
+      "name": "Backup Canary Ltd.",
+      "phone": "7805550231",
+      "email": "holly.bennett@example.com",
+      "address": "10832 Saskatchewan Dr NW",
+      "city": "Edmonton",
+      "zone": "city",
+      "notes": "Gate code 4417. Dog is friendly."
+    },
+    {
+      "id": "cus_2",
+      "name": "Glenora Gates Condo Corp",
+      "phone": "7805550288",
+      "email": "manager@glenoragates.example",
+      "address": "11240 Jasper Ave NW",
+      "city": "Edmonton",
+      "zone": "city",
+      "notes": "Bill to the property manager. Unit access via the front desk."
+    },
+    {
+      "id": "cus_3",
+      "name": "Tomás Delgado",
+      "phone": "5875550304",
+      "email": "tdelgado@example.com",
+      "address": "9617 76 Ave NW",
+      "city": "Edmonton",
+      "zone": "city",
+      "notes": ""
+    },
+    {
+      "id": "cus_4",
+      "name": "Ironwood Brewing Co.",
+      "phone": "7805550377",
+      "email": "ops@ironwoodbrewing.example",
+      "address": "10345 104 St NW",
+      "city": "Edmonton",
+      "zone": "city",
+      "notes": "Commercial. Prefers before 10am — kitchen opens at 11."
+    },
+    {
+      "id": "cus_5",
+      "name": "Priya Raghunathan",
+      "phone": "7805550412",
+      "email": "priya.r@example.com",
+      "address": "14820 Riverbend Rd NW",
+      "city": "Edmonton",
+      "zone": "greater",
+      "notes": "Snowbird — away November to April. Call the caretaker before rolling."
+    },
+    {
+      "id": "cus_6",
+      "name": "Grant Halvorsen",
+      "phone": "5875550455",
+      "email": "",
+      "address": "8715 149 St NW",
+      "city": "Edmonton",
+      "zone": "city",
+      "notes": ""
+    }
+  ],
+  "jobs": [
+    {
+      "id": "job_mw00ojxjubtz3",
+      "no": 1001,
+      "createdAt": 1793669790439,
+      "log": [
+        {
+          "ts": 1793664390439,
+          "text": "Job created from phone call"
+        },
+        {
+          "ts": 1793665590439,
+          "text": "Assigned to Sam Okafor"
+        },
+        {
+          "ts": 1793667990439,
+          "text": "Status: Dispatched → In Progress"
+        },
+        {
+          "ts": 1793669791533,
+          "text": "Time added by hand — 1h"
+        }
+      ],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "in_progress",
+      "techId": "tech_3",
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_4",
+      "type": "Drain Cleaning",
+      "priority": "Emergency",
+      "description": "Kitchen floor drain backing up under the three-comp sink. Standing water — they cannot open at 11 without it clear.",
+      "scheduledDate": "2026-11-03",
+      "window": "ASAP / Emergency",
+      "timeEntries": [
+        {
+          "id": "te_mw00okrxmza01",
+          "startedAt": 1793666191533,
+          "endedAt": 1793669791533,
+          "note": "canary trip"
+        }
+      ],
+      "materialCost": 1234.56,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxj738m5",
+      "no": 1002,
+      "createdAt": 1793669790439,
+      "log": [
+        {
+          "ts": 1793662590439,
+          "text": "Job created"
+        },
+        {
+          "ts": 1793663790439,
+          "text": "Assigned to Dana Whitfield"
+        }
+      ],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "dispatched",
+      "techId": "tech_2",
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_1",
+      "type": "Water Heater",
+      "priority": "High",
+      "description": "No hot water since last night. 50gal gas unit, ~11 years old. Pilot will not stay lit.",
+      "scheduledDate": "2026-11-03",
+      "window": "10:00–12:00",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxjiodd3",
+      "no": 1003,
+      "createdAt": 1793669790439,
+      "log": [],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "scheduled",
+      "techId": "tech_1",
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_2",
+      "type": "Boiler / Radiant Heat",
+      "priority": "Normal",
+      "description": "Annual boiler service, buildings A and B. Two units, check expansion tanks and bleed zones.",
+      "scheduledDate": "2026-11-03",
+      "window": "12:00–2:00",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxjofum4",
+      "no": 1004,
+      "createdAt": 1793669790439,
+      "log": [],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "scheduled",
+      "techId": "tech_2",
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_6",
+      "type": "Leak Repair",
+      "priority": "High",
+      "description": "Water staining on the ceiling below the upstairs bathroom. Suspect shower pan or supply line.",
+      "scheduledDate": "2026-11-03",
+      "window": "2:00–4:00",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxjai1y3",
+      "no": 1005,
+      "createdAt": 1793669790439,
+      "log": [],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "scheduled",
+      "techId": "tech_4",
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_3",
+      "type": "Fixture Install",
+      "priority": "Normal",
+      "description": "Install customer-supplied Kohler widespread lavatory faucet in the hall bath.",
+      "scheduledDate": "2026-11-03",
+      "window": "Anytime",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxjjb2z3",
+      "no": 1006,
+      "createdAt": 1793669790439,
+      "log": [],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "new",
+      "techId": null,
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_5",
+      "type": "Frozen Pipe",
+      "priority": "Emergency",
+      "description": "Caretaker reports no water at the guest wing. Crawlspace line likely frozen — no visible break yet.",
+      "scheduledDate": "2026-11-03",
+      "window": "ASAP / Emergency",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxkgom12",
+      "no": 1007,
+      "createdAt": 1793669790440,
+      "log": [],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "scheduled",
+      "techId": "tech_3",
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_3",
+      "type": "Sewer / Camera",
+      "priority": "Normal",
+      "description": "Recurring backups twice this year. Wants the main line scoped from the cleanout to the street.",
+      "scheduledDate": "2026-11-04",
+      "window": "8:00–10:00",
+      "estimateId": "est_mw00ojxk0ts3j",
+      "quotedTotal": 380,
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxk6nl3z",
+      "no": 1008,
+      "createdAt": 1793669790440,
+      "log": [],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "new",
+      "techId": null,
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_1",
+      "type": "Backflow Test",
+      "priority": "Low",
+      "description": "Annual backflow certification on the irrigation RPZ. Paperwork goes to EPCOR.",
+      "scheduledDate": "2026-11-04",
+      "window": "10:00–12:00",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxkze647",
+      "no": 1009,
+      "createdAt": 1793669790440,
+      "log": [],
+      "parts": [],
+      "laborHours": 0,
+      "laborRate": 145,
+      "status": "scheduled",
+      "techId": "tech_1",
+      "completedAt": null,
+      "payment": {
+        "status": "unbilled",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "",
+        "url": "",
+        "invoicedAt": null,
+        "paidAt": null
+      },
+      "customerId": "cus_4",
+      "type": "Gas Line",
+      "priority": "Normal",
+      "description": "Run a new 3/4in gas line for the second fryer. Needs permit and inspection.",
+      "scheduledDate": "2026-11-05",
+      "window": "8:00–10:00",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxk0y7x6",
+      "no": 1010,
+      "createdAt": 1793669790440,
+      "log": [
+        {
+          "ts": 1793496990440,
+          "text": "Job created"
+        },
+        {
+          "ts": 1793579790440,
+          "text": "Assigned to Dana Whitfield"
+        },
+        {
+          "ts": 1793583390440,
+          "text": "Status: In Progress → Complete"
+        }
+      ],
+      "parts": [
+        {
+          "desc": "1/4-turn angle stop, 1/2in",
+          "qty": 1,
+          "price": 18.4
+        },
+        {
+          "desc": "Braided supply line 20in",
+          "qty": 1,
+          "price": 11.75
+        }
+      ],
+      "laborHours": 1.5,
+      "laborRate": 145,
+      "status": "complete",
+      "techId": "tech_2",
+      "completedAt": 1793583390440,
+      "payment": {
+        "status": "invoiced",
+        "amountPaid": 0,
+        "method": "",
+        "ref": "INV-1042",
+        "url": "",
+        "invoicedAt": 1793583390440,
+        "paidAt": null
+      },
+      "customerId": "cus_2",
+      "type": "Leak Repair",
+      "priority": "Normal",
+      "description": "Unit 14C — dripping angle stop under the kitchen sink. Replaced stop and supply line.",
+      "scheduledDate": "2026-11-02",
+      "window": "10:00–12:00",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "job_mw00ojxk42ouz",
+      "no": 1011,
+      "createdAt": 1793669790440,
+      "log": [],
+      "parts": [],
+      "laborHours": 1,
+      "laborRate": 145,
+      "status": "complete",
+      "techId": "tech_3",
+      "completedAt": 1793496990440,
+      "payment": {
+        "status": "paid",
+        "amountPaid": 145,
+        "method": "Card",
+        "ref": "INV-1039",
+        "url": "",
+        "invoicedAt": 1793496990440,
+        "paidAt": 1793549790440
+      },
+      "customerId": "cus_6",
+      "type": "Drain Cleaning",
+      "priority": "Normal",
+      "description": "Slow tub drain, second floor. Cabled 25ft, pulled hair mass. Runs clear.",
+      "scheduledDate": "2026-11-01",
+      "window": "2:00–4:00",
+      "timeEntries": [],
+      "materialCost": 0,
+      "materials": [],
+      "photos": []
+    }
+  ],
+  "estimates": [
+    {
+      "id": "est_mw00ojxk0ktfg",
+      "no": 2001,
+      "customerId": "cus_2",
+      "lead": null,
+      "type": "Boiler / Radiant Heat",
+      "status": "sent",
+      "description": "Replace the failing building-B boiler. Existing unit is 22 years old and short-cycling; quote covers removal, new condensing unit, near-boiler piping, and a new expansion tank.",
+      "validDays": 30,
+      "createdAt": 1793151390440,
+      "sentAt": 1793237790440,
+      "decidedAt": null,
+      "jobId": null,
+      "items": [
+        {
+          "desc": "Condensing boiler, 120k BTU — unit",
+          "qty": 1,
+          "price": 4650,
+          "kind": "part"
+        },
+        {
+          "desc": "Near-boiler piping & fittings",
+          "qty": 1,
+          "price": 780,
+          "kind": "part"
+        },
+        {
+          "desc": "Expansion tank, 4.4 gal",
+          "qty": 1,
+          "price": 118,
+          "kind": "part"
+        },
+        {
+          "desc": "Install labor",
+          "qty": 14,
+          "price": 145,
+          "kind": "labor"
+        },
+        {
+          "desc": "Haul-away of old unit",
+          "qty": 1,
+          "price": 150,
+          "kind": "flat"
+        }
+      ],
+      "log": [
+        {
+          "ts": 1793151390440,
+          "text": "Estimate created"
+        },
+        {
+          "ts": 1793237790440,
+          "text": "Status: Draft → Sent"
+        }
+      ],
+      "timeEntries": [],
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "est_mw00ojxk1w101",
+      "no": 2002,
+      "customerId": null,
+      "lead": {
+        "name": "Cassie Moreau",
+        "phone": "7805550567",
+        "email": "cassie.moreau@example.com",
+        "address": "3422 Allan Way SW",
+        "city": "Edmonton"
+      },
+      "type": "Water Heater",
+      "status": "draft",
+      "description": "Called about a 12-year-old 50gal gas unit making noise. Wants a price on straight replacement before committing.",
+      "validDays": 30,
+      "createdAt": 1793496990440,
+      "sentAt": null,
+      "decidedAt": null,
+      "jobId": null,
+      "items": [
+        {
+          "desc": "Water heater, 50 gal gas — installed",
+          "qty": 1,
+          "price": 1850,
+          "kind": "flat"
+        },
+        {
+          "desc": "Expansion tank, 2 gal",
+          "qty": 1,
+          "price": 68,
+          "kind": "part"
+        },
+        {
+          "desc": "Haul-away of old unit",
+          "qty": 1,
+          "price": 75,
+          "kind": "flat"
+        }
+      ],
+      "log": [
+        {
+          "ts": 1793496990440,
+          "text": "Estimate created"
+        }
+      ],
+      "timeEntries": [],
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "est_mw00ojxk0ts3j",
+      "no": 2003,
+      "customerId": "cus_3",
+      "lead": null,
+      "type": "Sewer / Camera",
+      "status": "approved",
+      "description": "Recurring backups twice this year. Scope the main line from the cleanout to the street and report on what's causing it.",
+      "validDays": 30,
+      "createdAt": 1793324190440,
+      "sentAt": 1793324190440,
+      "decidedAt": 1793583390440,
+      "jobId": "job_mw00ojxkgom12",
+      "items": [
+        {
+          "desc": "Sewer camera inspection",
+          "qty": 1,
+          "price": 295,
+          "kind": "flat"
+        },
+        {
+          "desc": "Locate & mark line",
+          "qty": 1,
+          "price": 85,
+          "kind": "flat"
+        }
+      ],
+      "log": [
+        {
+          "ts": 1793324190440,
+          "text": "Estimate created"
+        },
+        {
+          "ts": 1793324190440,
+          "text": "Status: Draft → Sent"
+        },
+        {
+          "ts": 1793583390440,
+          "text": "Approved and converted to job #1007"
+        }
+      ],
+      "timeEntries": [],
+      "materials": [],
+      "photos": []
+    },
+    {
+      "id": "est_mw00ojxkss1j5",
+      "no": 2004,
+      "customerId": "cus_5",
+      "lead": null,
+      "type": "Remodel Rough-in",
+      "status": "declined",
+      "description": "Rough-in for a new guest bath in the lower level — three fixtures plus a relocated laundry box.",
+      "validDays": 30,
+      "createdAt": 1791941790440,
+      "sentAt": 1792028190440,
+      "decidedAt": 1792892190440,
+      "jobId": null,
+      "items": [
+        {
+          "desc": "Rough-in labor",
+          "qty": 22,
+          "price": 145,
+          "kind": "labor"
+        },
+        {
+          "desc": "PEX, 1/2in — per ft",
+          "qty": 180,
+          "price": 1.35,
+          "kind": "part"
+        },
+        {
+          "desc": "DWV fittings & pipe",
+          "qty": 1,
+          "price": 640,
+          "kind": "part"
+        },
+        {
+          "desc": "Laundry box relocation",
+          "qty": 1,
+          "price": 310,
+          "kind": "flat"
+        }
+      ],
+      "log": [
+        {
+          "ts": 1791941790440,
+          "text": "Estimate created"
+        },
+        {
+          "ts": 1792028190440,
+          "text": "Status: Draft → Sent"
+        },
+        {
+          "ts": 1792892190440,
+          "text": "Status: Sent → Declined"
+        },
+        {
+          "ts": 1792892190440,
+          "text": "Went with another bid — follow up in spring"
+        }
+      ],
+      "timeEntries": [],
+      "materials": [],
+      "photos": []
+    }
+  ],
+  "priceBook": [
+    {
+      "id": "pb_mw00ojxk4kd0f",
+      "desc": "Service call / diagnostic (first hour)",
+      "price": 145,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxknqqx2",
+      "desc": "Standard labor",
+      "price": 145,
+      "kind": "labor"
+    },
+    {
+      "id": "pb_mw00ojxkyjnts",
+      "desc": "After-hours / emergency labor",
+      "price": 218,
+      "kind": "labor"
+    },
+    {
+      "id": "pb_mw00ojxkf5iu8",
+      "desc": "Apprentice labor",
+      "price": 85,
+      "kind": "labor"
+    },
+    {
+      "id": "pb_mw00ojxkcrvqz",
+      "desc": "Drain cleaning, main line to 100ft",
+      "price": 385,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxkvdo2u",
+      "desc": "Drain cleaning, secondary fixture",
+      "price": 185,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxkcrxu2",
+      "desc": "Sewer camera inspection",
+      "price": 295,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxkdycxh",
+      "desc": "Backflow test & certification",
+      "price": 165,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxksh5ra",
+      "desc": "Boiler annual service",
+      "price": 240,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxkmnh07",
+      "desc": "Frozen pipe thaw & assess",
+      "price": 225,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxkn9n1d",
+      "desc": "Toilet replacement, customer-supplied",
+      "price": 285,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxktfb8z",
+      "desc": "Water heater, 50 gal gas — installed",
+      "price": 1850,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxk6647j",
+      "desc": "Haul-away of old unit",
+      "price": 75,
+      "kind": "flat"
+    },
+    {
+      "id": "pb_mw00ojxkp4qwr",
+      "desc": "Expansion tank, 2 gal",
+      "price": 68,
+      "kind": "part"
+    },
+    {
+      "id": "pb_mw00ojxkyd3s7",
+      "desc": "1/4-turn angle stop, 1/2in",
+      "price": 18.4,
+      "kind": "part"
+    },
+    {
+      "id": "pb_mw00ojxk7hdng",
+      "desc": "Braided supply line, 20in",
+      "price": 11.75,
+      "kind": "part"
+    },
+    {
+      "id": "pb_mw00ojxkvfxp7",
+      "desc": "Wax ring kit",
+      "price": 9.5,
+      "kind": "part"
+    },
+    {
+      "id": "pb_mw00ojxk6qpgq",
+      "desc": "Sharkbite coupling, 3/4in",
+      "price": 12.5,
+      "kind": "part"
+    },
+    {
+      "id": "pb_mw00ojxkp4cjy",
+      "desc": "PEX, 1/2in — per ft",
+      "price": 1.35,
+      "kind": "part"
+    }
+  ],
+  "waiverTemplates": [
+    {
+      "id": "wt_mw00ojxkuk393",
+      "key": "drain-condition",
+      "title": "Drain Cleaning & Sewer Line Condition Release",
+      "category": "Drain & Sewer",
+      "whenToUse": "Before cabling or clearing any drain or sewer line — especially cast iron, clay or Orangeburg pipe, homes over about 20 years old, known root intrusion, or any line that has backed up more than once.",
+      "body": [
+        "{{company}} has been asked to clear a blocked or slow drain at {{service_address}}. Drain and sewer lines are concealed. Their material, age, slope and condition cannot be known before work begins, and often cannot be known at all without a camera inspection.",
+        "Mechanical drain cleaning — cable machines, augers and similar equipment — applies force inside the line. A line that is already cracked, corroded, root-invaded, offset at a joint, bellied, or built from cast iron, clay or Orangeburg pipe may be further damaged by that force, or may fail during cleaning, even where the equipment is used correctly and with reasonable care.",
+        "The Customer understands that clearing a blockage may reveal or worsen an existing defect, and that the line may need repair or replacement afterward at additional cost. {{company}} does not guarantee that a line will remain clear, and does not accept responsibility for damage arising from the pre-existing condition of the line, from foreign objects placed in the line, or from a defect that could not reasonably have been identified before work began.",
+        "Cables can become caught or lodged in a defective line. If equipment cannot be recovered without excavation, that recovery is quoted separately."
+      ],
+      "acks": [
+        "I understand the age, material and condition of my drain or sewer line cannot be known before work begins.",
+        "I understand drain cleaning may damage a line that is already defective, and that this can happen without fault on the technician's part.",
+        "I understand any resulting repair or replacement is not included in the price of drain cleaning and will be quoted separately.",
+        "I have been offered a camera inspection to assess the line's condition, and I understand what declining it means.",
+        "I authorize {{company}} to proceed with drain cleaning at {{service_address}}."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxk88h0f",
+      "key": "hydro-jetting",
+      "title": "Hydro-Jetting High-Pressure Service Acknowledgment",
+      "category": "Drain & Sewer",
+      "whenToUse": "Any time high-pressure water jetting is used instead of, or after, cabling. Jetting carries more risk than a cable and deserves its own signature.",
+      "body": [
+        "High-pressure water jetting clears a line using water at pressures that can exceed 3,000 psi. It is more effective than cabling on grease, sludge and root mass, and it is also more demanding on the pipe.",
+        "Jetting is not appropriate for every line. Pipe that is thin-walled, corroded, cracked, separated at the joints, or made from clay, Orangeburg or deteriorated cast iron can be damaged or destroyed by jetting pressure. Where the condition of the line is unknown, {{company}} recommends a camera inspection before jetting and will perform one on request at the quoted rate.",
+        "Jetting can also force water and waste out of an existing break, crack or open joint into the surrounding soil, a crawlspace, or a lower level of the building. Where a line is already compromised, this may occur with no warning and no way to prevent it.",
+        "The Customer authorizes jetting at {{service_address}} understanding these risks, and accepts that {{company}} is not responsible for damage that results from the pre-existing condition of the line."
+      ],
+      "acks": [
+        "I understand hydro-jetting uses water pressure that can damage pipe which is already weak, cracked or deteriorated.",
+        "I have been offered a camera inspection before jetting and understand the risk of proceeding without one.",
+        "I understand jetting can force water out of an existing break into soil, a crawlspace or a lower level.",
+        "I accept that repairs arising from the pre-existing condition of the line are my responsibility.",
+        "I authorize {{company}} to hydro-jet the line at {{service_address}}."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxkh6lj5",
+      "key": "camera-limits",
+      "title": "Sewer Camera Inspection — Scope & Limitations",
+      "category": "Drain & Sewer",
+      "whenToUse": "Whenever you scope a line and give the customer findings, especially before a real estate transaction or a repair decision.",
+      "body": [
+        "A camera inspection is a visual record of what the camera could see inside the line on {{date}}. It is not a warranty, a guarantee, or a certification that the line is sound.",
+        "Cameras have real limits. Standing water, heavy grease, sludge, root mass or a collapse can hide a defect or stop the camera before the end of the line. Depth and location readings from a locator are approximate. Small cracks, hairline fractures and joint separations are not always visible, and a line can fail after an inspection that showed nothing wrong.",
+        "Any opinion offered about the material, age, remaining life or repair method for the line is a professional judgment based on what was visible, not a guarantee of outcome or cost.",
+        "The Customer understands this inspection covers only the portion of the line the camera actually reached, and that {{company}} makes no representation about any portion it did not."
+      ],
+      "acks": [
+        "I understand this inspection records only what the camera could see, on this date.",
+        "I understand water, grease, roots or a blockage can hide defects, and that depth and location readings are approximate.",
+        "I understand this is not a warranty or certification, and that the line may fail after a clear inspection.",
+        "I understand any repair recommendation is a professional opinion, not a guaranteed outcome or price."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxk67i36",
+      "key": "gas-safety",
+      "title": "Gas System Safety — Leak Found, Red Tag & Service Refusal",
+      "category": "Gas",
+      "whenToUse": "CRITICAL. Use when a technician finds a gas leak, an unsafe appliance, or a code violation and the customer declines the repair, or asks that gas be left on or turned back on. Never leave this one unsigned.",
+      "body": [
+        "During work at {{service_address}} on {{date}}, {{company}} identified a condition on the gas system or a gas appliance that, in the technician's professional judgment, is unsafe. The condition was explained to the Customer, along with the recommended corrective action.",
+        "Where required, the appliance or gas system has been shut off, tagged, and the utility or authority having jurisdiction notified in accordance with applicable code. A tagged appliance must not be returned to service by anyone other than a qualified technician after the condition has been corrected.",
+        "The Customer has been advised that operating a gas system or appliance with a known leak or unsafe condition can cause fire, explosion, carbon monoxide poisoning, serious injury and death. The Customer has been advised to leave the gas off until the condition is corrected.",
+        "By signing below, the Customer confirms that they have been informed of the condition and the risk, that they are declining or deferring the recommended repair by their own choice, and that they assume full responsibility for any consequence of that decision. {{company}} accepts no liability for injury, death, or property damage arising from the Customer's decision to decline, defer, or reverse the recommended corrective action.",
+        "Condition identified and action recommended: ____________________________________________"
+      ],
+      "acks": [
+        "The unsafe condition and the recommended repair were explained to me in terms I understood.",
+        "I have been told that operating this system or appliance as it stands risks fire, explosion, carbon monoxide poisoning, serious injury or death.",
+        "I understand a tagged appliance must not be put back in service by anyone other than a qualified technician.",
+        "I am declining or deferring the recommended repair of my own choice, and I accept full responsibility for that decision.",
+        "I understand {{company}} is not responsible for what results from my decision."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxkcxfky",
+      "key": "gas-pressure",
+      "title": "Gas Line Work & Pressure Test Acknowledgment",
+      "category": "Gas",
+      "whenToUse": "New gas line runs, extensions, repairs, appliance connections, and any job that involves a pressure test or an interruption of gas service.",
+      "body": [
+        "Work on the gas system at {{service_address}} requires that gas service be interrupted, that the affected piping be pressure-tested, and in most cases that the work be permitted and inspected by the authority having jurisdiction before service is restored.",
+        "Existing gas piping is often concealed within walls, floors and slabs. Its age, material, joint condition and prior workmanship cannot be fully assessed before work begins. Isolating a section of an older system, or bringing it up to test pressure, can reveal leaks at existing joints and fittings that were not leaking beforehand. Repairs to those existing sections are not included in the quoted price and are quoted separately.",
+        "{{company}} pressure-tests and certifies only the piping it installs or repairs. It does not certify the balance of the gas system, appliances it did not connect, or any portion it could not access.",
+        "Gas service is restored, and appliances relit, only after a passing test and any required inspection. Where the utility must restore service, the timing is the utility's and outside {{company}}'s control."
+      ],
+      "acks": [
+        "I understand my gas service will be interrupted while this work is carried out.",
+        "I understand pressure-testing an older system can reveal existing leaks at joints that were not leaking before, and that repairing those is quoted separately.",
+        "I understand {{company}} certifies only the piping it installed or repaired, not the rest of my gas system or my appliances.",
+        "I understand service is restored only after a passing test and any required inspection, and that utility timing is outside {{company}}'s control."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxket7am",
+      "key": "boiler-service",
+      "title": "Boiler & Hydronic System Service Acknowledgment",
+      "category": "Boiler & Hydronic",
+      "whenToUse": "Annual service, repair or diagnosis on any boiler or hydronic system — particularly units over about 15 years old, and any system with original insulation.",
+      "body": [
+        "The boiler or hydronic system at {{service_address}} is being serviced or repaired by {{company}}. Boilers are pressure vessels operating with heat, water and, in most cases, fuel gas. Systems of this kind age in ways that are not visible from outside the jacket.",
+        "Servicing an older boiler involves disturbing components that may be at the end of their service life — sections, gaskets, circulators, zone valves, expansion tanks, relief valves, controls, and near-boiler piping. A component that was functioning before service may fail during or shortly after it because of its existing age and condition, not because of the work performed. Where that happens, replacement is quoted separately.",
+        "Draining, refilling, or isolating zones on an older system can dislodge scale and sediment and reveal leaks at existing joints. Systems that have run for years with low water quality or without proper treatment are especially prone to this.",
+        "If the technician determines the appliance is unsafe to operate, it will be shut down and tagged, and a separate safety acknowledgment will be required before it is left in service.",
+        "In a cold-weather climate, a system taken out of service risks freeze damage to the building. The Customer is responsible for maintaining heat by other means, or for arranging winterization, while the system is down."
+      ],
+      "acks": [
+        "I understand my boiler is an aging pressure vessel and that servicing it may cause a component already at the end of its life to fail.",
+        "I understand replacement of failed components is not included in the price of service and will be quoted separately.",
+        "I understand draining or isolating the system can reveal existing leaks and dislodge scale and sediment.",
+        "I understand that if the appliance is found unsafe it will be shut down and tagged.",
+        "I understand I am responsible for protecting the building from freezing while the system is out of service."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxk8oylv",
+      "key": "water-heater",
+      "title": "Water Heater Replacement & Existing Condition Acknowledgment",
+      "category": "Plumbing",
+      "whenToUse": "Any water heater replacement, and any repair that means closing an old shutoff valve or disturbing existing connections.",
+      "body": [
+        "Replacing or servicing the water heater at {{service_address}} requires closing the cold water shutoff and disturbing existing connections, venting and, on gas units, the gas connection.",
+        "Shutoff valves, particularly older gate valves, frequently fail to hold or fail to reopen once they have been operated after years in one position. Where the shutoff will not hold, the water must be turned off at the main or at the street, and a valve replacement will be quoted separately. Where the main itself will not hold, a municipal shutoff may be required and the schedule becomes dependent on the water provider.",
+        "Existing connections, unions, nipples, flex lines, venting and drain pans are often corroded and may not be reusable. Current code may also require upgrades that the original installation did not include — expansion control, seismic strapping, drain pan and termination, sediment trap, vent sizing, or a pan drain to an approved point. Where these are required, they are quoted before installation proceeds.",
+        "{{company}} warrants its own workmanship and passes through the manufacturer's warranty on equipment it supplies. It does not warrant the existing piping, venting or valves it did not install."
+      ],
+      "acks": [
+        "I understand old shutoff valves often fail when operated, and that replacing one is quoted separately.",
+        "I understand existing connections, venting and pans may not be reusable.",
+        "I understand current code may require upgrades my original installation did not include, and that these will be quoted before work proceeds.",
+        "I understand {{company}} does not warrant existing piping, venting or valves it did not install."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxk82im5",
+      "key": "customer-materials",
+      "title": "Customer-Supplied Materials & Equipment Waiver",
+      "category": "All trades",
+      "whenToUse": "Any time the customer provides the fixture, water heater, faucet, valve or part — including anything bought online or from a big-box store.",
+      "body": [
+        "The Customer has chosen to supply the following material or equipment for installation by {{company}} at {{service_address}}: ____________________________________________",
+        "{{company}} did not select, supply, or inspect this material and makes no representation about its quality, suitability, code compliance, or fitness for the intended application. No warranty of any kind is offered on Customer-supplied material.",
+        "{{company}} warrants only its own labour. If Customer-supplied material is defective, incomplete, damaged, the wrong size or model, discontinued, missing parts, or fails after installation, the labour to diagnose, remove, and reinstall a replacement is billable at standard rates, as is any return trip.",
+        "Where material arrives incomplete or incompatible and the job cannot be finished, the visit is billable at the standard service rate. Manufacturer warranty claims on Customer-supplied equipment are the Customer's to pursue directly with the seller or manufacturer."
+      ],
+      "acks": [
+        "I am supplying this material myself and understand {{company}} did not select or inspect it.",
+        "I understand no warranty of any kind is offered on material I supply.",
+        "I understand that if my material is defective or wrong, the labour to remove it and install a replacement is billable at standard rates.",
+        "I understand a warranty claim on my own material is mine to pursue with the seller or manufacturer."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxkm1e51",
+      "key": "declined-repair",
+      "title": "Declined or Deferred Recommended Repair",
+      "category": "All trades",
+      "whenToUse": "Whenever a technician recommends work and the customer says no, or not now. The cheapest liability protection there is — get it signed at the door.",
+      "body": [
+        "During the visit to {{service_address}} on {{date}}, {{company}} recommended the following work, and explained the reason for it and what may happen if it is not carried out:",
+        "Recommended: ____________________________________________",
+        "Reason and risk if deferred: ____________________________________________",
+        "The Customer has chosen to decline or defer this work at this time. That decision is the Customer's alone and was made after the recommendation and the risks were explained.",
+        "The Customer understands that a deferred condition can worsen, sometimes suddenly, and can lead to water damage, property loss, loss of heat or hot water, or an unsafe condition. {{company}} is not responsible for damage, loss, or injury arising from work it recommended and the Customer declined or deferred, and the recommendation is not withdrawn by the Customer's decision."
+      ],
+      "acks": [
+        "The recommended work and the reason for it were explained to me.",
+        "I was told what may happen if the work is not carried out.",
+        "I am declining or deferring this work by my own choice.",
+        "I understand {{company}} is not responsible for damage or loss arising from my decision."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxkufjk3",
+      "key": "access-entry",
+      "title": "Property Access, Entry & Unattended Work Authorization",
+      "category": "All trades",
+      "whenToUse": "Second homes, rentals, vacant properties, lockbox or keypad entry, and any job where nobody will be on site. Common in a resort town — get it in writing.",
+      "body": [
+        "The Customer authorizes {{company}} and its technicians to enter the property at {{service_address}} to perform the work described, including on dates when the Customer or an occupant is not present.",
+        "Entry method and access details provided by the Customer: ____________________________________________",
+        "The Customer confirms they are the owner of the property, or are authorized by the owner to permit this entry and this work. Where the property is tenanted, the Customer is responsible for any notice the tenancy requires.",
+        "The Customer is responsible for securing valuables, firearms, medication, sensitive documents and pets before the visit, and for disclosing alarm systems, cameras, gate codes, and any hazard on the property. {{company}} will secure the property on leaving using the method described above.",
+        "Where work requires water, gas or power to be shut off and no one is present to be consulted, {{company}} will act reasonably to protect the property and will report what was done. The Customer accepts that decisions of this kind may need to be made without contacting them first."
+      ],
+      "acks": [
+        "I own this property or am authorized by the owner to permit entry and this work.",
+        "I authorize entry when I am not present, by the access method described above.",
+        "I am responsible for securing valuables and pets and for disclosing alarms, cameras and hazards.",
+        "I accept that if utilities must be shut off and I cannot be reached, the technician may act to protect the property."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxkrofl0",
+      "key": "access-openings",
+      "title": "Access Openings & Finish Restoration Waiver",
+      "category": "All trades",
+      "whenToUse": "Whenever reaching the work means cutting drywall, tile, plaster, cabinetry, decking or concrete — most concealed leaks and most rough-in work.",
+      "body": [
+        "The work at {{service_address}} requires access to piping or equipment concealed behind a finished surface. Reaching it means cutting, removing or drilling drywall, plaster, tile, stone, cabinetry, flooring, decking, siding or concrete.",
+        "{{company}} makes access openings no larger than the work reasonably requires, and locates them to limit damage where there is a choice. It is not always possible to know the best location before opening the surface, and a second opening is sometimes necessary.",
+        "Unless separately quoted in writing, the price of this work does NOT include restoration of the finished surface. Access openings are left unrestored, or closed to a rough state only. Drywall finishing, texture, paint, tile, stone, grout, cabinetry, flooring and concrete finish work are the Customer's responsibility to arrange.",
+        "Matching existing tile, stone, texture, paint or finish is frequently impossible where the material is discontinued or has aged. Where a finish material must be removed, it is often destroyed in the process and cannot be reinstalled."
+      ],
+      "acks": [
+        "I understand reaching the work requires cutting into finished surfaces, and that a second opening is sometimes needed.",
+        "I understand restoration of the finish is NOT included unless separately quoted in writing.",
+        "I understand tile, stone and other finish materials are often destroyed on removal and cannot be reused.",
+        "I understand an exact match to existing finishes may not be possible."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxk5m5hq",
+      "key": "freeze-shutoff",
+      "title": "Winterization, Water Shut-Off & Freeze Damage Acknowledgment",
+      "category": "Plumbing",
+      "whenToUse": "Winterizing a property, leaving water off, or any work in a vacant or seasonally-occupied building during cold weather. Mountain-town essential.",
+      "body": [
+        "This acknowledgment covers work at {{service_address}} involving winterization, an extended water shut-off, or service to a building that is vacant or seasonally occupied during freezing weather.",
+        "Winterization reduces the risk of freeze damage. It does not eliminate it. Water can remain trapped in low points, traps, valves, appliances, in-floor tubing, irrigation, and fixtures that cannot be fully drained or accessed. A building left unheated, or one that loses heat or power while unoccupied, can suffer freeze damage regardless of how thoroughly it was winterized.",
+        "The Customer is responsible for maintaining adequate heat and power to the building, for monitoring the property while it is unoccupied, and for notifying {{company}} of any area, appliance, or system not disclosed at the time of service. Systems and fixtures {{company}} was not told about, or could not access, are not covered by this service.",
+        "Where the water has been left off, it must be recommissioned by a qualified technician. Turning the water back on to a winterized building without a proper walk-through frequently causes flooding from a fixture or line that was left open.",
+        "Areas or systems excluded from this winterization: ____________________________________________"
+      ],
+      "acks": [
+        "I understand winterization reduces but does not eliminate the risk of freeze damage.",
+        "I am responsible for maintaining heat and power and for monitoring the property while it is unoccupied.",
+        "I understand systems or areas not disclosed, or not accessible, are not covered by this service.",
+        "I understand the water must be turned back on by a qualified technician, and that doing it myself risks flooding."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxkzps6o",
+      "key": "excavation",
+      "title": "Excavation & Private Underground Utility Waiver",
+      "category": "All trades",
+      "whenToUse": "Any digging — sewer or water line repair or replacement, gas line trenching, well and pump work.",
+      "body": [
+        "The work at {{service_address}} requires excavation. {{company}} will request a public utility locate through Utility Safety Partners (formerly Alberta One-Call) before digging, as required by law. Locate requests need lead time, and busy seasons slow them down.",
+        "A public locate marks public utilities only. It does NOT mark privately owned lines on the property. Irrigation and sprinkler lines, landscape lighting, invisible pet fencing, private electrical runs to sheds, garages, gates, wells or pumps, septic components, drain tile, data and low-voltage cabling, propane lines and private water lines are the Customer's to identify and mark.",
+        "The Customer agrees to identify and mark all known private underground installations before excavation begins, and accepts that {{company}} is not responsible for damage to private lines that were not marked or disclosed.",
+        "Excavation disturbs the surface. Restoration is to rough grade with the excavated soil unless a finished restoration is separately quoted. Sod, landscaping, plantings, mature root systems, paving, driveways, patios and retaining structures within the work area may be damaged or removed, and their replacement is not included. Settlement over a backfilled trench is normal and may continue for a season or more.",
+        "Private lines identified by the Customer: ____________________________________________"
+      ],
+      "acks": [
+        "I understand the public locate marks public utilities only, not private lines on my property.",
+        "I have identified and marked all private underground lines I know of, and I accept responsibility for any I did not.",
+        "I understand restoration is to rough grade unless finished restoration is separately quoted.",
+        "I understand landscaping, paving and plantings in the work area may be damaged, and that trench settlement is normal."
+      ],
+      "builtin": true,
+      "archived": false
+    },
+    {
+      "id": "wt_mw00ojxknezq4",
+      "key": "hazmat",
+      "title": "Suspected Hazardous Material — Work Stoppage Acknowledgment",
+      "category": "All trades",
+      "whenToUse": "When a technician encounters suspected asbestos, lead or mould — old boiler and pipe insulation, pre-1980 buildings, and any wet cavity that has been closed up.",
+      "body": [
+        "During work at {{service_address}} on {{date}}, {{company}} encountered material suspected to contain asbestos, lead, or mould growth. Suspected material and location: ____________________________________________",
+        "{{company}} is a plumbing and mechanical contractor. It is not licensed or equipped for hazardous material abatement, testing, or remediation, and it will not disturb, remove or work through suspected hazardous material.",
+        "Work in the affected area has been stopped and will not resume until the Customer has arranged assessment and, where required, abatement by an appropriately licensed specialist, and has provided documentation that the area is clear.",
+        "The Customer understands that disturbing asbestos-containing insulation or lead paint, or working in an area with active mould growth, presents a health risk to occupants and to trades on site, and that federal and provincial rules govern how such material must be handled.",
+        "Time already spent on site is billable at standard rates. Rescheduling after clearance is subject to normal availability."
+      ],
+      "acks": [
+        "I understand suspected hazardous material was encountered and that work in that area has stopped.",
+        "I understand {{company}} is not licensed for testing, abatement or remediation and will not disturb the material.",
+        "I am responsible for arranging a licensed specialist and providing clearance documentation before work resumes.",
+        "I understand time already spent on site is billable and that rescheduling depends on availability."
+      ],
+      "builtin": true,
+      "archived": false
+    }
+  ],
+  "signedWaivers": [
+    {
+      "id": "wv_canary",
+      "no": 5001,
+      "templateId": "wt_mw00ojxkuk393",
+      "title": "Drain Cleaning & Sewer Line Condition Release",
+      "body": "frozen canary text",
+      "jobId": "job_mw00ojxjubtz3",
+      "customerId": "cus_1",
+      "signerName": "Canary Signer",
+      "signatureData": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "acks": [],
+      "signedAt": 1793669791535
+    }
+  ],
+  "leads": [],
+  "counterInv": 1000,
+  "leadsDone": {},
+  "manualLeads": []
+}

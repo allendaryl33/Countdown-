@@ -104,15 +104,15 @@ const server = http.createServer((req, res) => {
   }
   if (u.pathname === '/invoice.html'){
     res.writeHead(200, {'Content-Type':'text/html'});
-    return res.end(fs.readFileSync(`' + APP + '/invoice.html`));
+    return res.end(fs.readFileSync(`${APP}/invoice.html`));
   }
   if (u.pathname === '/sign.html'){
     res.writeHead(200, {'Content-Type':'text/html'});
-    return res.end(fs.readFileSync(`' + APP + '/sign.html`));
+    return res.end(fs.readFileSync(`${APP}/sign.html`));
   }
   if (u.pathname === '/index.html' || u.pathname === '/'){
     res.writeHead(200, {'Content-Type':'text/html'});
-    return res.end(fs.readFileSync(`' + APP + '/index.html`));
+    return res.end(fs.readFileSync(`${APP}/index.html`));
   }
   // sw.js among them: the real host serves it next to index.html, and
   // without it every page logs a failed registration
