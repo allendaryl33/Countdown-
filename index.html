@@ -801,6 +801,30 @@ tr[data-line-row] td{vertical-align:top;padding:6px}
 .toast.ok{background:var(--green)}
 .toast.err{background:var(--red)}
 .toast.warn{background:var(--amber)}
+
+/* His own calendar, above the board. Deliberately unlike a job card: grey,
+   flat, no status colour, so a dentist appointment can never be read as
+   work at a glance. */
+.pcal{display:flex;align-items:flex-start;gap:9px;margin:0 0 10px;padding:8px 11px;
+      border:1px solid var(--line);border-radius:7px;background:#f6f8fa;
+      font-size:13px;color:var(--muted);line-height:1.45}
+.pcal .pc-ico{flex:0 0 auto;font-size:14px;line-height:1.3}
+.pcal .pc-txt{flex:1}
+.pcal .pc-list{flex:1;display:flex;flex-wrap:wrap;gap:4px 14px}
+.pcal .pc-day{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
+.pcal .pc-day b{color:var(--text);font-weight:650}
+.pcal .pc-ev{display:inline-block;padding:1px 8px;border-radius:999px;
+             background:#e6eaef;color:#44525f;white-space:nowrap}
+.pcal.warn{background:var(--amber-soft);border-color:#e8c9a6;color:#7a4a12}
+.pcal.bad{background:#fdecea;border-color:#f0c2bc;color:#8c2f22}
+.pcal.bad strong{color:#8c2f22}
+.pcal .btn{flex:0 0 auto}
+
+/* The booking clash. Amber, not red: it is a heads-up, not a refusal. */
+.clash{border:1px solid #e8c9a6;background:var(--amber-soft);color:#7a4a12;
+       border-radius:7px;padding:8px 11px;font-size:13px;line-height:1.45}
+.cal-list{display:flex;flex-direction:column;gap:2px}
+.cal-row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px;cursor:pointer}
 @keyframes slidein{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
 
 /* ---------- Phone layout overrides ----------
@@ -2201,6 +2225,11 @@ const Store = {
        moved — and never set if it is already there. */
     this.data.jobs.forEach(j => { if (j.billWith === undefined) j.billWith = null; });
     this.data.estimates.forEach(e => { if (e.scopeOf === undefined) e.scopeOf = null; });
+    /* Added with his own calendar. Off until he turns it on, and the list of
+       calendars he has switched off is his — never rewritten from the server,
+       so a calendar he hid stays hidden when a new one appears. */
+    if (this.data.settings.calOn == null) this.data.settings.calOn = false;
+    if (!Array.isArray(this.data.settings.calHide)) this.data.settings.calHide = [];
     this.data.estimates.forEach(e => { if (!e.photos) e.photos = []; });
     // A demo should always demo. Real work is never moved.
     if (this.data.demo && !this.data.liveSince && this.data.seededOn
@@ -4835,6 +4864,8 @@ function viewSchedule(){
     <button class="btn sm accent" data-action="new-job">＋ New Job</button>
   </div>
 
+  ${mode === "month" ? "" : personalStrip(mode === "day" ? [App.date] : weekDays(App.date))}
+
   ${loose.length ? `
     <div class="tray">
       <div class="tray-head">
@@ -4847,6 +4878,53 @@ function viewSchedule(){
     </div>` : ""}
 
   ${body}`;
+}
+
+/* The band above the board. Five states, and the two that matter most are
+   the ones that look alike if you are careless: "nothing of yours on" is said
+   only when the calendar actually answered, and a failure says so in words
+   and offers to try again. An empty board is never allowed to stand in for
+   an unanswered one. */
+function personalStrip(dates){
+  if (!Cal.on()) return "";
+  const from = dates[0], to = dates[dates.length - 1];
+  Cal.need(from, to);
+
+  const band = (cls, ico, txt, btn) => `
+    <div class="pcal ${cls}">
+      <span class="pc-ico">${ico}</span>
+      <span class="pc-txt">${txt}</span>
+      ${btn || ""}
+    </div>`;
+
+  if (Cal.state === "loading") return band("", "\u{1F5D3}", "Checking your calendar\u2026");
+  if (Cal.state === "setup")
+    return band("warn", "\u{1F5D3}", "Your calendar isn't connected yet \u2014 Data &amp; Setup, "
+      + "under Your own calendar.");
+  if (Cal.state === "error")
+    return band("bad", "\u26A0",
+      "<strong>Couldn't read your calendar.</strong> This board is showing jobs only, so don't "
+      + "take an empty slot as free. " + esc(Cal.detail),
+      `<button class="btn sm" data-action="cal-retry">Try again</button>`);
+  if (Cal.state !== "ready") return "";
+
+  const groups = dates.map(d => ({ d, evs: Cal.forDate(d) })).filter(g => g.evs.length);
+  if (!groups.length)
+    return band("", "\u{1F5D3}", "Nothing of your own on "
+      + (dates.length > 1 ? "this week" : "today") + ".");
+
+  return `
+    <div class="pcal on">
+      <span class="pc-ico">\u{1F5D3}</span>
+      <div class="pc-list">
+        ${groups.map(g => `<span class="pc-day">
+          ${dates.length > 1
+            ? `<b>${esc(parseYmd(g.d).toLocaleDateString(undefined,{weekday:"short"}))}</b>` : ""}
+          ${g.evs.map(e => `<span class="pc-ev"${e.calName
+              ? ` title="${esc(e.calName)}"` : ""}>${esc(Cal.evLabel(e))}</span>`).join("")}
+        </span>`).join("")}
+      </div>
+    </div>`;
 }
 
 function scheduleHint(mode){
@@ -6402,6 +6480,45 @@ function viewData(){
       </div>
 
       <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>Your own calendar</h3></div>
+        <div class="card-body">
+          ${(() => {
+            if (!Cloud.configured() || !Cloud.cfg.refreshToken)
+              return `<p class="t-sub" style="margin-top:0">Sign in to sync first and this can
+                read your Google calendar, so you can see what's on before you book a job.</p>`;
+            if (!d.settings.calOn)
+              return `<p class="t-sub" style="margin-top:0">Show your own appointments on the
+                schedule, so you can see what's on before you book a job into it. They sit
+                above the board in grey and are never mistaken for work. Read-only: nothing
+                here can change your calendar, and nothing personal is saved into the shop or
+                sent to a customer.</p>
+                <button class="btn primary" data-action="cal-on">Show my calendar</button>`;
+            const rows = Cal.calendars.filter(c => !c.excluded);
+            return `<p class="t-sub" style="margin-top:0">On. Your appointments show above the
+                day and week boards, and booking over one gives you a warning rather than
+                stopping you.</p>
+              ${Cal.state === "error" ? `<p class="t-sub" style="color:var(--red)">
+                  Last try failed: ${esc(Cal.detail)}</p>` : ""}
+              ${Cal.state === "setup" ? `<p class="t-sub" style="color:var(--amber)">
+                  Google isn't connected on the server yet. ${esc(Cal.detail)}</p>` : ""}
+              ${rows.length ? `<div class="t-sub" style="margin:10px 0 4px">Which calendars to
+                  show:</div>
+                <div class="cal-list">${rows.map(c => `
+                  <label class="cal-row">
+                    <input type="checkbox" data-cal-toggle="${esc(c.id)}"
+                      ${Cal.isHidden(c.id) ? "" : "checked"}>
+                    <span>${esc(c.name)}</span>
+                  </label>`).join("")}</div>
+                <p class="t-sub" style="font-size:11px;margin:6px 0 0">The Work calendar is left
+                  out on purpose \u2014 that is where your jobs already go, and reading it back
+                  would show every job twice.</p>` : ""}
+              <div style="margin-top:12px"><button class="btn" data-action="cal-off">Turn it
+                off</button></div>`;
+          })()}
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
         <div class="card-head"><h3>Work types</h3></div>
         <div class="card-body">
           <p class="t-sub" style="margin-top:0">The ${Store.jobTypes().length} kinds of work you
@@ -6902,6 +7019,8 @@ function openJobForm(id){
           <div class="hint">Leave blank to hold unscheduled.</div></div>
         <div class="field"><label>Arrival window</label>
           <select class="input" id="f-window">${WINDOWS.map(w=>`<option${sel(w,j?j.window:"8:00–10:00")}>${esc(w)}</option>`).join("")}</select></div>
+        <div class="field" id="f-clash-wrap" style="display:none;grid-column:1/-1;margin-bottom:0">
+          <div class="clash" id="f-clash"></div></div>
         <div class="field"><label>Technician</label>
           <select class="input" id="f-tech"><option value="">— Unassigned —</option>
             ${Store.activeTechs().map(t=>`<option value="${t.id}"${sel(t.id,j?j.techId:"")}>${esc(t.name)}</option>`).join("")}
@@ -6925,6 +7044,27 @@ function openJobForm(id){
     nc.style.display = cSel.value === "__new" ? "block" : "none";
     if (cSel.value === "__new") $("#nc-name").focus();
   });
+
+  /* A warning, never a block: he works through his own evenings and knows
+     it. The point is that he finds out here rather than on the doorstep. */
+  const paintClash = () => {
+    const wrap = $("#f-clash-wrap"), box = $("#f-clash");
+    if (!wrap || !box) return;
+    const d = $("#f-date").value, w = $("#f-window").value;
+    const hit = (Cal.on() && d) ? Cal.clashes(d, w) : [];
+    if (!hit.length){ wrap.style.display = "none"; box.innerHTML = ""; return; }
+    wrap.style.display = "block";
+    box.innerHTML = "\u26A0 Clashes with: "
+      + hit.map(e => `<strong>${esc(Cal.evLabel(e))}</strong>`).join(", ")
+      + '<div class="t-sub" style="margin-top:3px">Book it anyway if you mean to \u2014 '
+      + 'this is only so you know.</div>';
+  };
+  $("#f-date").addEventListener("change", paintClash);
+  $("#f-window").addEventListener("change", paintClash);
+  /* The modal lives in #modal-root, which viewHasLiveInput does not cover, so
+     a load finishing cannot repaint this from under him \u2014 it is painted once
+     on open and again only when he changes the date or the slot. */
+  paintClash();
 }
 
 function saveJobFromForm(id){
@@ -8582,6 +8722,143 @@ function saveMessageSetup(){
    the network instead. */
 
 const VAPID_PUBLIC = "BMfeoozGYBjdOHKH8fybAbIkVQ10a7hNsAnLAl6E6W30PcZtvsbPxGRB2FBF97HYk0BGql7-lCI5QjcXL7Yy5cA";
+
+/* ============================================================
+   His own calendar
+
+   He books jobs without his personal week in front of him. The other
+   direction already works — poseidon-sync.py writes his jobs into a Google
+   calendar called Work, and Helm shows them — so this is the way back.
+
+   Nothing personal is stored. Events are fetched for the days on screen and
+   held in memory only: never in Store.data, never in localStorage, never in
+   the row that syncs to Supabase. That row is business data read with a
+   service-role key by a script on his Mac, and an appointment he deletes in
+   Google should vanish from here rather than linger in a copy.
+
+   The one rule everything below serves: a day with nothing on it and a day
+   that could not be read must never look the same. If they did he would book
+   over his daughter's recital and the app would have told him it was free.
+   ============================================================ */
+const Cal = {
+  state: "off",        // off | loading | ready | error | setup
+  detail: "",
+  from: null, to: null,
+  events: [],
+  calendars: [],
+  _seq: 0,
+  _failed: null,       // the window that failed, so a bad day is not retried on every render
+
+  on(){
+    const st = Store.data.settings;
+    return !!(st.calOn && Cloud.configured() && Cloud.cfg && Cloud.cfg.refreshToken);
+  },
+  hidden(){ return Store.data.settings.calHide || []; },
+  isHidden(id){ return this.hidden().indexOf(id) >= 0; },
+  toggle(id){
+    const list = this.hidden().slice();
+    const i = list.indexOf(id);
+    if (i >= 0) list.splice(i, 1); else list.push(id);
+    Store.data.settings.calHide = list;
+    Store.save();
+  },
+
+  /* Do we actually know what is on that day? Everything that would tell him
+     a day is clear has to ask this first. */
+  knows(d){
+    return this.state === "ready" && this.from && this.to && d >= this.from && d <= this.to;
+  },
+  forDate(d){
+    if (!this.knows(d)) return [];
+    return this.events.filter(e => e.date === d && !this.isHidden(e.cal));
+  },
+
+  /* Called from a view while it renders. It must never fetch on every pass:
+     once for a window, and after a failure not again until he asks. */
+  need(from, to){
+    if (!this.on()){ this.state = "off"; return; }
+    if (this.state === "loading") return;
+    if (this.state === "ready" && this.from <= from && this.to >= to) return;
+    if (this._failed === from + "|" + to) return;
+    this.load(from, to);
+  },
+  retry(){ this._failed = null; this.state = "off"; renderQuiet(); },
+
+  async load(from, to){
+    const seq = ++this._seq;
+    const key = from + "|" + to;
+    this.state = "loading"; this.detail = "";
+    let r = null, failed = null;
+    try {
+      await Cloud.ensureToken();
+      r = await Cloud.call("/functions/v1/personal-calendar?from=" + encodeURIComponent(from)
+                           + "&to=" + encodeURIComponent(to));
+    } catch(err){
+      failed = err && err.offline
+        ? "No signal, so your calendar hasn't loaded."
+        : String((err && err.message) || err);
+    }
+    if (seq !== this._seq) return;         // a newer load started; this answer is stale
+    if (failed){
+      this.state = "error"; this.detail = failed; this._failed = key;
+    } else if (!r || !r.ok){
+      this.state = (r && r.setup) ? "setup" : "error";
+      this.detail = (r && r.error) || "The calendar didn't answer.";
+      this._failed = key;
+    } else {
+      /* Second guard on the Work-calendar loop: the function excludes that
+         calendar by name, and anything still carrying the sync's own tag is
+         one of his jobs coming back round. Dropped here too, because a job
+         showing up as a personal event would clash with itself. */
+      this.events = (r.events || []).filter(e => e && !e.poseidon_job_id && !e.poseidonJobId);
+      this.calendars = r.calendars || [];
+      this.from = from; this.to = to;
+      this.state = "ready"; this.detail = ""; this._failed = null;
+    }
+    renderQuiet();
+  },
+
+  /* ---- reading a window as a time ----
+     His slots are "8:00–10:00" through "4:00–6:00" on a 12-hour clock, and
+     his day runs 8am to 6pm, so anything before 7 is an afternoon. */
+  windowSpan(w){
+    const m = /^(\d+):(\d+)[^\d]+(\d+):(\d+)/.exec(String(w || ""));
+    if (!m) return null;                    // Anytime and ASAP have no span
+    const h = x => { const n = Number(x); return n < 7 ? n + 12 : n; };
+    return { s: h(m[1]) * 60 + Number(m[2]), e: h(m[3]) * 60 + Number(m[4]) };
+  },
+  mins(t){
+    const m = /^(\d+):(\d+)/.exec(String(t || ""));
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  },
+  clock(t){
+    const m = /^(\d+):(\d+)/.exec(String(t || ""));
+    if (!m) return "";
+    let h = Number(m[1]); const mm = m[2];
+    const ap = h >= 12 ? "pm" : "am";
+    h = h % 12 || 12;
+    return h + (mm === "00" ? "" : ":" + mm) + ap;
+  },
+  evLabel(e){
+    if (!e) return "";
+    return e.allDay ? e.title + " (all day)"
+                    : e.title + " " + this.clock(e.start) + "–" + this.clock(e.end);
+  },
+
+  /* What a job in this slot would run into. A warning, never a block: he is
+     allowed to work through his own evening and often does. */
+  clashes(date, window){
+    if (!this.knows(date)) return [];
+    const span = this.windowSpan(window);
+    return this.forDate(date).filter(e => {
+      if (e.allDay) return true;            // a day away collides with any slot
+      if (!span) return false;              // Anytime/ASAP: no span, so no claim
+      const s = this.mins(e.start), en = this.mins(e.end);
+      if (s == null || en == null) return false;
+      return s < span.e && en > span.s;
+    });
+  }
+};
 
 const Nudge = {
   reg: null,
@@ -10609,6 +10886,9 @@ document.addEventListener("click", e => {
   const lkWent = hit("[data-link-went]");
   if (lkWent) return finishLinkSend(lkWent.dataset.linkWent === "yes");
 
+  const calTog = hit("[data-cal-toggle]");
+  if (calTog){ Cal.toggle(calTog.dataset.calToggle); renderQuiet(); return; }
+
   const mergeAsk = hit("[data-merge-ask]");
   if (mergeAsk) return finishBillTogether(mergeAsk.dataset.mergeAsk);
 
@@ -10882,6 +11162,23 @@ document.addEventListener("click", e => {
       render();
       break;
     }
+    case "cal-on": {
+      Store.data.settings.calOn = true; Store.save();
+      Cal._failed = null; Cal.state = "off";
+      render();
+      break;
+    }
+    case "cal-off": {
+      /* Everything it held was in memory. Turning it off drops it rather
+         than leaving yesterday's appointments to be drawn on a stale pass. */
+      Store.data.settings.calOn = false; Store.save();
+      Cal.state = "off"; Cal.events = []; Cal.calendars = [];
+      Cal.from = null; Cal.to = null; Cal._failed = null; Cal.detail = "";
+      render();
+      break;
+    }
+    case "cal-retry": { Cal.retry(); break; }
+
     case "cloud-signin": {
       const email = $("#cl-email").value.trim();
       const pass  = $("#cl-pass").value;
