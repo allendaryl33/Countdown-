@@ -633,6 +633,11 @@ tr[data-line-row] td{vertical-align:top;padding:6px}
 .jobcard:hover{border-color:#c6d2de;box-shadow:0 2px 8px rgba(16,36,56,.1)}
 .jobcard:active{cursor:grabbing}
 .jobcard.dragging{opacity:.4}
+/* Dropping a job onto another job bills them together, which is a different
+   thing from moving it, so it does not look like the dashed move outline. */
+.jobcard.mergeover,.minicard.mergeover{
+  outline:2px solid var(--green);outline-offset:-2px;background:var(--green-soft);
+}
 .jobcard.pri-Emergency{border-left-color:var(--red)}
 .jobcard.pri-High{border-left-color:var(--amber)}
 .jobcard.pri-Low{border-left-color:#c3ccd6}
@@ -795,6 +800,7 @@ tr[data-line-row] td{vertical-align:top;padding:6px}
 }
 .toast.ok{background:var(--green)}
 .toast.err{background:var(--red)}
+.toast.warn{background:var(--amber)}
 @keyframes slidein{from{transform:translateX(20px);opacity:0}to{transform:none;opacity:1}}
 
 /* ---------- Phone layout overrides ----------
@@ -2190,6 +2196,11 @@ const Store = {
     this.data.jobs.forEach(j => { if (!j.materials) j.materials = []; });
     this.data.estimates.forEach(e => { if (!e.materials) e.materials = []; });
     this.data.jobs.forEach(j => { if (!j.photos) j.photos = []; });
+    /* Added with change of scope. null, not undefined, so a job he has
+       deliberately put back on its own reads the same as one that never
+       moved — and never set if it is already there. */
+    this.data.jobs.forEach(j => { if (j.billWith === undefined) j.billWith = null; });
+    this.data.estimates.forEach(e => { if (e.scopeOf === undefined) e.scopeOf = null; });
     this.data.estimates.forEach(e => { if (!e.photos) e.photos = []; });
     // A demo should always demo. Real work is never moved.
     if (this.data.demo && !this.data.liveSince && this.data.seededOn
@@ -2462,9 +2473,31 @@ const Store = {
       materials: (e.materials || []).map(m => Object.assign({}, m, { id: uid("mat") })),
       estimateId: e.id, quotedTotal: total,
       flatPrice: this.estIsFlat(e) ? Number(e.flatPrice) : null,
+      billWith: null,
       log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no} · quoted ${money(total)}` }]
     };
     this.data.jobs.push(job);
+
+    /* Quoted as a change of scope: put it on the original invoice. It can
+       legitimately be too late - that invoice may already be with the
+       customer - and then it stands on its own and the log says why,
+       rather than the money quietly going nowhere. */
+    if (e.scopeOf){
+      const parent = this.job(e.scopeOf);
+      if (!parent){
+        this.addLog(job, "Quoted as a change of scope, but the original job is gone — billing on its own");
+      } else {
+        const why = this.canBillTogether(job, parent);
+        if (why){
+          this.addLog(job, `Not billed with job #${parent.no}: ${why}`);
+          this.addEstLog(e, `Could not go on job #${parent.no}'s invoice — ${why}`);
+        } else {
+          job.billWith = parent.id;
+          this.addLog(job, `Change of scope — billed with job #${parent.no}`);
+          this.addLog(parent, `Billing with it: ${this.jobLabel(job)}`);
+        }
+      }
+    }
     if (opts.techId) this.assign(job, opts.techId);
     else if (job.scheduledDate){ job.status = "scheduled"; this.addLog(job, "Scheduled, awaiting a technician"); }
 
@@ -2864,8 +2897,9 @@ const Store = {
   },
   /* Finished work nobody has billed yet. */
   toInvoice(){
-    return this.data.jobs.filter(j => j.status === "complete" &&
-      (!j.payment || j.payment.status === "unbilled"));
+    return this.data.jobs.filter(j => j.status === "complete"
+      && !this.isBilledWithAnother(j)
+      && (!j.payment || j.payment.status === "unbilled"));
   },
   /* Billed and still waiting on the money. */
   /* Cancelled work is not owed and was not collected. Leaving it in the
@@ -2874,6 +2908,7 @@ const Store = {
      The payment record is left alone, so un-cancelling restores it whole. */
   outstanding(){
     return this.data.jobs.filter(j => j.status !== "cancelled"
+      && !this.isBilledWithAnother(j)
       && j.payment && j.payment.status === "invoiced");
   },
   setPayment(job, fields){
@@ -2912,11 +2947,71 @@ const Store = {
     const st = this.data.settings;
     return st.gst ? (Number(st.gstRate) || 0) / 100 : 0;
   },
-  taxOn(job){ return Math.round(this.jobTotal(job) * this.taxRate() * 100) / 100; },
+  /* ---- Work billed together -------------------------------------------
+     A change of scope is its own job: its own signed estimate, its own slot
+     on the calendar, its own photos and time. What it is not is its own
+     invoice. The customer agreed to one bathroom and should get one bill.
+
+     jobTotal deliberately stays per-job. It is what Time & Money counts as
+     earned, and rolling children into it would count the same work twice.
+     Only the invoice adds them up. */
+  billParent(job){
+    const id = job && job.billWith;
+    const p = id ? this.job(id) : null;
+    return p && p.id !== (job && job.id) ? p : null;
+  },
+  isBilledWithAnother(job){ return !!this.billParent(job); },
+  billChildren(job){
+    if (!job) return [];
+    return this.data.jobs.filter(j => j.billWith === job.id
+      && j.id !== job.id && j.status !== "cancelled");
+  },
+  /* The job plus everything billing with it. */
+  billedTotal(job){
+    return this.billChildren(job).reduce((s,c) => s + this.jobTotal(c), this.jobTotal(job));
+  },
+
+  /* Refused rather than done quietly when it would change something already
+     with the customer, or make a loop. */
+  canBillTogether(child, parent){
+    if (!child || !parent) return "There's nothing to attach.";
+    if (child.id === parent.id) return "That's the same job.";
+    if (this.billChildren(child).length)
+      return "Other work is already billed with that one — move it first.";
+    if (this.billParent(parent))
+      return "That job is itself billed with another. Attach to the first one instead.";
+    const out = j => j && j.payment && j.payment.status !== "unbilled";
+    if (out(parent)) return "That invoice has already gone out. It can't be added to.";
+    if (out(child))  return "This one has already been invoiced on its own.";
+    if (child.customerId !== parent.customerId) return "Those are two different customers.";
+    return null;      // fine
+  },
+  billTogether(child, parent){
+    const why = this.canBillTogether(child, parent);
+    if (why) return why;
+    child.billWith = parent.id;
+    this.addLog(parent, `Billing with it: ${this.jobLabel(child)}`);
+    this.addLog(child,  `Billed with job #${parent.no}`);
+    this.save();
+    return null;
+  },
+  billSeparately(child){
+    const p = this.billParent(child);
+    if (!p) return;
+    child.billWith = null;
+    this.addLog(child, `Billed on its own again`);
+    this.addLog(p, `No longer billing: ${this.jobLabel(child)}`);
+    this.save();
+  },
+  jobLabel(job){
+    return `job #${job.no} — ${this.workLabel(job.type, job.service)}`;
+  },
+
+  taxOn(job){ return Math.round(this.billedTotal(job) * this.taxRate() * 100) / 100; },
 
   /* What he earns is jobTotal and stays pre-tax, because GST is not revenue
      and Time & Money would lie if it counted. What the customer owes is this. */
-  invoiceTotal(job){ return Math.round((this.jobTotal(job) + this.taxOn(job)) * 100) / 100; },
+  invoiceTotal(job){ return Math.round((this.billedTotal(job) + this.taxOn(job)) * 100) / 100; },
 
   /* Terms are not always a number of days. For a one-man shop collecting on
      the spot, "due in 15 days" is an invitation to pay in 15 days, which is
@@ -2940,6 +3035,20 @@ const Store = {
   /* Parts and labour as one list. The printed invoice builds this inline;
      the page the customer opens needs the same thing as data. */
   invoiceLines(job){
+    const kids = this.billChildren(job);
+    // A flat job's scope lines are priced at nothing, which only adds up so
+    // long as nothing else on the invoice costs money. Added work does, so
+    // the agreed price has to come out and stand as its own line.
+    const kidsCost = kids.some(c => this.jobTotal(c) > 0);
+    const own = this.jobOwnLines(job, kidsCost);
+    if (!kids.length) return own;
+    /* Added work gets a heading of its own. One bill, but the customer can
+       still see which part of it they agreed to later and what it was. */
+    return kids.reduce((acc, c) => acc
+      .concat([{ desc: "Added: " + this.workLabel(c.type, c.service), qty: 0, price: 0, scope: true }])
+      .concat(this.jobOwnLines(c, (Number(c.flatPrice) || 0) > 0)), own);
+  },
+  jobOwnLines(job, needPrice){
     // Flat: the lines are the scope, the price sits on the job, and hours
     // are his own record rather than something the customer is billed for.
     if (this.jobIsFlat(job)){
@@ -2951,7 +3060,7 @@ const Store = {
       // no prices against it, one total. The moment something priced is on
       // there the agreed price has to appear as its own line, or the lines
       // do not add up to the total and the customer is right to query it.
-      if (!extra.length) return scope;
+      if (!extra.length && !needPrice) return scope;
       return scope
         .concat([{ desc: "Agreed price", qty: 1, price: Number(job.flatPrice) || 0 }])
         .concat(extra.map(p => ({ desc: p.desc || p.name,
@@ -2976,11 +3085,13 @@ const Store = {
   /* Finished, worth money, no invoice sent. The money filter matters: a
      completed no-charge callback shouldn't sit in the list forever. */
   invToSend(){
-    return this.data.jobs.filter(j => j.status === "complete" &&
-      (!j.payment || j.payment.status === "unbilled") && this.jobTotal(j) > 0);
+    return this.data.jobs.filter(j => j.status === "complete"
+      && !this.isBilledWithAnother(j)
+      && (!j.payment || j.payment.status === "unbilled") && this.jobTotal(j) > 0);
   },
   invPaid(){
     return this.data.jobs.filter(j => j.status !== "cancelled"
+      && !this.isBilledWithAnother(j)
       && j.payment && j.payment.status === "paid");
   },
   /* How long it's been out. Falls back to the timestamp for anything
@@ -4997,6 +5108,38 @@ function wireBoard(){
       draggedId = null;
       card.classList.remove("dragging");
       $$("[data-drop]").forEach(c => c.classList.remove("dragover"));
+      $$(".jobcard").forEach(c => c.classList.remove("mergeover"));
+    });
+
+    /* Dropping one job onto another, to bill them together.
+
+       Rescheduling by dragging is what he does every morning and it must
+       not get harder, so the card only takes the drop when billing the two
+       together is actually possible - same customer, neither invoiced.
+       Anything else falls straight through to the cell underneath and
+       reschedules exactly as it always did. And even when it can, it asks:
+       the card sits inside the cell, so a drop on it is just as likely to
+       have meant "put it on Thursday". */
+    const mergeTarget = () => {
+      const moving = draggedId && Store.job(draggedId);
+      const onto   = Store.job(card.dataset.job);
+      return moving && onto && !Store.canBillTogether(moving, onto) ? onto : null;
+    };
+    card.addEventListener("dragover", e => {
+      if (!mergeTarget()) return;                // let the cell have it
+      e.preventDefault(); e.stopPropagation();
+      try { e.dataTransfer.dropEffect = "link"; } catch(_){}
+      const cell = card.closest("[data-drop]");
+      if (cell) cell.classList.remove("dragover");
+      card.classList.add("mergeover");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("mergeover"));
+    card.addEventListener("drop", e => {
+      const onto = mergeTarget();
+      if (!onto) return;                         // let the cell have it
+      e.preventDefault(); e.stopPropagation();
+      card.classList.remove("mergeover");
+      askBillTogether(draggedId, onto.id, card.closest("[data-drop]"));
     });
   });
 
@@ -5012,32 +5155,111 @@ function wireBoard(){
       cell.classList.remove("dragover");
       const id = draggedId || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
       const job = id && Store.job(id);
-      if (!job) return;
-
-      // A cell can carry a date, a technician, or both. Whatever it names,
-      // the job takes; anything it doesn't name is left alone.
-      const newDate = cell.dataset.dropDate;
-      const hasTech = Object.prototype.hasOwnProperty.call(cell.dataset, "dropTech");
-      const newTech = hasTech ? (cell.dataset.dropTech || null) : job.techId;
-      const newWin  = cell.dataset.dropWindow;
-
-      const dateChanged = newDate != null && newDate !== job.scheduledDate;
-      const techChanged = hasTech && (newTech || "") !== (job.techId || "");
-      const winChanged  = newWin != null && newWin !== job.window;
-      if (!dateChanged && !techChanged && !winChanged) return;
-
-      if (dateChanged) Store.setDate(job, newDate);
-      if (techChanged) Store.assign(job, newTech);
-      if (winChanged)  Store.setWindow(job, newWin);
-      render();
-
-      const bits = [];
-      if (techChanged) bits.push(newTech ? Store.tech(newTech).name : "Unassigned");
-      if (winChanged)  bits.push(newWin);
-      if (dateChanged) bits.push(fmtDate(newDate));
-      toast(`#${job.no} → ${bits.join(" · ")}`, "ok");
+      if (job) moveJobToCell(job, cell);
     });
   });
+}
+
+/* Which he meant by dropping one job on another. The cell underneath is
+   held onto so "just move it" still reschedules, rather than the drag
+   being thrown away and done again. */
+let MergeAsk = null;
+function askBillTogether(childId, parentId, cell){
+  const child = Store.job(childId), parent = Store.job(parentId);
+  if (!child || !parent) return;
+  const why = Store.canBillTogether(child, parent);
+  if (why) return toast(why, "warn");
+
+  MergeAsk = { childId, parentId, cell };
+  const where = cell && cell.dataset.dropDate
+    ? fmtDate(cell.dataset.dropDate) : null;
+  openModal(`
+    <div class="modal-head"><div><div class="t-sub">${esc(custName(parent.customerId))}</div>
+      <h2>Bill these together?</h2></div><div class="spacer"></div>
+      <button class="x" data-close>&times;</button></div>
+    <div class="modal-body">
+      <p class="t-sub" style="margin-top:0;max-width:64ch">Job
+        <strong>#${esc(child.no)}</strong> would stay its own job, with its own
+        day and its own photos, but it stops raising an invoice of its own.
+        What it comes to goes on job <strong>#${esc(parent.no)}</strong> instead,
+        so she gets one bill.</p>
+      <div class="card" style="margin:12px 0">
+        <div class="money-row"><span class="mr-label">#${esc(parent.no)} ·
+          ${esc(Store.workLabel(parent.type, parent.service))}</span>
+          <span class="mr-val">${esc(money(Store.jobTotal(parent)))}</span></div>
+        <div class="money-row"><span class="mr-label">#${esc(child.no)} ·
+          ${esc(Store.workLabel(child.type, child.service))}</span>
+          <span class="mr-val">${esc(money(Store.jobTotal(child)))}</span></div>
+        <div class="money-row" style="border-bottom:0"><span class="mr-label">One bill
+          for</span><span class="mr-val"><strong>${esc(money(
+            Store.jobTotal(parent) + Store.jobTotal(child)))}</strong></span></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" data-merge-ask="bill">Bill it with #${esc(parent.no)}</button>
+        ${where ? `<button class="btn" data-merge-ask="move">Just move it to ${esc(where)}</button>` : ""}
+        <button class="btn" data-merge-ask="no">Leave it alone</button>
+      </div>
+      <p class="t-sub" style="margin:12px 0 0;max-width:64ch">Nothing is deleted
+        either way, and you can put it back on its own invoice afterwards.</p>
+    </div>`, { noFocus:true });
+}
+/* Back onto its own invoice. Nothing is lost either way, so this does not
+   need confirming - but it does need saying, because the bill he is looking
+   at is about to get smaller. */
+function billApartNow(arg){
+  const [jobId, backTo] = String(arg || "").split(":");
+  const job = Store.job(jobId);
+  if (!job || !Store.billParent(job)) return;
+  Store.billSeparately(job);
+  render();
+  if (Store.job(backTo)) openJob(backTo);
+  toast(`#${job.no} will be invoiced on its own`, "ok");
+}
+
+function finishBillTogether(what){
+  const ask = MergeAsk; MergeAsk = null;
+  closeModal();
+  if (!ask || what === "no") return;
+  if (what === "move"){
+    const job = Store.job(ask.childId);
+    if (job && ask.cell) moveJobToCell(job, ask.cell);
+    return;
+  }
+  const child = Store.job(ask.childId), parent = Store.job(ask.parentId);
+  const why = child && parent ? Store.billTogether(child, parent) : "That job is gone.";
+  render();
+  if (why) return toast(why, "warn");
+  toast(`#${child.no} now bills with #${parent.no}`, "ok");
+}
+
+/* Moving a job by dragging it. Pulled out of the drop handler because
+   dropping one job onto another has to ask which he meant, and "just move
+   it" then has to do exactly what dropping on the empty part of the cell
+   does, not a second copy of it that drifts. */
+function moveJobToCell(job, cell){
+  if (!job || !cell) return false;
+  // A cell can carry a date, a technician, or both. Whatever it names,
+  // the job takes; anything it doesn't name is left alone.
+  const newDate = cell.dataset.dropDate;
+  const hasTech = Object.prototype.hasOwnProperty.call(cell.dataset, "dropTech");
+  const newTech = hasTech ? (cell.dataset.dropTech || null) : job.techId;
+  const newWin  = cell.dataset.dropWindow;
+
+  const dateChanged = newDate != null && newDate !== job.scheduledDate;
+  const techChanged = hasTech && (newTech || "") !== (job.techId || "");
+  const winChanged  = newWin != null && newWin !== job.window;
+  if (!dateChanged && !techChanged && !winChanged) return false;
+  if (dateChanged) Store.setDate(job, newDate);
+  if (techChanged) Store.assign(job, newTech);
+  if (winChanged)  Store.setWindow(job, newWin);
+  render();
+
+  const bits = [];
+  if (techChanged) bits.push(newTech ? Store.tech(newTech).name : "Unassigned");
+  if (winChanged)  bits.push(newWin);
+  if (dateChanged) bits.push(fmtDate(newDate));
+  toast(`#${job.no} → ${bits.join(" · ")}`, "ok");
+  return true;
 }
 
 /* ============================================================
@@ -6413,6 +6635,8 @@ function openJob(id){
         ${c ? `<button class="btn sm" data-message="${j.id}">💬 Message customer</button>` : ""}
         <button class="btn sm" data-edit-job="${j.id}">Edit details</button>
         <button class="btn sm" data-print-job="${j.id}">🖨 Ticket</button>
+        ${j.status !== "cancelled"
+          ? `<button class="btn sm" data-scope-job="${j.id}">➕ Change of scope</button>` : ""}
         <button class="btn sm primary" data-invoice="${j.id}">🧾 Invoice</button>
       </div>
 
@@ -6435,6 +6659,32 @@ function openJob(id){
       </div>
 
       <div class="dl"><dt>Reported problem</dt><dd style="white-space:pre-wrap">${esc(j.description)||"—"}</dd></div>
+
+      ${(() => {
+        const par  = Store.billParent(j);
+        const kids = Store.billChildren(j);
+        if (!par && !kids.length) return "";
+        if (par) return `
+          <div class="dl"><dt>Billing</dt><dd>
+            <div>Goes on <span class="linkish" data-job="${par.id}">job #${esc(par.no)}</span>'s
+              invoice — this one raises none of its own.</div>
+            <div class="t-sub" style="margin-top:3px">Its own total, ${esc(money(Store.jobTotal(j)))},
+              is added there.</div>
+            <button class="btn sm" style="margin-top:8px" data-bill-apart="${j.id}:${j.id}">Bill this on its own instead</button>
+          </dd></div>`;
+        return `
+          <div class="dl"><dt>Billing</dt><dd>
+            <div>One invoice, covering this job and ${kids.length} change${kids.length===1?"":"s"} of scope.</div>
+            ${kids.map(k => `<div style="margin-top:6px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+              <span class="linkish" data-job="${k.id}">#${esc(k.no)}</span>
+              <span>${esc(Store.workLabel(k.type, k.service))}</span>
+              <span class="t-sub">${esc(money(Store.jobTotal(k)))}</span>
+              <button class="btn sm ghost" data-bill-apart="${k.id}:${j.id}">bill separately</button>
+            </div>`).join("")}
+            <div class="t-sub" style="margin-top:8px">Invoice total
+              ${esc(money(Store.invoiceTotal(j)))}${Store.taxRate() ? " including GST" : ""}.</div>
+          </dd></div>`;
+      })()}
 
       <div class="section-title" style="margin-top:22px">Parts &amp; labor</div>
       <table style="border:1px solid var(--line);border-radius:6px">
@@ -7007,12 +7257,17 @@ function openEstimate(id){
 }
 
 /* ---------- Estimate create / edit ---------- */
-function openEstimateForm(id){
+function openEstimateForm(id, scopeJobId){
   const e = id ? Store.estimate(id) : null;
   const custs = Store.data.customers.slice().sort((a,b)=>a.name.localeCompare(b.name));
   const lead = e && e.lead ? e.lead : null;
   const sel = (v, cur) => v === cur ? " selected" : "";
-  const mode = e ? (e.customerId ? "existing" : "lead") : "lead";
+  /* A change of scope is quoted against a job that already exists, so the
+     customer is not in question and the link rides in the form rather than
+     in a variable that could still be sitting there an hour later. */
+  const scopeJob = Store.job(scopeJobId || (e && e.scopeOf) || "");
+  const preCust  = e ? e.customerId : (scopeJob ? scopeJob.customerId : "");
+  const mode = e ? (e.customerId ? "existing" : "lead") : (scopeJob ? "existing" : "lead");
 
   openModal(`
     <div class="modal-head">
@@ -7049,10 +7304,18 @@ function openEstimateForm(id){
         <label>Customer *</label>
         <select class="input" id="e-customer">
           <option value="">— Select a customer —</option>
-          ${custs.map(c => `<option value="${c.id}"${sel(c.id, e?e.customerId:"")}>${esc(c.name)} — ${esc(c.address)}</option>`).join("")}
+          ${custs.map(c => `<option value="${c.id}"${sel(c.id, preCust)}>${esc(c.name)} — ${esc(c.address)}</option>`).join("")}
         </select>
       </div>
       <div class="err" id="e-who" style="display:none">Say who this quote is for.</div>
+      <input type="hidden" id="e-scopeof" value="${esc(scopeJob ? scopeJob.id : "")}">
+      ${scopeJob ? `<div class="card" style="margin-bottom:14px;background:var(--blue-soft,#eef5fb)">
+        <div class="t-strong">A change of scope on job #${esc(scopeJob.no)}</div>
+        <div class="t-sub" style="margin-top:3px">Quote only the extra work. When she
+          approves it, it becomes its own job on the board — its own day, its own
+          photos — but it goes onto job #${esc(scopeJob.no)}'s invoice, so she gets
+          one bill. If that invoice has already gone out by then it stays separate,
+          and the job log will say so.</div></div>` : ""}
 
       <div class="row2">
         <div class="field"><label>Work type</label>
@@ -7105,11 +7368,13 @@ function saveEstimateFromForm(id){
   if (!desc){ $("#e-edesc").style.display = "block"; ok = false; }
   if (!ok) return;
 
+  const scopeEl = $("#e-scopeof");
   const fields = {
     customerId, lead,
     type: $("#e-type").value,
     validDays: Number($("#e-valid").value) || 30,
-    description: desc
+    description: desc,
+    scopeOf: (scopeEl && scopeEl.value) || null
   };
 
   if (id){
@@ -8910,10 +9175,14 @@ function ticketHtml(j){
 async function invoiceDocHtml(j){
   const st = Store.data.settings;
   const c = Store.customer(j.customerId);
-  const parts = j.parts || [];
-  const partsTotal = parts.reduce((s,p) => s + (Number(p.qty)||0)*(Number(p.price)||0), 0);
-  const laborTotal = (Number(j.laborHours)||0) * (Number(j.laborRate)||0);
-  const sub = Store.jobTotal(j);
+  /* The same lines the customer gets on the link. This used to build its own
+     off j.parts while taking the tax and the total from the Store, which on a
+     flat job printed every line at $0.00 against a subtotal of the agreed
+     price, and on a job carrying a change of scope would have left out the
+     added work entirely while still charging for it. The printed copy and the
+     one she opens have to be the same document. */
+  const lines = Store.invoiceLines(j);
+  const sub = Store.billedTotal(j);
   const tax = Store.taxOn(j);
   const total = Store.invoiceTotal(j);
   const paid = Number(j.payment && j.payment.amountPaid) || 0;
@@ -8959,7 +9228,7 @@ async function invoiceDocHtml(j){
         </td>
         <td valign="top">
           <strong>Work done</strong><br>
-          ${esc(j.type)} &middot; Job #${esc(j.no)}<br>
+          ${esc(Store.workLabel(j.type, j.service))} &middot; Job #${esc(j.no)}<br>
           ${j.scheduledDate ? esc(fmtDateLong(j.scheduledDate)) : ""}<br>
           ${(() => { const t = Store.termsLine(j); return t ? `<strong>${esc(t)}</strong>` : ""; })()}
         </td>
@@ -8973,18 +9242,14 @@ async function invoiceDocHtml(j){
         <th>Description</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th>
       </tr></thead>
       <tbody>
-        ${parts.map(pt => `<tr>
-          <td>${esc(pt.desc)}</td>
-          <td class="num">${esc(pt.qty)}</td>
-          <td class="num">${esc(money(pt.price))}</td>
-          <td class="num">${esc(money((Number(pt.qty)||0)*(Number(pt.price)||0)))}</td>
+        ${lines.map(l => l.scope
+          ? `<tr><td colspan="4">${esc(l.desc)}</td></tr>`
+          : `<tr>
+          <td>${esc(l.desc)}</td>
+          <td class="num">${esc(l.qty)}</td>
+          <td class="num">${esc(money(l.price))}</td>
+          <td class="num">${esc(money((Number(l.qty)||0)*(Number(l.price)||0)))}</td>
         </tr>`).join("")}
-        ${laborTotal ? `<tr>
-          <td>Labour</td>
-          <td class="num">${esc(j.laborHours)} hr</td>
-          <td class="num">${esc(money(j.laborRate))}</td>
-          <td class="num">${esc(money(laborTotal))}</td>
-        </tr>` : ""}
       </tbody>
       <tfoot>
         <tr><td colspan="3" class="num">Subtotal</td><td class="num">${esc(money(sub))}</td></tr>
@@ -10343,6 +10608,15 @@ document.addEventListener("click", e => {
 
   const lkWent = hit("[data-link-went]");
   if (lkWent) return finishLinkSend(lkWent.dataset.linkWent === "yes");
+
+  const mergeAsk = hit("[data-merge-ask]");
+  if (mergeAsk) return finishBillTogether(mergeAsk.dataset.mergeAsk);
+
+  const scopeJob = hit("[data-scope-job]");
+  if (scopeJob) return openEstimateForm(null, scopeJob.dataset.scopeJob);
+
+  const billApart = hit("[data-bill-apart]");
+  if (billApart) return billApartNow(billApart.dataset.billApart);
 
   const signEst = hit("[data-sign-estimate]");
   if (signEst) return openEstimateSign(signEst.dataset.signEstimate);
