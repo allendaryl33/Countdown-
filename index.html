@@ -9382,6 +9382,32 @@ function signLinkUrl(token){
 
 /* He tapped Text, Email or Copy — so it really went. Until this runs, the
    estimate says nothing about having been sent, because it hasn't been. */
+/* Handing the link to the phone is not sending it, and the signing flow had
+   its own copy of that mistake: tapping Text marked the estimate sent, so
+   backing out of Messages left it claiming it had gone to a customer who
+   never heard from him. The customer-messages sheet was fixed for this; this
+   path was missed. Same answer — the phone never reports whether send was
+   pressed, so it asks. */
+let LinkAsk = null;
+
+function beginLinkSend(eid, how){
+  LinkAsk = { eid, how, at: Date.now() };
+  Store.data.settings.pendingLink = LinkAsk;
+  Store.save();
+  sendForSignature(eid);          // redraws the panel with the question
+}
+
+function finishLinkSend(yes){
+  const ask = LinkAsk || Store.data.settings.pendingLink;
+  LinkAsk = null;
+  Store.data.settings.pendingLink = null;
+  Store.save();
+  if (!ask) return;
+  if (yes) markLinkSent(ask.eid, ask.how);
+  closeModal(); render();
+  if (!yes) toast("Left as it was — nothing recorded", "ok");
+}
+
 function markLinkSent(id, how){
   const e = Store.estimate(id);
   if (!e) return;
@@ -9450,11 +9476,21 @@ async function sendForSignature(id){
       </p>
       <div class="field"><label>The message</label>
         <textarea class="msg-prev" id="lk-note" style="min-height:140px">${esc(note)}</textarea></div>
+      ${LinkAsk && LinkAsk.eid === e.id ? `
+      <div class="section-title" style="margin-top:14px">Did it go?</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <button class="btn primary" data-link-went="yes">Yes, it went</button>
+        <button class="btn" data-link-went="no">No — I backed out</button>
+      </div>
+      <p class="t-sub" style="margin:12px 0 0;max-width:62ch">
+        The phone doesn't tell the app whether you pressed send, so the
+        estimate stays a draft until you say. Backing out changes nothing.
+      </p>` : `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         ${c.phone ? `<a class="btn primary" id="lk-sms" href="#" data-link-sent="${e.id}:Texted">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
         ${c.email ? `<a class="btn" id="lk-mail" href="#" data-link-sent="${e.id}:Emailed">✉ Email ${esc(c.email)}</a>` : ""}
         <button class="btn" data-copy-link="${esc(token)}" data-sent-id="${e.id}">📋 Copy the link</button>
-      </div>
+      </div>`}
       <p class="t-sub" style="margin:14px 0 0;max-width:62ch">
         <strong>The link is the key.</strong> Anyone holding it can see this one
         estimate and sign it — same as any e-signature service — so don't post it
@@ -10255,7 +10291,7 @@ document.addEventListener("click", e => {
     if (navigator.clipboard && navigator.clipboard.writeText)
       navigator.clipboard.writeText(url).then(done, () => prompt("Copy this link:", url));
     else prompt("Copy this link:", url);
-    if (copyLink.dataset.sentId) markLinkSent(copyLink.dataset.sentId, "Copied");
+    if (copyLink.dataset.sentId) beginLinkSend(copyLink.dataset.sentId, "Copied");
     return;
   }
 
@@ -10264,9 +10300,12 @@ document.addEventListener("click", e => {
   const lkSent = hit("[data-link-sent]");
   if (lkSent){
     const [eid, how] = lkSent.dataset.linkSent.split(":");
-    markLinkSent(eid, how);
+    beginLinkSend(eid, how);
     return;
   }
+
+  const lkWent = hit("[data-link-went]");
+  if (lkWent) return finishLinkSend(lkWent.dataset.linkWent === "yes");
 
   const signEst = hit("[data-sign-estimate]");
   if (signEst) return openEstimateSign(signEst.dataset.signEstimate);
@@ -10824,6 +10863,10 @@ document.addEventListener("visibilitychange", () => {
   Cloud.syncNow({ quiet:true });
   // back from Messages: ask whether it actually went
   if (Store.data.settings.pendingSend && !(MsgState && MsgState.asking)) resumePendingSend();
+  if (Store.data.settings.pendingLink && !LinkAsk){
+    LinkAsk = Store.data.settings.pendingLink;
+    if (Store.estimate(LinkAsk.eid)) sendForSignature(LinkAsk.eid); else LinkAsk = null;
+  }
 });
 window.addEventListener("online", () => Cloud.syncNow({ quiet:true }));
 
@@ -10834,6 +10877,12 @@ Nudge.register();
 
 /* Dropped while Messages was in front: pick the question back up. */
 if (Store.data.settings.pendingSend) resumePendingSend();
+
+/* Same for a signing link handed to the phone. */
+if (Store.data.settings.pendingLink && Store.estimate(Store.data.settings.pendingLink.eid)){
+  LinkAsk = Store.data.settings.pendingLink;
+  sendForSignature(LinkAsk.eid);
+}
 </script>
 </body>
 </html>
