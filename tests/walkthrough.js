@@ -64,6 +64,9 @@ const errs=[]; let step=0;
 
   await t('he taps Text — now it is sent, and the record says so', async () => {
     await pg.click('[data-copy-link][data-sent-id]'); await pg.waitForTimeout(400);
+    // Copying is not sending either: the panel asks before anything is
+    // written down, so the send is the answer, not the tap.
+    await pg.click('[data-link-went="yes"]'); await pg.waitForTimeout(400);
     const s = await pg.evaluate(i => Store.estimate(i).status, estId);
     if (s !== 'sent') throw new Error('status ' + s);
     await pg.evaluate(() => closeModal());

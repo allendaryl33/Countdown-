@@ -53,6 +53,9 @@ const errs=[];
     await pg.evaluate(i => openEstimate(i), a); await pg.waitForTimeout(400);
     await pg.click(`[data-link-estimate="${a}"]`); await pg.waitForTimeout(1200);
     await pg.click('[data-copy-link][data-sent-id]'); await pg.waitForTimeout(400);
+    // Copying is not sending either: the panel asks before anything is
+    // written down, so the send is the answer, not the tap.
+    await pg.click('[data-link-went="yes"]'); await pg.waitForTimeout(400);
     const s = await st(a);
     if (s.status !== 'sent') throw new Error('status is ' + s.status);
     if (!s.linkSentAt) throw new Error('no send time recorded');

@@ -112,6 +112,24 @@ const errs=[];
     if (after !== 1) throw new Error('backing out of a re-send still re-stamped it');
   });
 
+  /* The redraw used to call sendForSignature again, which publishes a token
+     every time it runs — so each tap of Text minted another live link. */
+  await t('asking the question does not mint another live link', async () => {
+    const r = await pg.evaluate(id => {
+      const e = Store.estimate(id);
+      e.status = "draft"; delete e.linkSentAt;
+      Store.data.settings.pendingLink = null; Store.save();
+      const before = (Cloud.signLinks || []).length;
+      beginLinkSend(id, "Texted");
+      beginLinkSend(id, "Texted");
+      beginLinkSend(id, "Texted");
+      return { before, after: (Cloud.signLinks || []).length };
+    }, eid);
+    if (r.after !== r.before)
+      throw new Error(`three taps made ${r.after - r.before} extra signing link(s)`);
+    await pg.evaluate(() => finishLinkSend(false));
+  });
+
   await b.close();
   if (errs.length){ console.log('\n' + errs.length + ' problem(s)'); process.exit(1); }
   console.log('\nall good');
