@@ -13,6 +13,12 @@ let shops = {};            // owner -> { owner, data, rev, device, updated_at }
 // The website's own table, exactly the columns Victor reported.
 let inquiries = [];
 let inqMode = 'ok';        // 'ok' | 'missing' | 'denied'
+/* Stands in for the personal-calendar Edge Function. calMode picks what
+   Google would do: answer, fail, be unconfigured, or never reply at all. */
+let calMode = 'ok';        // 'ok' | 'error' | 'setup' | 'dead' | 'unauth'
+let calEvents = [];
+let calCals = [{ id:'primary', name:'Daryl', excluded:false },
+               { id:'work@g',  name:'Work',  excluded:true }];
 let links = [];            // estimate_links rows
 let invLinks = [];         // invoice_links rows
 let history = [];
@@ -22,7 +28,10 @@ let signed = {};           // token -> "bucket/path"
 let refresh = {};          // refresh -> owner
 
 const reset = () => { shops = {}; history = []; tokens = {}; refresh = {}; objects = {}; signed = {};
-  inquiries = []; inqMode = 'ok'; links = []; invLinks = []; };
+  inquiries = []; inqMode = 'ok'; links = []; invLinks = [];
+  calMode = 'ok'; calEvents = [];
+  calCals = [{ id:'primary', name:'Daryl', excluded:false },
+             { id:'work@g',  name:'Work',  excluded:true }]; };
 const json = (res, code, body, extra) => {
   res.writeHead(code, Object.assign({
     'Content-Type':'application/json',
@@ -46,6 +55,42 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') return json(res, 204);
 
   if (u.pathname === '/__reset'){ reset(); return json(res, 200, { ok:true }); }
+
+  /* Tests set the scenario here, then the app calls the function below. */
+  if (u.pathname === '/__cal'){
+    let raw = ''; req.on('data', c => raw += c);
+    return req.on('end', () => {
+      let b = {}; try { b = JSON.parse(raw || '{}'); } catch(e){}
+      if (b.mode) calMode = b.mode;
+      if (Array.isArray(b.events)) calEvents = b.events;
+      if (Array.isArray(b.calendars)) calCals = b.calendars;
+      json(res, 200, { ok:true, mode:calMode, events:calEvents.length });
+    });
+  }
+  if (u.pathname === '/functions/v1/personal-calendar'){
+    // No token at all must not read anybody's calendar: the real function is
+    // deployed with jwt verification on, and the platform rejects it first.
+    const bearer = (req.headers['authorization']||'').replace(/^Bearer /,'');
+    if (calMode === 'unauth' || !bearer || !tokens[bearer])
+      return json(res, 401, { message:'Missing authorization header' });
+    if (calMode === 'dead'){ res.destroy(); return; }
+    if (calMode === 'setup')
+      return json(res, 200, { ok:false, setup:true,
+        error:"Google isn't connected yet. The three GOOGLE_ secrets aren't set on this function." });
+    if (calMode === 'error')
+      return json(res, 200, { ok:false, reauth:true,
+        error:'Google has stopped accepting the saved permission. It needs granting again.' });
+    const from = u.query.from || '', to = u.query.to || from;
+    // The real one excludes the Work calendar by name and drops anything
+    // still carrying the sync's own tag; both are mirrored here.
+    const hidden = calCals.filter(c => c.excluded).map(c => c.id);
+    const evs = calEvents
+      .filter(e => !e.poseidon_job_id)
+      .filter(e => hidden.indexOf(e.cal) < 0)
+      .filter(e => e.date >= from && e.date <= to);
+    return json(res, 200, { ok:true, zone:'America/Edmonton', from, to,
+                            calendars: calCals, events: evs });
+  }
   // the inquiry-photos bucket: sign and serve, so the app can show them
   if (u.pathname.startsWith('/storage/v1/object/sign/inquiry-photos/')){
     const key = u.pathname.replace('/storage/v1/object/sign/inquiry-photos/','');
