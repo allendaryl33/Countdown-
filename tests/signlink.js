@@ -40,6 +40,9 @@ const errs=[];
     const before = await pg.evaluate(id => Store.estimate(id).status, eid);
     if (before !== 'draft') throw new Error('marked ' + before + ' before he sent anything');
     await pg.click('[data-copy-link][data-sent-id]'); await pg.waitForTimeout(400);
+    // Copying is not sending either: the panel asks before anything is
+    // written down, so the send is the answer, not the tap.
+    await pg.click('[data-link-went="yes"]'); await pg.waitForTimeout(400);
     const st = await pg.evaluate(id => Store.estimate(id).status, eid);
     if (st !== 'sent') throw new Error('estimate still ' + st);
     console.log('       ' + link.slice(0, 64) + '…');
@@ -367,6 +370,12 @@ const errs=[];
     const tx = await cust.evaluate(() => document.querySelector('#root').textContent.replace(/\s+/g,' '));
     if (/isn't complete/.test(tx)) throw new Error('a survivable cut was treated as broken');
     if (!/EST-/.test(tx)) throw new Error('did not load: ' + tx.slice(0,160));
+    // This published a link purely to open it, and never signed it. Left
+    // behind it counts as outstanding and the watcher test below — which
+    // checks the poll stops when nothing is out — fails on our litter.
+    await pg.evaluate(tok => {
+      Cloud.signLinks = (Cloud.signLinks || []).filter(l => l.token !== tok);
+    }, fresh);
   });
 
   /* The cut that still matters. A token is 16 random bytes, always 32 hex
