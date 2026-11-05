@@ -2914,9 +2914,35 @@ const Store = {
                                  : phrase.replace(/\d+/, friendly);
   },
 
-  messageContext(job, bumpMins){
+  /* Messaging was written for jobs, and then estimates got a visit booked
+     against them \u2014 a real appointment, on the board, with somebody expecting
+     him. Rather than a second set of templates that drift out of step, both
+     are presented in the one shape the templates already read. */
+  msgView(rec){
+    if (!rec) return null;
+    const isJob = Object.prototype.hasOwnProperty.call(rec, "scheduledDate");
+    return isJob
+      ? { kind:"job", id: rec.id, label: "job #" + rec.no, contact: this.customer(rec.customerId),
+          date: rec.scheduledDate, window: rec.window, techId: rec.techId,
+          type: rec.type, service: rec.service, payment: rec.payment || {} }
+      : { kind:"estimate", id: rec.id, label: "EST-" + rec.no, contact: this.estContact(rec),
+          date: rec.visitDate, window: rec.window, techId: rec.techId,
+          type: rec.type, service: rec.service, payment: {} };
+  },
+  /* Either by id, because the sheet re-reads it between renders. */
+  msgSubject(id){
+    return this.msgView(this.job(id) || this.estimate(id));
+  },
+  /* Nothing is finished after a trip to go and look, so that one is not
+     offered. The rest read correctly for a visit as they stand. */
+  messagesFor(kind){
+    return this.messages().filter(m => kind === "estimate" ? m.id !== "done" : true);
+  },
+
+  messageContext(rec, bumpMins){
     const st = this.data.settings;
-    const c = job ? this.customer(job.customerId) : null;
+    const job = rec && rec.kind ? rec : this.msgView(rec);
+    const c = job ? job.contact : null;
     const z = this.zone(c ? c.zone : "city");
     const tech = job && job.techId ? (this.tech(job.techId) || {}).name
                : (this.activeTechs()[0] || {}).name || "";
@@ -2927,7 +2953,7 @@ const Store = {
       company: this.tradeName(),
       phone: st.phone,
       eta: this.bumpEta(z.eta, bumpMins),
-      day: this.dayWord(job && job.scheduledDate),
+      day: this.dayWord(job && job.date),
       window: job ? fieldWindow(job.window) : "",
       work: job ? "the " + this.workPhrase(job.type, job.service) : "the work",
       pay_link: pay.url ? ` Pay here: ${pay.url}` : ""
@@ -7505,6 +7531,8 @@ function openEstimate(id){
               ${WINDOWS.map(w => `<option${w === (e.window || "Anytime") ? " selected" : ""}>${esc(w)}</option>`).join("")}
             </select>
           </div>
+          ${e.visitDate && String((Store.estContact(e)||{}).phone || "").replace(/\D/g,"")
+            ? `<button class="btn" data-message="${e.id}">\u{1F4AC} Message them</button>` : ""}
           <button class="btn" data-save-visit="${e.id}">Save</button>
           ${e.visitDate ? `<button class="btn ghost" data-clear-visit="${e.id}">Clear</button>` : ""}
           <div class="t-sub" style="flex:1 1 100%;margin:0">
@@ -8883,17 +8911,22 @@ function saveTimeEdit(payload){
 let MsgState = { tplId:"onway", bump:0, jobId:null };
 
 function openMessage(jobId, tplId){
-  const job = Store.job(jobId);
-  if (!job) return;
-  const c = Store.customer(job.customerId);
-  if (!c){ toast("No customer on this job.", "err"); return; }
-  MsgState = { tplId: tplId || "onway", bump: 0, jobId, asking: null };
+  const v = Store.msgSubject(jobId);
+  if (!v) return;
+  if (!v.contact || !String(v.contact.phone || "").replace(/\D/g, "")){
+    toast("No phone number on this one.", "err"); return;
+  }
+  /* "Finished" makes no sense before a quote, so a visit must not open on it. */
+  let tpl = tplId || "onway";
+  if (v.kind === "estimate" && tpl === "done") tpl = "onway";
+  MsgState = { tplId: tpl, bump: 0, jobId, asking: null };
   renderMessageSheet();
 }
 
 function renderMessageSheet(){
-  const job = Store.job(MsgState.jobId);
-  const c = Store.customer(job.customerId);
+  const job = Store.msgSubject(MsgState.jobId);
+  if (!job) return;
+  const c = job.contact;
   const z = Store.zone(c.zone);
   const body = Store.renderMessage(MsgState.tplId, job, MsgState.bump);
   const tel = String(c.phone || "").replace(/\D/g, "");
@@ -8903,13 +8936,13 @@ function renderMessageSheet(){
 
   openModal(`
     <div class="modal-head">
-      <div><div class="t-sub">${esc(c.name)} · job #${job.no}</div>
+      <div><div class="t-sub">${esc(c.name)} · ${esc(job.label)}</div>
         <h2>Message the customer</h2></div>
       <div class="spacer"></div><button class="x" data-close>×</button>
     </div>
     <div class="modal-body">
       <div class="msg-tabs">
-        ${Store.messages().map(m =>
+        ${Store.messagesFor(job.kind).map(m =>
           `<button class="${MsgState.tplId===m.id?"on":""}" data-msg-tpl="${esc(m.id)}">${esc(m.label)}</button>`).join("")}
       </div>
 
@@ -8999,7 +9032,7 @@ function finishSend(){
    while Messages was in front: the question is still owed an answer. */
 function resumePendingSend(){
   const p = Store.data.settings.pendingSend;
-  if (!p || !Store.job(p.jobId)) { 
+  if (!p || !Store.msgSubject(p.jobId)) { 
     if (p){ Store.data.settings.pendingSend = null; Store.save(); }
     return;
   }
@@ -9011,13 +9044,16 @@ function resumePendingSend(){
 
 function logMessageSent(how){
   const job = Store.job(MsgState.jobId);
-  if (!job) return;
+  const est = job ? null : Store.estimate(MsgState.jobId);
+  const rec = job || est;
+  if (!rec) return;
   const label = Store.message(MsgState.tplId).label;
-  Store.addLog(job, `${how} customer: ${label}${MsgState.bump ? ` (+${MsgState.bump} min)` : ""}`);
+  const line = `${how} customer: ${label}${MsgState.bump ? ` (+${MsgState.bump} min)` : ""}`;
+  if (job) Store.addLog(job, line); else Store.addEstLog(est, line);
   // Stamped against the day it was sent for, so a job that moves is asked
   // about again instead of leaving them expecting the old date.
   if (MsgState.tplId === "reminder"){
-    job.reminded = { at: Date.now(), forDate: job.scheduledDate, how };
+    rec.reminded = { at: Date.now(), forDate: job ? job.scheduledDate : est.visitDate, how };
   }
   Store.save();
 }
