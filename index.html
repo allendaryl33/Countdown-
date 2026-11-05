@@ -605,6 +605,7 @@ textarea.input{resize:vertical;min-height:76px}
 .clockwarn strong{color:#6b3f0f}
 .clockhint{color:var(--muted)}
 .clockhint.gap{color:var(--amber);font-weight:650}
+.card.invpick{margin:0 0 14px;background:var(--surface)}
 .card.visitrow{border-color:#e4d3a0;background:#fffdf4}
 .minicard.estcard .mc-win{color:#8a6d12;font-weight:700}
 .minicard.estcard .mc-type{color:#8a6d12}
@@ -3032,6 +3033,17 @@ const Store = {
   /* The job plus everything billing with it. */
   billedTotal(job){
     return this.billChildren(job).reduce((s,c) => s + this.jobTotal(c), this.jobTotal(job));
+  },
+
+  /* Her other finished work that is not spoken for. Offered at the moment he
+     is actually looking at the invoice, because that is when he knows whether
+     she wants one bill or three \u2014 not days earlier when the job was created. */
+  couldJoin(job){
+    if (!job) return [];
+    return this.data.jobs
+      .filter(j => j.id !== job.id && !this.canBillTogether(j, job))
+      .sort((a,b) => String(a.scheduledDate || "").localeCompare(String(b.scheduledDate || ""))
+                  || String(a.no).localeCompare(String(b.no)));
   },
 
   /* Refused rather than done quietly when it would change something already
@@ -8445,8 +8457,13 @@ async function previewInvoice(id){
   const j = Store.job(id);
   if (!j) return;
   const missing = [];
-  if (!Store.jobTotal(j)) missing.push("there are no line items or labour on it yet");
+  // What the invoice asks for, not what this one job is worth: a job worth
+  // nothing on its own is still invoiceable once another is added to it.
+  if (!Store.billedTotal(j)) missing.push("there are no line items or labour on it yet");
   if (!Store.customer(j.customerId)) missing.push("it isn't attached to a customer");
+
+  const onIt   = Store.billChildren(j);
+  const couldBe = Store.couldJoin(j);
 
   const body = missing.length ? "" : await invoiceDocHtml(j);
   openModal(`
@@ -8456,6 +8473,31 @@ async function previewInvoice(id){
       <div class="spacer"></div><button class="x" data-close>&times;</button>
     </div>
     <div class="modal-body" style="background:var(--sunk)">
+      ${(onIt.length || couldBe.length) ? `
+        <div class="card invpick">
+          <div class="card-body">
+            <div class="t-strong">On this invoice</div>
+            <div class="t-sub" style="margin:2px 0 8px">
+              ${esc(custName(j.customerId))}'s work. Tick what she is paying for now \u2014
+              leave the rest and invoice it later.</div>
+            <label class="cal-row">
+              <input type="checkbox" checked disabled>
+              <span><strong>#${esc(j.no)}</strong> \u00b7 ${esc(Store.workLabel(j.type, j.service))}
+                \u00b7 ${esc(money(Store.jobTotal(j)))}</span>
+            </label>
+            ${onIt.map(k => `<label class="cal-row">
+              <input type="checkbox" checked data-inv-join="${esc(k.id)}:${esc(j.id)}">
+              <span><strong>#${esc(k.no)}</strong> \u00b7 ${esc(Store.workLabel(k.type, k.service))}
+                \u00b7 ${esc(money(Store.jobTotal(k)))}</span>
+            </label>`).join("")}
+            ${couldBe.map(k => `<label class="cal-row">
+              <input type="checkbox" data-inv-join="${esc(k.id)}:${esc(j.id)}">
+              <span><strong>#${esc(k.no)}</strong> \u00b7 ${esc(Store.workLabel(k.type, k.service))}
+                \u00b7 ${esc(money(Store.jobTotal(k)))}
+                ${k.scheduledDate ? `<span class="t-sub">\u00b7 ${esc(fmtDate(k.scheduledDate))}</span>` : ""}</span>
+            </label>`).join("")}
+          </div>
+        </div>` : ""}
       ${missing.length
         ? `<div class="legal-note" style="margin:0">
              <strong>Not ready to invoice:</strong> ${esc(missing.join(", and "))}.
@@ -10954,6 +10996,24 @@ document.addEventListener("click", e => {
     Store.setPayment(j, { status:"invoiced", amountPaid: 0 });
     closeModal(); render();
     toast("Put back to waiting on payment", "ok");
+    return;
+  }
+
+  const invJoin = hit("[data-inv-join]");
+  if (invJoin){
+    const [otherId, onId] = invJoin.dataset.invJoin.split(":");
+    const other = Store.job(otherId), target = Store.job(onId);
+    if (!other || !target) return;
+    if (other.billWith === target.id){
+      Store.billSeparately(other);
+      toast(`#${other.no} off this invoice`, "ok");
+    } else {
+      const why = Store.billTogether(other, target);
+      if (why){ toast(why, "warn"); return; }
+      toast(`#${other.no} added`, "ok");
+    }
+    render();
+    previewInvoice(target.id);   // the document below has to follow the ticks
     return;
   }
 
