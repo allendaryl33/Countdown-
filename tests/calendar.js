@@ -387,6 +387,85 @@ const errs = [];
       throw new Error('dot is ' + r.dot + 'px against a ' + r.av + 'px avatar');
   });
 
+  /* The month answers "which days have something", the day answers "what".
+     A green dot is the prompt to click, and clicking lands on that day with
+     the band at the top naming it. */
+  const monthDots = async () => {
+    await pg.evaluate(() => { App.search=''; go('schedule'); App.scheduleMode='month'; render(); });
+    await pg.waitForTimeout(500);
+    return pg.evaluate(() => Array.from(document.querySelectorAll('.mo-cell')).map(el => ({
+      day: (el.querySelector('.dnum') || {}).textContent,
+      date: el.dataset.goday,
+      dot: !!el.querySelector('.pdot'),
+      title: el.getAttribute('title') || ''
+    })));
+  };
+
+  await t('the month marks the days that have something on them', async () => {
+    await pg.evaluate(() => { Store.data.settings.calOn = true; Store.save(); });
+    await setCal('ok', [{ id:'m1', cal:'primary', calName:'Daryl', title:'Trent - 12 Labours',
+      date: today, start:'19:00', end:'19:30', allDay:false }]);
+    await pg.evaluate(() => { Cal.state='off'; Cal._failed=null; Cal.events=[]; });
+    const cells = await monthDots();
+    const mine = cells.find(c => c.date === today);
+    if (!mine) throw new Error('today is not on the month grid');
+    if (!mine.dot) throw new Error('no dot on the day that has an appointment');
+    if (!/Trent/.test(mine.title)) throw new Error('hovering it says nothing: ' + mine.title);
+    const others = cells.filter(c => c.date !== today);
+    if (others.some(c => c.dot))
+      throw new Error('a day with nothing on it was marked');
+  });
+
+  await t('clicking a marked day opens that day, where the band says what it is', async () => {
+    // the cell's middle holds job cards, which open the job; the date number
+    // is the part of the cell he actually taps to open the day
+    await pg.evaluate(() => closeModal());
+    await pg.click(`.mo-cell[data-goday="${today}"] .dnum`);
+    await pg.waitForTimeout(500);
+    const r = await pg.evaluate(() => ({
+      mode: App.scheduleMode, date: App.date,
+      band: (document.querySelector('.pcal') || {}).innerText || ''
+    }));
+    if (r.mode !== 'day') throw new Error('it did not switch to the day view: ' + r.mode);
+    if (r.date !== today) throw new Error('it opened ' + r.date);
+    if (!/Trent/.test(r.band))
+      throw new Error('the day does not say what is on: ' + r.band);
+  });
+
+  await t('a month it could not read draws no dots, and says so', async () => {
+    await setCal('error');
+    await pg.evaluate(() => { Cal.state='off'; Cal._failed=null; Cal.events=[]; });
+    const cells = await monthDots();
+    if (cells.some(c => c.dot)) throw new Error('dots drawn from a failed read');
+    const band = await pg.evaluate(() => (document.querySelector('.pcal') || {}).innerText || '');
+    if (!/couldn.t read your calendar/i.test(band))
+      throw new Error('a blank month with no warning reads as a clear month: ' + band);
+  });
+
+  await t('and once it reads, the month is dots alone \u2014 no band in the way', async () => {
+    await setCal('ok', [{ id:'m2', cal:'primary', calName:'Daryl', title:'Physio',
+      date: today, start:'09:00', end:'10:00', allDay:false }]);
+    await pg.evaluate(() => { Cal.state='off'; Cal._failed=null; Cal.events=[]; });
+    await monthDots();
+    const band = await pg.evaluate(() => !!document.querySelector('.pcal'));
+    if (band) throw new Error('the band is still taking up room on the month');
+    const dotted = await pg.evaluate(() => document.querySelectorAll('.mo-cell .pdot').length);
+    if (dotted !== 1) throw new Error(dotted + ' dots, wanted 1');
+  });
+
+  await t('one fetch covers the month, the weeks and the days inside it', async () => {
+    const before = await pg.evaluate(() => Cal._seq);
+    await pg.evaluate(() => { App.scheduleMode='week'; render(); });
+    await pg.waitForTimeout(250);
+    await pg.evaluate(() => { App.scheduleMode='day'; render(); });
+    await pg.waitForTimeout(250);
+    await pg.evaluate(() => { App.scheduleMode='month'; render(); });
+    await pg.waitForTimeout(250);
+    const after = await pg.evaluate(() => Cal._seq);
+    if (after !== before)
+      throw new Error('flipping views cost ' + (after-before) + ' more fetches');
+  });
+
   await t('turning it off clears what it was holding', async () => {
     await pg.evaluate(() => { go('data'); render(); }); await pg.waitForTimeout(450);
     await pg.click('[data-action="cal-off"]'); await pg.waitForTimeout(300);

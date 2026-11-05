@@ -594,6 +594,8 @@ textarea.input{resize:vertical;min-height:76px}
 .weekhours .wt-day .pdot{width:7px;height:7px;border-radius:50%;
   background:var(--green);box-shadow:0 0 0 1.5px #fff;flex:0 0 7px}
 .weekhours .wt-day.today .pdot{box-shadow:0 0 0 1.5px var(--blue)}
+.mo-cell .pdot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:0 0 7px}
+.mo-cell.out .pdot{opacity:.45}
 .weekhours .wt-tech{background:#f7fafc;display:flex;align-items:center;justify-content:center;padding:5px}
 .weekhours .wt-tech.unassigned{background:var(--amber-soft)}
 .weekhours .avatar.sm{width:19px;height:19px;font-size:9px}
@@ -4855,6 +4857,16 @@ function viewSchedule(){
   // above it so they can be dragged onto a day.
   const loose = Store.data.jobs.filter(j => !j.scheduledDate && isOpen(j));
 
+  /* Ask for the days this view is about before any of them are drawn.
+     A month covers the weeks and days inside it, so flipping between the
+     three views after this costs nothing. */
+  if (Cal.on()){
+    const span = mode === "day" ? [App.date]
+               : mode === "week" ? weekDays(App.date)
+               : monthCells(App.date);
+    Cal.need(span[0], span[span.length - 1]);
+  }
+
   const body = mode === "day" ? dayBoard() : mode === "week" ? weekGrid() : monthGrid();
 
   return `
@@ -4873,7 +4885,9 @@ function viewSchedule(){
     <button class="btn sm accent" data-action="new-job">＋ New Job</button>
   </div>
 
-  ${mode === "month" ? "" : personalStrip(mode === "day" ? [App.date] : weekDays(App.date))}
+  ${mode === "month"
+     ? (Cal.on() && Cal.state !== "ready" ? personalStrip(monthCells(App.date)) : "")
+     : personalStrip(mode === "day" ? [App.date] : weekDays(App.date))}
 
   ${loose.length ? `
     <div class="tray">
@@ -5101,10 +5115,18 @@ function monthGrid(){
         j.scheduledDate === d && j.status !== "cancelled"));
       const shown = list.slice(0, PER_CELL);
       const rest = list.length - shown.length;
+      /* Only from a day the calendar answered for \u2014 a day it could not read
+         must not get a dot, or a month of blank squares would read as a
+         month with nothing on. The band says so instead. */
+      const mine = Cal.on() ? Cal.forDate(d) : [];
+      const tip = mine.length
+        ? mine.map(e => Cal.evLabel(e)).join(" \u00b7 ")
+        : "Open " + fmtDate(d);
       return `<div class="mo-cell ${sameMonth(d, App.date)?"":"out"} ${d===today?"today":""}"
-                   data-drop data-drop-date="${esc(d)}" data-goday="${esc(d)}" title="Open ${esc(fmtDate(d))}">
+                   data-drop data-drop-date="${esc(d)}" data-goday="${esc(d)}" title="${esc(tip)}">
         <div class="dtop">
           <span class="dnum">${parseYmd(d).getDate()}</span>
+          ${mine.length ? `<span class="pdot" aria-label="${esc(mine.length)} of your own"></span>` : ""}
           ${list.length?`<span class="dcount">${list.length}</span>`:""}
         </div>
         ${shown.map(j => miniCard(j, { compact:true })).join("")}
