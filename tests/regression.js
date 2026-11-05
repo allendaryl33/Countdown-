@@ -343,12 +343,19 @@ const errs = [];
     const m = await page.evaluate(() => ({
       body: Math.round(document.body.getBoundingClientRect().height),
       doc: document.scrollingElement.scrollHeight,
-      rows: document.querySelectorAll('tbody tr').length
+      // Item rows, not every row. A tag with nothing filed under it renders
+      // an empty-state row, so counting tbody tr counted furniture as stock
+      // and broke the moment a fourth tag existed. Against the book's own
+      // length rather than a number typed in here, so it keeps meaning
+      // "every item he has is on the page".
+      rows: document.querySelectorAll('tbody tr [data-edit-price]').length,
+      book: Store.data.priceBook.length
     }));
     if (m.doc <= m.body + 2 === false && Math.abs(m.doc - m.body) > 4)
       throw new Error('body '+m.body+' vs content '+m.doc+' — an embedding frame would clip it');
-    if (m.rows !== 19) throw new Error('price book rows='+m.rows);
-    console.log('       body ' + m.body + 'px = content ' + m.doc + 'px, all 19 items');
+    if (!m.book) throw new Error('the price book is empty, so this proves nothing');
+    if (m.rows !== m.book) throw new Error(m.rows+' rows for '+m.book+' price book items');
+    console.log('       body ' + m.body + 'px = content ' + m.doc + 'px, all ' + m.book + ' items');
   });
   await t('every item in the price book is reachable by scrolling', async () => {
     await page.evaluate(() => document.scrollingElement.scrollTo(0, 99999));
