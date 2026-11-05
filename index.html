@@ -598,6 +598,13 @@ textarea.input{resize:vertical;min-height:76px}
    is agreed yet — it is an hour he has promised, not work he has sold. */
 .minicard.estcard{border:1.5px dashed #c9a227;border-left:1.5px dashed #c9a227;
   background:#fffdf4;box-shadow:none}
+/* The clock disagreeing with the bill. Amber: nothing is broken, but he is
+   about to invoice a number that is not the one he worked. */
+.clockwarn{border:1px solid #e8c9a6;background:var(--amber-soft);color:#7a4a12;
+  border-radius:7px;padding:10px 12px;margin:0 0 14px;font-size:13px;line-height:1.45}
+.clockwarn strong{color:#6b3f0f}
+.clockhint{color:var(--muted)}
+.clockhint.gap{color:var(--amber);font-weight:650}
 .card.visitrow{border-color:#e4d3a0;background:#fffdf4}
 .minicard.estcard .mc-win{color:#8a6d12;font-weight:700}
 .minicard.estcard .mc-type{color:#8a6d12}
@@ -3145,6 +3152,19 @@ const Store = {
       && !this.isBilledWithAnother(j)
       && (!j.payment || j.payment.status === "unbilled") && this.jobTotal(j) > 0);
   },
+  /* The quiet one. invToSend only lists finished work worth something, so a
+     job with twelve hours on the clock, no billable hours and no parts is
+     worth nothing, drops out of the list, and is never asked about again.
+     Nothing errors. He simply never invoices it. */
+  clockedNotBilled(){
+    return this.data.jobs.filter(j =>
+      j.status === "complete"
+      && !this.isBilledWithAnother(j)
+      && (!j.payment || j.payment.status === "unbilled")
+      && this.jobTotal(j) <= 0
+      && this.totalMs(j) > 0);
+  },
+
   invPaid(){
     return this.data.jobs.filter(j => j.status !== "cancelled"
       && !this.isBilledWithAnother(j)
@@ -3325,6 +3345,44 @@ const Store = {
              : `Visit booked for ${fmtDate(e.visitDate)}${e.window && e.window !== "Anytime" ? ", " + e.window : ""}`)
       : "Visit unbooked");
     this.save();
+  },
+
+  /* A second day on the same job. Renovations balloon, a rough-in runs long,
+     he goes back. It is not new work agreed and it is not a new customer: it
+     is the same job continuing, so it carries everything forward and bills
+     with the original rather than raising a second invoice.
+
+     A fresh job rather than a date on the old one, because each day has its
+     own hours, its own parts and its own photos, and squashing them together
+     loses which day the dump run belonged to. */
+  anotherVisit(job){
+    if (!job) return null;
+    const parent = this.billParent(job) || job;   // always hang off the first one
+    const j = {
+      id: uid("job"), no: this.nextJobNo(), createdAt: Date.now(),
+      customerId: job.customerId,
+      type: job.type, service: String(job.service || ""),
+      priority: job.priority || "Normal",
+      description: job.description,
+      scheduledDate: null, window: job.window || "Anytime",
+      techId: job.techId || null, status: "new", completedAt: null,
+      laborHours: 0, laborRate: job.laborRate || this.data.settings.laborRate,
+      parts: [], payment: blankPayment(), timeEntries: [],
+      materials: [], photos: [], flatPrice: null, billWith: null,
+      log: [{ ts: Date.now(), text: `Return visit on job #${parent.no}` }]
+    };
+    this.data.jobs.push(j);
+    /* One invoice, unless he splits it. Refused rather than forced if the
+       first one has already gone out - then it stands on its own and says so. */
+    const why = this.canBillTogether(j, parent);
+    if (why){
+      this.addLog(j, `Billing on its own: ${why}`);
+    } else {
+      j.billWith = parent.id;
+      this.addLog(parent, `Another visit: job #${j.no}`);
+    }
+    this.save();
+    return j;
   },
 
   jobFromLead(lead){
@@ -6051,7 +6109,29 @@ function viewInvoices(){
              "Once you mark an invoice received it moves here and stays, so there's a record of it."]
   }[tab];
 
+  /* Finished work with hours on the clock and nothing to bill. It is worth
+     nothing, so it is not in any of the three lists below \u2014 it would just be
+     gone. Said here instead, where he comes to get paid. */
+  const unbilled = Store.clockedNotBilled();
+
   return `
+  ${unbilled.length ? `
+    <div class="clockwarn" style="margin-bottom:14px">
+      <strong>\u23f1 ${unbilled.length} finished job${unbilled.length===1?"":"s"} with time on the
+        clock and nothing to bill.</strong>
+      <div style="margin-top:3px">The clock is not the same number as the Labor line, and only
+        the Labor line is charged for. ${unbilled.length===1?"This one is":"These are"} worth
+        nothing right now, so ${unbilled.length===1?"it does":"they do"} not appear in any list
+        below.</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        ${unbilled.slice(0,6).map(j => `<button class="btn sm" data-job="${j.id}">
+          #${esc(j.no)} \u00b7 ${esc(custName(j.customerId))} \u00b7
+          ${esc((Math.round(hoursOf(Store.totalMs(j))*4)/4).toFixed(2).replace(/\.?0+$/,""))}h
+        </button>`).join("")}
+        ${unbilled.length > 6 ? `<span class="t-sub">and ${unbilled.length-6} more</span>` : ""}
+      </div>
+    </div>` : ""}
+
   <div class="stat-row">
     <div class="stat ${owed ? "alert" : ""}"><div class="label">Owed to you</div>
       <div class="value">${esc(money(owed))}</div>
@@ -6907,6 +6987,15 @@ function openJob(id){
   const parts = j.parts || [];
   const partsTotal = parts.reduce((s,p) => s + (Number(p.qty)||0)*(Number(p.price)||0), 0);
   const laborTotal = (Number(j.laborHours)||0) * (Number(j.laborRate)||0);
+  /* The clock and the bill are two different numbers and always have been.
+     The clock says how long he was there; laborHours says what the customer
+     is charged for. Nothing has ever copied one into the other, which is how
+     twelve hours on site can sit beside a zero on the invoice without a
+     single thing going wrong on screen. */
+  const clockedH = Math.round(hoursOf(Store.totalMs(j)) * 4) / 4;
+  const clockGap = clockedH > 0 && !Store.jobIsFlat(j)
+                 && Math.abs(clockedH - (Number(j.laborHours) || 0)) >= 0.25
+                 && j.clockOkAt !== clockedH;
 
   openModal(`
     <div class="modal-head">
@@ -6934,6 +7023,8 @@ function openJob(id){
         <button class="btn sm" data-edit-job="${j.id}">Edit details</button>
         <button class="btn sm" data-print-job="${j.id}">🖨 Ticket</button>
         ${j.status !== "cancelled"
+          ? `<button class="btn sm" data-another-visit="${j.id}">↺ Another visit</button>` : ""}
+        ${j.status !== "cancelled"
           ? `<button class="btn sm" data-scope-job="${j.id}">➕ Change of scope</button>` : ""}
         <button class="btn sm primary" data-invoice="${j.id}">🧾 Invoice</button>
       </div>
@@ -6955,6 +7046,19 @@ function openJob(id){
           ${j.completedAt?`<div class="dl"><dt>Completed</dt><dd>${esc(fmtStamp(j.completedAt))}</dd></div>`:""}
         </div>
       </div>
+
+      ${clockGap ? `
+        <div class="clockwarn">
+          <strong>\u23f1 ${esc(clockedH.toFixed(2).replace(/\.?0+$/,""))} hours on the clock, but
+          ${esc(Number(j.laborHours) || 0)} on the bill.</strong>
+          <div style="margin-top:3px">The clock records how long you were there. What the
+          customer pays for is the Labor line below, and nothing copies one into the other \u2014
+          so these can disagree without anything looking wrong.</div>
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn sm" data-use-clock="${j.id}">Bill the ${esc(clockedH.toFixed(2).replace(/\.?0+$/,""))} hours</button>
+            <button class="btn sm ghost" data-ignore-clock="${j.id}">They are meant to differ</button>
+          </div>
+        </div>` : ""}
 
       <div class="dl"><dt>Reported problem</dt><dd style="white-space:pre-wrap">${esc(j.description)||"—"}</dd></div>
 
@@ -7004,7 +7108,8 @@ function openJob(id){
           <tr>
             <td>Labor <span class="t-sub">@ ${esc(money(j.laborRate||0))}/hr</span></td>
             <td class="num"><input class="input" id="labor-hours" type="number" min="0" step="0.25" value="${esc(j.laborHours||0)}" style="width:70px"></td>
-            <td class="num t-sub">hours</td>
+            <td class="num t-sub">hours${clockedH ? `<div class="t-sub clockhint${clockGap ? " gap" : ""}"
+              style="font-size:11px;white-space:nowrap">\u23f1 ${esc(clockedH.toFixed(2).replace(/\.?0+$/,""))}h on the clock</div>` : ""}</td>
             <td class="num">${esc(money(laborTotal))}</td>
             <td class="num"><button class="btn sm" data-save-labor="${j.id}">✓</button></td>
           </tr>
@@ -10994,6 +11099,30 @@ document.addEventListener("click", e => {
     return;
   }
 
+  const useClock = hit("[data-use-clock]");
+  if (useClock){
+    const j = Store.job(useClock.dataset.useClock);
+    if (!j) return;
+    const h = Math.round(hoursOf(Store.totalMs(j)) * 4) / 4;
+    const was = Number(j.laborHours) || 0;
+    j.laborHours = h;
+    Store.addLog(j, `Billable hours set to ${h} from the clock (was ${was})`);
+    Store.save(); render(); openJob(j.id);
+    toast(`Billing ${h} hours`, "ok");
+    return;
+  }
+  const ignoreClock = hit("[data-ignore-clock]");
+  if (ignoreClock){
+    const j = Store.job(ignoreClock.dataset.ignoreClock);
+    if (!j) return;
+    /* Written down rather than just hidden: a flat job, travel he is not
+       charging for, two of them on site. Next time the clock moves it asks
+       again, because by then it is a different number. */
+    j.clockOkAt = Math.round(hoursOf(Store.totalMs(j)) * 4) / 4;
+    Store.addLog(j, "Clock and bill are meant to differ here");
+    Store.save(); render(); openJob(j.id);
+    return;
+  }
   const saveLabor = hit("[data-save-labor]");
   if (saveLabor){
     const j = Store.job(saveLabor.dataset.saveLabor);
@@ -11095,6 +11224,18 @@ document.addEventListener("click", e => {
 
   const mergeAsk = hit("[data-merge-ask]");
   if (mergeAsk) return finishBillTogether(mergeAsk.dataset.mergeAsk);
+
+  const againJob = hit("[data-another-visit]");
+  if (againJob){
+    const was = Store.job(againJob.dataset.anotherVisit);
+    const j = Store.anotherVisit(was);
+    if (!j) return;
+    render(); openJob(j.id);
+    toast(j.billWith
+      ? `Job #${j.no} \u2014 same work, bills with #${Store.job(j.billWith).no}. Pick a day.`
+      : `Job #${j.no} \u2014 billing on its own. Pick a day.`, "ok");
+    return;
+  }
 
   const scopeJob = hit("[data-scope-job]");
   if (scopeJob) return openEstimateForm(null, scopeJob.dataset.scopeJob);
