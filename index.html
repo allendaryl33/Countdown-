@@ -3355,11 +3355,39 @@ const Store = {
      A fresh job rather than a date on the old one, because each day has its
      own hours, its own parts and its own photos, and squashing them together
      loses which day the dump run belonged to. */
+  /* B, then C, then D. The first visit is the job itself and wears no
+     letter, so #1005 and #1005B are the same job on two days.
+
+     The letter is chosen once and stored, never recomputed from whoever is
+     left. If a visit were deleted and the rest re-lettered, a number he had
+     already written on a ticket or said down the phone would quietly come
+     to mean a different day. */
+  nextVisitLetter(parent){
+    /* Counted on the job, not read off whoever is still here. Scanning the
+       siblings would hand C back out after a C was deleted, and then two
+       different days would both have been called #1005C at some point —
+       one of them on a ticket already in somebody's hand. */
+    const seq = (parent.visitSeq || 0) + 1;
+    if (seq > 25) return null;                     // past Z: take a number instead
+    parent.visitSeq = seq;
+    return String.fromCharCode(65 + seq);          // 1 -> B, 2 -> C
+  },
+
   anotherVisit(job){
     if (!job) return null;
     const parent = this.billParent(job) || job;   // always hang off the first one
+    const letter = this.nextVisitLetter(parent);
     const j = {
-      id: uid("job"), no: this.nextJobNo(), createdAt: Date.now(),
+      id: uid("job"),
+      /* Same number, another day. nextJobNo is a counter rather than a max,
+         and nothing in here sorts or does arithmetic on a job number, so a
+         visit can share the parent's without disturbing anything \u2014 and it
+         does not burn a number for work that is not a new job. If he somehow
+         gets past Z, it falls back to a number of its own rather than
+         inventing a second #1005B. */
+      no: letter ? `${parent.no}${letter}` : this.nextJobNo(),
+      visitOf: parent.id, visitLetter: letter,
+      createdAt: Date.now(),
       customerId: job.customerId,
       type: job.type, service: String(job.service || ""),
       priority: job.priority || "Normal",
