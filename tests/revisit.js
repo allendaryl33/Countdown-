@@ -61,6 +61,62 @@ const errs=[];
     if (r.status !== "new") throw new Error('status is ' + r.status);
   });
 
+  await t('it keeps the job number and adds a letter \u2014 same job, another day', async () => {
+    const r = await pg.evaluate(([a,c]) => ({
+      parent: Store.job(a).no, child: Store.job(c).no,
+      letter: Store.job(c).visitLetter, of: Store.job(c).visitOf === a
+    }), [jid, kid]);
+    if (String(r.child) !== String(r.parent) + "B")
+      throw new Error('the return visit reads #' + r.child + ', wanted #' + r.parent + 'B');
+    if (r.letter !== "B") throw new Error('letter is ' + r.letter);
+    if (!r.of) throw new Error('it does not point back at the job it belongs to');
+  });
+
+  await t('the first visit keeps no letter at all', async () => {
+    const n = await pg.evaluate(a => Store.job(a).no, jid);
+    if (/[A-Z]$/.test(String(n))) throw new Error('the original grew a letter: ' + n);
+  });
+
+  await t('and it does not burn a job number on the way', async () => {
+    const r = await pg.evaluate(([a,c]) => {
+      const before = Store.data.counter;
+      const k = Store.anotherVisit(Store.job(a));
+      return { before, after: Store.data.counter, no: k.no, id: k.id };
+    }, [jid, kid]);
+    if (r.after !== r.before)
+      throw new Error('the counter moved from ' + r.before + ' to ' + r.after);
+    if (!/C$/.test(String(r.no))) throw new Error('third visit reads #' + r.no + ', wanted C');
+  });
+
+  await t('the letters keep going, and a deleted one never re-letters the rest', async () => {
+    const r = await pg.evaluate(a => {
+      const p = Store.job(a);
+      // drop the C and add another: the new one must be D, not a second C
+      const c = Store.data.jobs.find(j => j.visitOf === a && j.visitLetter === "C");
+      Store.data.jobs = Store.data.jobs.filter(j => j.id !== c.id);
+      Store.save();
+      const d = Store.anotherVisit(p);
+      const b = Store.data.jobs.find(j => j.visitOf === a && j.visitLetter === "B");
+      return { made: d.no, bStill: b && b.no };
+    }, jid);
+    if (!/D$/.test(String(r.made)))
+      throw new Error('after deleting C the next was ' + r.made + ' \u2014 C was reused');
+    if (!/B$/.test(String(r.bStill)))
+      throw new Error('B was re-lettered to ' + r.bStill);
+  });
+
+  await t('the number he sees is the lettered one, everywhere it shows', async () => {
+    const shown = await pg.evaluate(c => {
+      closeModal(); go("jobs"); render();
+      return document.body.innerText;
+    }, kid);
+    await pg.waitForTimeout(400);
+    const text = await pg.evaluate(() => document.body.innerText);
+    const n = await pg.evaluate(c => String(Store.job(c).no), kid);
+    if (!text.includes("#" + n))
+      throw new Error('the jobs list does not show #' + n);
+  });
+
   await t('and it is one bill, not two', async () => {
     const r = await pg.evaluate(([a,c]) => ({
       billWith: Store.job(c).billWith === a,
