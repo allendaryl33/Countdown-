@@ -13,10 +13,19 @@
  *
  * NOT --no-verify-jwt. The nightly-reminder function uses that flag because
  * the worst anyone with its URL can do is buzz his own phone. This one answers
- * with the titles of his family's appointments. With the flag, the URL alone
- * would read them out to anyone who had it. With verification on, Supabase
- * rejects the request before this code runs unless the caller presents a real
- * signed-in token for this project — which is what the app sends.
+ * with the titles of his family's appointments.
+ *
+ * But that flag is not enough on its own, and an earlier version of this
+ * comment said it was. Supabase's own check only asks "is this a valid token
+ * for this project". The publishable key IS one. That key is baked into
+ * sign.html and invoice.html, served on his website and readable in a public
+ * repo — so with platform verification alone, anyone who copied it out of the
+ * page could read his family's calendar. Verified by calling this function
+ * with nothing but that key and getting a real appointment back.
+ *
+ * So the function asks the auth server who the caller actually is, and serves
+ * nobody but a signed-in user. Deploy-time flags are the outer door; this is
+ * the lock.
  *
  * Secrets:
  *   supabase secrets set \
@@ -31,6 +40,9 @@
  *
  * See FOR-DARYL-calendar.md in the repo root for how to get those three values.
  */
+
+const SUPABASE_URL  = Deno.env.get("SUPABASE_URL") ?? "";
+const ANON_KEY      = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
 const CLIENT_ID     = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
 const CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
@@ -106,6 +118,32 @@ async function gcal(path: string, token: string, params: Record<string, string>)
   return res.json();
 }
 
+/* Who is asking. Holding a token is not the same as being him: the anon and
+   publishable keys are valid project tokens and are public by design. The auth
+   server is the only thing that can tell a signed-in person from a key anyone
+   can copy off the website, so it is asked on every call. Anything other than
+   a real user — no header, the anon key, an expired session, a token from
+   another project — gets nothing. */
+async function signedInUser(req: Request): Promise<boolean> {
+  const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+  if (!token || !SUPABASE_URL) return false;
+  // The publishable key presented as the bearer is the exact case this exists
+  // for, and it is cheap to reject before asking the auth server.
+  if (ANON_KEY && token === ANON_KEY) return false;
+  if (/^sb_publishable_/.test(token)) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: ANON_KEY }
+    });
+    if (!res.ok) return false;
+    const user = await res.json().catch(() => null);
+    return !!(user && user.id && user.role !== "anon" && user.aud !== "anon");
+  } catch (_) {
+    // Cannot tell who this is, so do not answer. Failing shut, not open.
+    return false;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   const cors = {
     "Content-Type": "application/json",
@@ -117,6 +155,12 @@ Deno.serve(async (req: Request) => {
 
   const reply = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: cors });
+
+  if (!(await signedInUser(req))) {
+    return new Response(
+      JSON.stringify({ ok: false, error: "Sign in to see your calendar." }),
+      { status: 401, headers: cors });
+  }
 
   if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
     return reply(200, { ok: false, setup: true,
