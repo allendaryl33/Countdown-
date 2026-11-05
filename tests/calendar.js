@@ -322,7 +322,73 @@ const errs = [];
     if (offered.indexOf('work@g') >= 0) throw new Error('the Work calendar is offered as a choice');
   });
 
+  /* The week board marks which days have something of his own on them, so he
+     does not have to read the band to know Thursday is spoken for. */
+  const weekDots = async () => {
+    await pg.evaluate(() => { App.search=''; go('schedule'); App.scheduleMode='week'; render(); });
+    await pg.waitForTimeout(450);
+    return pg.evaluate(() => Array.from(document.querySelectorAll('.wt-day')).map(el => ({
+      day: (el.querySelector('.dd') || {}).textContent,
+      dot: !!el.querySelector('.pdot'),
+      title: el.getAttribute('title') || ''
+    })));
+  };
+
+  await t('a week day with something of his own gets a dot', async () => {
+    await pg.evaluate(() => { Store.data.settings.calOn = true; Store.save(); });
+    await setCal('ok', [{ id:'w1', cal:'primary', calName:'Daryl', title:'Trent - 12 Labours',
+      date: today, start:'19:00', end:'19:30', allDay:false }]);
+    await pg.evaluate(() => { Cal.state='off'; Cal._failed=null; Cal.events=[]; });
+    const rows = await weekDots();
+    const d = String(Number(today.slice(8)));
+    const mine = rows.find(r => r.day === d);
+    if (!mine) throw new Error('today is not on the week board: ' + JSON.stringify(rows));
+    if (!mine.dot) throw new Error('no dot on a day that has an appointment');
+    if (!/Trent/.test(mine.title))
+      throw new Error('hovering the day does not name it: ' + mine.title);
+  });
+
+  await t('and the other days do not', async () => {
+    const rows = await weekDots();
+    const d = String(Number(today.slice(8)));
+    const others = rows.filter(r => r.day !== d);
+    if (!others.length) throw new Error('only one day on the board');
+    if (others.some(r => r.dot))
+      throw new Error('a day with nothing on it was marked: ' + JSON.stringify(others));
+  });
+
+  await t('a week it could not read is not marked as empty by silence', async () => {
+    await setCal('error');
+    await pg.evaluate(() => { Cal.state='off'; Cal._failed=null; Cal.events=[]; });
+    const rows = await weekDots();
+    if (rows.some(r => r.dot))
+      throw new Error('dots drawn from a failed read');
+    const band = await pg.evaluate(() => {
+      const el = document.querySelector('.pcal');
+      return el ? el.innerText : null;
+    });
+    if (!band || !/couldn.t read your calendar/i.test(band))
+      throw new Error('no failure band, so missing dots read as a clear week: ' + band);
+  });
+
+  await t('the dot is small enough not to read as another technician', async () => {
+    await setCal('ok', [{ id:'w2', cal:'primary', calName:'Daryl', title:'Physio',
+      date: today, start:'09:00', end:'10:00', allDay:false }]);
+    await pg.evaluate(() => { Cal.state='off'; Cal._failed=null; Cal.events=[]; });
+    await weekDots();
+    const r = await pg.evaluate(() => {
+      const dot = document.querySelector('.wt-day .pdot');
+      const av  = document.querySelector('.wt-tech .avatar');
+      if (!dot || !av) return { err: 'missing ' + (!dot ? 'dot' : 'avatar') };
+      return { dot: dot.getBoundingClientRect().width, av: av.getBoundingClientRect().width };
+    });
+    if (r.err) throw new Error(r.err);
+    if (!(r.dot > 0 && r.dot < r.av / 2))
+      throw new Error('dot is ' + r.dot + 'px against a ' + r.av + 'px avatar');
+  });
+
   await t('turning it off clears what it was holding', async () => {
+    await pg.evaluate(() => { go('data'); render(); }); await pg.waitForTimeout(450);
     await pg.click('[data-action="cal-off"]'); await pg.waitForTimeout(300);
     const r = await pg.evaluate(() => ({ n: Cal.events.length, state: Cal.state, on: Cal.on() }));
     if (r.n) throw new Error(r.n + ' appointments left in memory after switching off');

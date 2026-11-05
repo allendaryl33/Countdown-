@@ -587,6 +587,13 @@ textarea.input{resize:vertical;min-height:76px}
 .weekhours .wt-day.today{background:var(--blue);color:#fff}
 .weekhours .wt-day .dn{text-transform:uppercase;letter-spacing:.4px;opacity:.75}
 .weekhours .wt-day .dd{font-size:14px;font-variant-numeric:tabular-nums}
+/* A day with something of his own on it. 7px against the 19px technician
+   circles below it — small enough not to read as another person, big enough
+   to catch at a glance across seven columns. Same green as the band above,
+   so the dot and the words are obviously the same thing. */
+.weekhours .wt-day .pdot{width:7px;height:7px;border-radius:50%;
+  background:var(--green);box-shadow:0 0 0 1.5px #fff;flex:0 0 7px}
+.weekhours .wt-day.today .pdot{box-shadow:0 0 0 1.5px var(--blue)}
 .weekhours .wt-tech{background:#f7fafc;display:flex;align-items:center;justify-content:center;padding:5px}
 .weekhours .wt-tech.unassigned{background:var(--amber-soft)}
 .weekhours .avatar.sm{width:19px;height:19px;font-size:9px}
@@ -802,19 +809,21 @@ tr[data-line-row] td{vertical-align:top;padding:6px}
 .toast.err{background:var(--red)}
 .toast.warn{background:var(--amber)}
 
-/* His own calendar, above the board. Deliberately unlike a job card: grey,
-   flat, no status colour, so a dentist appointment can never be read as
-   work at a glance. */
+/* His own calendar, above the board. Green, and green is used for nothing
+   else on this screen: job cards carry status colours and a technician's
+   own colour, so one colour reserved for "this is yours, not work" can be
+   read without being learned. Still deliberately unlike a job card — flat,
+   no card shadow, no status stripe. */
 .pcal{display:flex;align-items:flex-start;gap:9px;margin:0 0 10px;padding:8px 11px;
-      border:1px solid var(--line);border-radius:7px;background:#f6f8fa;
-      font-size:13px;color:var(--muted);line-height:1.45}
+      border:1px solid #bfe0cd;border-radius:7px;background:var(--green-soft);
+      font-size:13px;color:#2c6646;line-height:1.45}
 .pcal .pc-ico{flex:0 0 auto;font-size:14px;line-height:1.3}
 .pcal .pc-txt{flex:1}
 .pcal .pc-list{flex:1;display:flex;flex-wrap:wrap;gap:4px 14px}
 .pcal .pc-day{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px}
-.pcal .pc-day b{color:var(--text);font-weight:650}
+.pcal .pc-day b{color:#1d5436;font-weight:650}
 .pcal .pc-ev{display:inline-block;padding:1px 8px;border-radius:999px;
-             background:#e6eaef;color:#44525f;white-space:nowrap}
+             background:#d2ead9;color:#235c3c;white-space:nowrap}
 .pcal.warn{background:var(--amber-soft);border-color:#e8c9a6;color:#7a4a12}
 .pcal.bad{background:#fdecea;border-color:#f0c2bc;color:#8c2f22}
 .pcal.bad strong{color:#8c2f22}
@@ -5035,10 +5044,18 @@ function weekGrid(){
 
   const dateHead = `<div class="wt-corner"></div>` + days.map(d => {
     const dt = parseYmd(d);
+    /* Only where the calendar actually answered. A day we could not read must
+       not get a dot, because a missing dot would read as "nothing on". */
+    const mine = Cal.on() ? Cal.forDate(d) : [];
+    const dotTitle = mine.length
+      ? mine.map(e => Cal.evLabel(e)).join(" \u00b7 ")
+      : "";
     return `<div class="wt-day${d===today?" today":""}" style="grid-column:span ${sub}"
-                 data-goday="${esc(d)}" title="Open ${esc(fmtDate(d))}">
+                 data-goday="${esc(d)}" title="${mine.length
+                   ? esc(dotTitle) : "Open " + esc(fmtDate(d))}">
       <span class="dn">${esc(dt.toLocaleDateString(undefined,{weekday:"short"}))}</span>
       <span class="dd">${dt.getDate()}</span>
+      ${mine.length ? `<span class="pdot" aria-label="${esc(mine.length)} of your own"></span>` : ""}
     </div>`;
   }).join("");
 
