@@ -594,6 +594,14 @@ textarea.input{resize:vertical;min-height:76px}
 .weekhours .wt-day .pdot{width:7px;height:7px;border-radius:50%;
   background:var(--green);box-shadow:0 0 0 1.5px #fff;flex:0 0 7px}
 .weekhours .wt-day.today .pdot{box-shadow:0 0 0 1.5px var(--blue)}
+/* A quote visit. Dashed all round and no status stripe, because nothing here
+   is agreed yet — it is an hour he has promised, not work he has sold. */
+.minicard.estcard{border:1.5px dashed #c9a227;border-left:1.5px dashed #c9a227;
+  background:#fffdf4;box-shadow:none}
+.card.visitrow{border-color:#e4d3a0;background:#fffdf4}
+.minicard.estcard .mc-win{color:#8a6d12;font-weight:700}
+.minicard.estcard .mc-type{color:#8a6d12}
+.tray-strip .minicard.estcard{background:#fffdf4}
 .mo-cell .pdot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:0 0 7px}
 .mo-cell.out .pdot{opacity:.45}
 .weekhours .wt-tech{background:#f7fafc;display:flex;align-items:center;justify-content:center;padding:5px}
@@ -2239,6 +2247,14 @@ const Store = {
     /* Added with his own calendar. Off until he turns it on, and the list of
        calendars he has switched off is his — never rewritten from the server,
        so a calendar he hid stays hidden when a new one appears. */
+    /* Added with the quote visit: time booked to go and look at something
+       before it can be quoted. Null means nobody has booked it yet, which is
+       what puts it in the tray. */
+    this.data.estimates.forEach(e => {
+      if (e.visitDate === undefined) e.visitDate = null;
+      if (!e.window) e.window = "Anytime";
+      if (e.techId === undefined) e.techId = null;
+    });
     if (this.data.settings.calOn == null) this.data.settings.calOn = false;
     if (!Array.isArray(this.data.settings.calHide)) this.data.settings.calHide = [];
     this.data.estimates.forEach(e => { if (!e.photos) e.photos = []; });
@@ -3281,6 +3297,36 @@ const Store = {
   },
   /* Unscheduled on purpose. The lead said roughly when they're free; he
      picks the actual slot, which is the whole point of not automating it. */
+  /* ---- Going to look at it -------------------------------------------
+     Between "she sent photos" and "here is the price" there is a trip to go
+     and look, and it takes real time out of a real day. It belongs on the
+     board, but it is not work: nothing is owed for it and it raises no
+     invoice. So it hangs off the estimate rather than being a job, and it
+     goes away by itself once the estimate is decided. */
+  estNeedsVisit(){
+    return this.data.estimates.filter(e =>
+      !e.visitDate && (e.status === "draft" || e.status === "sent"));
+  },
+  estVisitsOn(date){
+    return this.data.estimates.filter(e =>
+      e.visitDate === date && (e.status === "draft" || e.status === "sent"));
+  },
+  /* A visit shows until the estimate is decided. After that the quote is
+     either a job with its own day or it is dead, and either way the trip has
+     served its purpose \u2014 leaving it on the board would just be clutter. */
+  setVisit(e, date, window, techId){
+    if (!e) return;
+    const was = e.visitDate;
+    e.visitDate = date || null;
+    if (window) e.window = window;
+    if (techId !== undefined) e.techId = techId || null;
+    this.addEstLog(e, e.visitDate
+      ? (was ? `Visit moved to ${fmtDate(e.visitDate)}${e.window && e.window !== "Anytime" ? ", " + e.window : ""}`
+             : `Visit booked for ${fmtDate(e.visitDate)}${e.window && e.window !== "Anytime" ? ", " + e.window : ""}`)
+      : "Visit unbooked");
+    this.save();
+  },
+
   jobFromLead(lead){
     const c = this.customerFromLead(lead);
     const j = {
@@ -4856,6 +4902,9 @@ function viewSchedule(){
   // Jobs with no date at all have nowhere to sit on the board — park them
   // above it so they can be dragged onto a day.
   const loose = Store.data.jobs.filter(j => !j.scheduledDate && isOpen(j));
+  // An estimate nobody has been out to look at yet. Same tray, same drag:
+  // this is the thing that had no home before.
+  const toSee = Store.estNeedsVisit();
 
   /* Ask for the days this view is about before any of them are drawn.
      A month covers the weeks and days inside it, so flipping between the
@@ -4889,14 +4938,18 @@ function viewSchedule(){
      ? (Cal.on() && Cal.state !== "ready" ? personalStrip(monthCells(App.date)) : "")
      : personalStrip(mode === "day" ? [App.date] : weekDays(App.date))}
 
-  ${loose.length ? `
+  ${(loose.length + toSee.length) ? `
     <div class="tray">
       <div class="tray-head">
-        <span class="nm">⚠ ${loose.length} job${loose.length===1?"":"s"} with no date</span>
-        <span class="t-sub" style="font-size:12px">— drag one onto a day to schedule it</span>
+        <span class="nm">⚠ ${[
+          loose.length ? `${loose.length} job${loose.length===1?"":"s"} with no date` : "",
+          toSee.length ? `${toSee.length} quote${toSee.length===1?"":"s"} to go and look at` : ""
+        ].filter(Boolean).join(" · ")}</span>
+        <span class="t-sub" style="font-size:12px">— drag one onto a day to book it in</span>
       </div>
       <div class="tray-strip">
         ${loose.map(j => miniCard(j, { showDate:false })).join("")}
+        ${toSee.map(e => estCard(e, { showDate:false })).join("")}
       </div>
     </div>` : ""}
 
@@ -4981,6 +5034,7 @@ function dayBoard(){
       <div>Add yourself under Technicians and the board fills in.</div></div>`;
   }
   const dayJobs = Store.data.jobs.filter(j => j.scheduledDate === d && j.status !== "cancelled");
+  const dayVisits = Store.estVisitsOn(d);
   const cols = [
     { key:"", name:"Unassigned", color:"#b0bcc8", unassigned:true },
     ...Store.activeTechs().map(t => ({ key:t.id, name:t.name, color:t.color, skill:t.skill }))
@@ -5010,14 +5064,23 @@ function dayBoard(){
         ${cols.map(c => {
           const list = sortForBoard(dayJobs.filter(j =>
             (j.techId||"") === c.key && bucket(j) === r.w));
+          const visits = dayVisits.filter(e =>
+            (e.techId||"") === c.key && vbucket(e) === r.w);
           return `<div class="dg-cell${c.unassigned?" unassigned":""}${r.urgent?" urgent":""}"
                        data-drop data-drop-tech="${esc(c.key)}"
                        data-drop-date="${esc(d)}" data-drop-window="${esc(r.w)}">
             ${list.map(j => miniCard(j, { showDate:false, showTech:false, showWindow:false })).join("")}
+            ${visits.map(e => estCard(e, { showDate:false, showTech:false, showWindow:false })).join("")}
           </div>`;
         }).join("")}`).join("")}
     </div>
   </div>`;
+}
+
+/* A visit with no slot of its own falls to Anytime, the same way a job does. */
+function vbucket(e){
+  const known = boardRows().map(r => r.w);
+  return known.includes(e.window) ? e.window : "Anytime";
 }
 
 /* The hours of a working day, in the order they happen. ASAP rides at the
@@ -5083,10 +5146,13 @@ function weekGrid(){
     ${days.map(d => rows.map(r => {
       const list = sortForBoard(inWeek.filter(j =>
         j.scheduledDate === d && (j.techId||"") === r.key && bucket(j) === sl.w));
+      const visits = Store.estVisitsOn(d).filter(e =>
+        (e.techId||"") === r.key && vbucket(e) === sl.w);
       return `<div class="dg-cell${r.unassigned?" unassigned":""}${sl.urgent?" urgent":""}${sl.loose?" loose":""}${d===today?" today":""}"
                    data-drop data-drop-tech="${esc(r.key)}"
                    data-drop-date="${esc(d)}" data-drop-window="${esc(sl.w)}">
         ${list.map(j => miniCard(j, { compact:true, showDate:false, showTech:false, showWindow:false })).join("")}
+        ${visits.map(e => estCard(e, { showDate:false, showTech:false, showWindow:false })).join("")}
       </div>`;
     }).join("")).join("")}`).join("");
 
@@ -5113,8 +5179,9 @@ function monthGrid(){
     ${cells.map(d => {
       const list = sortForBoard(Store.data.jobs.filter(j =>
         j.scheduledDate === d && j.status !== "cancelled"));
+      const visits = Store.estVisitsOn(d);
       const shown = list.slice(0, PER_CELL);
-      const rest = list.length - shown.length;
+      const rest = (list.length - shown.length) + Math.max(0, visits.length - 1);
       /* Only from a day the calendar answered for \u2014 a day it could not read
          must not get a dot, or a month of blank squares would read as a
          month with nothing on. The band says so instead. */
@@ -5127,12 +5194,40 @@ function monthGrid(){
         <div class="dtop">
           <span class="dnum">${parseYmd(d).getDate()}</span>
           ${mine.length ? `<span class="pdot" aria-label="${esc(mine.length)} of your own"></span>` : ""}
-          ${list.length?`<span class="dcount">${list.length}</span>`:""}
+          ${(list.length + visits.length)
+            ? `<span class="dcount">${list.length + visits.length}</span>` : ""}
         </div>
         ${shown.map(j => miniCard(j, { compact:true })).join("")}
+        ${visits.slice(0, 1).map(e => estCard(e, { compact:true, showDate:false })).join("")}
         ${rest > 0 ? `<div class="mo-more" data-goday="${esc(d)}">+${rest} more</div>` : ""}
       </div>`;
     }).join("")}
+  </div>`;
+}
+
+/* A trip to go and look at something. Dashed and labelled EST so it cannot
+   be read as booked work at a glance: nothing is owed for this, and the job
+   it might turn into has not been agreed yet. Draggable like a job card, but
+   it carries data-estvisit so the board knows which of the two it is. */
+function estCard(e, opts){
+  opts = opts || {};
+  const c = Store.estContact(e);
+  const tech = Store.tech(e.techId);
+  return `
+  <div class="minicard estcard" draggable="true"
+       data-estvisit="${esc(e.id)}" data-estimate="${esc(e.id)}"
+       title="Quote visit \u2014 EST-${esc(e.no)}">
+    <div class="mc-top">
+      <span class="mc-win">${opts.showWindow === false
+        ? "EST-" + esc(e.no)
+        : esc(shortWindow(e.window || "Anytime"))}</span>
+      ${opts.showTech === false ? "" :
+        (tech ? `<span class="mc-dot" style="background:${esc(tech.color)}" title="${esc(tech.name)}"></span>`
+              : `<span class="mc-dot" style="background:#c3ccd6" title="Unassigned"></span>`)}
+    </div>
+    <div class="mc-cust">${esc(c ? c.name : "(no contact)")}</div>
+    <div class="mc-type">\u{1F50D} Look at it${opts.showDate === false || !e.visitDate
+      ? "" : " \u00b7 " + esc(fmtDate(e.visitDate))}</div>
   </div>`;
 }
 
@@ -5211,11 +5306,28 @@ function jobCardHtml(j){
 }
 
 function wireBoard(){
-  let draggedId = null;
+  let draggedId = null;     // a job id
+  let draggedEst = null;    // or a quote visit
+
+  $$("[data-estvisit][draggable='true']").forEach(card => {
+    card.addEventListener("dragstart", e => {
+      draggedEst = card.dataset.estvisit;
+      draggedId = null;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", draggedEst); } catch(_){}
+    });
+    card.addEventListener("dragend", () => {
+      draggedEst = null;
+      card.classList.remove("dragging");
+      $$("[data-drop]").forEach(c => c.classList.remove("dragover"));
+    });
+  });
 
   $$("[data-job][draggable='true']").forEach(card => {
     card.addEventListener("dragstart", e => {
       draggedId = card.dataset.job;
+      draggedEst = null;
       card.classList.add("dragging");
       e.dataTransfer.effectAllowed = "move";
       // Some browsers won't start a drag unless data is set.
@@ -5270,6 +5382,12 @@ function wireBoard(){
     cell.addEventListener("drop", e => {
       e.preventDefault();
       cell.classList.remove("dragover");
+      if (draggedEst){
+        const est = Store.estimate(draggedEst);
+        draggedEst = null;
+        if (est) moveVisitToCell(est, cell);
+        return;
+      }
       const id = draggedId || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
       const job = id && Store.job(id);
       if (job) moveJobToCell(job, cell);
@@ -5347,6 +5465,30 @@ function finishBillTogether(what){
   render();
   if (why) return toast(why, "warn");
   toast(`#${child.no} now bills with #${parent.no}`, "ok");
+}
+
+/* Booking the trip to go and look. The cell says which day, which slot and
+   whose it is; the visit takes all three, the same way a job does. */
+function moveVisitToCell(est, cell){
+  if (!est || !cell) return false;
+  const newDate = cell.dataset.dropDate;
+  if (newDate == null) return false;
+  const hasTech = Object.prototype.hasOwnProperty.call(cell.dataset, "dropTech");
+  const newTech = hasTech ? (cell.dataset.dropTech || null) : est.techId;
+  const newWin  = cell.dataset.dropWindow || est.window || "Anytime";
+
+  const same = newDate === est.visitDate
+            && (newTech || "") === (est.techId || "")
+            && newWin === est.window;
+  if (same) return false;
+
+  Store.setVisit(est, newDate, newWin, newTech);
+  render();
+  const bits = [fmtDate(newDate)];
+  if (newWin && newWin !== "Anytime") bits.push(newWin);
+  if (hasTech && newTech) bits.push(Store.tech(newTech).name);
+  toast(`EST-${est.no} \u2014 going to look on ${bits.join(" \u00b7 ")}`, "ok");
+  return true;
 }
 
 /* Moving a job by dragging it. Pulled out of the drop handler because
@@ -7205,6 +7347,29 @@ function openEstimate(id){
       <button class="x" data-close>×</button>
     </div>
     <div class="modal-body">
+      ${(e.status === "draft" || e.status === "sent") ? `
+      <div class="card visitrow" style="margin-bottom:14px">
+        <div class="card-body" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="field" style="margin:0">
+            <label>Going to look at it</label>
+            <input class="input" type="date" id="est-visit" value="${esc(e.visitDate || "")}">
+          </div>
+          <div class="field" style="margin:0">
+            <label>When</label>
+            <select class="input" id="est-visit-win" style="width:auto">
+              ${WINDOWS.map(w => `<option${w === (e.window || "Anytime") ? " selected" : ""}>${esc(w)}</option>`).join("")}
+            </select>
+          </div>
+          <button class="btn" data-save-visit="${e.id}">Save</button>
+          ${e.visitDate ? `<button class="btn ghost" data-clear-visit="${e.id}">Clear</button>` : ""}
+          <div class="t-sub" style="flex:1 1 100%;margin:0">
+            ${e.visitDate
+              ? `On the board for ${esc(fmtDateLong(e.visitDate))}. Drag it to move it.`
+              : `Not booked. It is sitting in the tray above the schedule \u2014 drag it onto a day, or set it here.`}
+          </div>
+        </div>
+      </div>` : ""}
+
       <div class="status-steps" style="margin-bottom:16px">
         ${actions.join("")}
         <button class="btn sm" data-edit-estimate="${e.id}">Edit details</button>
@@ -11133,6 +11298,27 @@ document.addEventListener("click", e => {
   }
 
   /* --- generic row / card open (last) --- */
+  const saveVisit = hit("[data-save-visit]");
+  if (saveVisit){
+    const e = Store.estimate(saveVisit.dataset.saveVisit);
+    if (!e) return;
+    const d = ($("#est-visit") || {}).value || "";
+    const w = ($("#est-visit-win") || {}).value || "Anytime";
+    Store.setVisit(e, d || null, w, e.techId);
+    render(); openEstimate(e.id);
+    toast(d ? `Going to look on ${fmtDate(d)}` : "Visit cleared", "ok");
+    return;
+  }
+  const clearVisit = hit("[data-clear-visit]");
+  if (clearVisit){
+    const e = Store.estimate(clearVisit.dataset.clearVisit);
+    if (!e) return;
+    Store.setVisit(e, null, e.window, e.techId);
+    render(); openEstimate(e.id);
+    toast("Back in the tray \u2014 drag it onto a day", "ok");
+    return;
+  }
+
   const estEl = hit("[data-estimate]"); if (estEl) return openEstimate(estEl.dataset.estimate);
 
   const jobEl = hit("[data-job]");   if (jobEl) return openJob(jobEl.dataset.job);
