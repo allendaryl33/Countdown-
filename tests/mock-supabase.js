@@ -137,15 +137,17 @@ const server = http.createServer((req, res) => {
     return json(res, 200, shops[o] || null);
   }
 
-  if (u.pathname === '/sign-baked.html'){
+  /* Any sign-baked*.html, so a second suite can bake its own copy instead of
+     two of them writing over one filename. */
+  if (/^\/sign-baked[\w-]*\.html$/.test(u.pathname)){
     const dir = process.env.SP_DIR || process.env.SP || __dirname;
     try {
-      const body = fs.readFileSync(dir + '/sign-baked.html');
+      const body = fs.readFileSync(dir + u.pathname);
       res.writeHead(200, {'Content-Type':'text/html'});
       return res.end(body);
     } catch(err){
       res.writeHead(404, {'Content-Type':'text/plain'});
-      return res.end('no sign-baked.html in ' + dir);
+      return res.end('no ' + u.pathname + ' in ' + dir);
     }
   }
   if (u.pathname === '/invoice.html'){
@@ -292,6 +294,16 @@ const server = http.createServer((req, res) => {
       const l = links.find(x => x.token === q.p_token &&
                                 new Date(x.expires_at) > new Date() && !x.signed_at);
       if (!l) return json(res, 200, { ok:false, reason:'already signed, or the link has expired' });
+      /* supabase-estimate-options.sql: one signature per estimate. An
+         estimate can go out as two options, each its own link, and the
+         customer's page promises her that approving one closes the others.
+         The database is what makes that true rather than nearly true, so
+         the mock has to model it or the suites would pass against a
+         backend kinder than the real one. The same rule also covers a link
+         that was re-sent, which could be signed twice before. */
+      if (links.some(x => x.estimate_id === l.estimate_id &&
+                          x.token !== l.token && x.signed_at))
+        return json(res, 200, { ok:false, reason:'this estimate has already been approved' });
       l.signer_name = String(q.p_name).trim();
       l.signer_role = q.p_role || null;
       l.signature = q.p_signature;
@@ -299,12 +311,19 @@ const server = http.createServer((req, res) => {
       return json(res, 200, { ok:true });
     }
 
+    // What really went in, rows and payloads, so a suite can assert on the
+    // database rather than on the message the app happened to compose.
+    if (u.pathname === '/__links') return json(res, 200, links);
+
     if (u.pathname === '/rest/v1/estimate_links'){
       if (!owner) return json(res, 401, { message:'JWT expired' });
       if (req.method === 'GET') return json(res, 200, links.filter(l => l.owner === owner));
       if (req.method === 'POST'){
-        const row = Object.assign({}, b, { created_at: new Date().toISOString() });
-        links.push(row);
+        // PostgREST takes an array for a bulk insert, and an estimate with
+        // options posts one row per option in a single call.
+        const now = new Date().toISOString();
+        (Array.isArray(b) ? b : [b]).forEach(r =>
+          links.push(Object.assign({}, r, { created_at: now })));
         return json(res, 201, []);
       }
       return json(res, 405, { message:'no' });

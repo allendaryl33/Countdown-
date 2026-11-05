@@ -38,6 +38,19 @@ table{width:100%;border-collapse:collapse}
 td{padding:9px 0;border-bottom:1px solid var(--line);vertical-align:top}
 td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 tr.total td{border-bottom:0;border-top:2px solid var(--navy);font-weight:700;font-size:18px;padding-top:12px}
+.opt{display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;
+  background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:16px 18px;
+  margin-bottom:12px;font:inherit;color:inherit}
+.opt:hover,.opt:focus{border-color:var(--navy);outline:none}
+.opt .ol{flex:1;min-width:0}
+.opt .on{font-weight:700;font-size:16px}
+.opt .os{color:var(--muted);font-size:13.5px;margin-top:2px}
+.opt .op{font-weight:700;font-size:19px;white-space:nowrap}
+.opt.gone{opacity:.55;cursor:default}
+.opt.gone:hover{border-color:var(--line)}
+.backlink{display:inline-block;background:none;border:0;padding:0;margin:0 0 14px;
+  font:inherit;color:var(--navy);text-decoration:underline;cursor:pointer}
+.oneof{color:var(--muted);font-size:13px;margin:0 0 6px}
 .desc{white-space:pre-wrap;margin:0 0 14px}
 label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:0 0 5px}
 input,select{
@@ -139,6 +152,102 @@ function letterhead(c){
     .map(x => `<div>${esc(x)}</div>`).join("");
 }
 
+/* Which of the options is on screen. A set of options is a set of tokens:
+   signing is always one specific scope at one specific price, so the token
+   under the button has to be the one she is looking at \u2014 not the one the
+   link happened to arrive on. */
+let CUR = null, SET = null, LOADED = {};
+
+async function load(token){
+  if (LOADED[token]) return LOADED[token];
+  const d = await rpc("estimate_for_signing", { p_token: token });
+  if (d) LOADED[token] = d;
+  return d;
+}
+
+/* Has one of them already been signed? Asked of the database, not guessed
+   from what this page happens to remember, because she may well have
+   approved one on another phone an hour ago. */
+async function signedOne(set){
+  const got = await Promise.all(set.map(async o => {
+    try { const d = await load(o.token); return d && d.signed ? { o, d } : null; }
+    catch(_){ return null; }
+  }));
+  return got.find(Boolean) || null;
+}
+
+function alreadyState(hit, co){
+  state("\u2713", "Already approved",
+    `${esc(hit.o.label || "It")} was approved by ${esc((hit.d.signer_name) || "someone")}. ` +
+    `Nothing more to do \u2014 ${esc((co && co.name) || "we")} will be in touch.`, "ok");
+}
+
+function chooser(d){
+  const p = d.payload || {};
+  const co = p.company || {};
+  const set = p.options || [];
+  $("#root").innerHTML = `
+    <div class="card">
+      <div class="head">
+        <div>
+          <h1>${esc(co.name || "Estimate")}</h1>
+          <div class="meta">${letterhead(co)}</div>
+        </div>
+        <div class="right"><b>Estimate</b>EST-${esc(p.no)}<br>${esc(p.created || "")}</div>
+      </div>
+
+      <h2>Prepared for</h2>
+      <div style="margin-bottom:14px">${esc(p.customer || "")}${p.address ? `<div class="meta">${esc(p.address)}</div>` : ""}</div>
+
+      ${p.description ? `<h2>The work</h2><p class="desc">${esc(p.description)}</p>` : ""}
+
+      <h2>${set.length === 2 ? "Two ways to do it" : "Ways to do it"}</h2>
+      <p class="desc" style="margin-top:0">Have a look at each one. Tap the one
+      you'd like and you'll see the full estimate, with somewhere to sign.</p>
+
+      ${set.map(o => `<button class="opt" type="button" data-pick="${esc(o.token)}">
+        <div class="ol">
+          <div class="on">${esc(o.label || "Option")}</div>
+          <div class="os">Sign and approve here \u2192</div>
+        </div>
+        <div class="op">${esc(money(o.total))}</div>
+      </button>`).join("")}
+
+      <p class="note">Once one of these is approved and signed for, the others
+      close off automatically \u2014 so there's no risk of being charged for
+      more than the one you pick. Good for ${esc(p.validDays || 30)} days from
+      the date above.</p>
+    </div>`;
+  $("#root").querySelectorAll("[data-pick]").forEach(n =>
+    n.addEventListener("click", () => pick(n.dataset.pick)));
+}
+
+async function pick(token){
+  const co = ((LOADED[CUR] || {}).payload || {}).company || {};
+  try {
+    /* Check the set again on the way in. If she approved another one in the
+       meantime, she should be told so, not handed a second thing to sign. */
+    if (SET){
+      const hit = await signedOne(SET);
+      if (hit) return alreadyState(hit, co);
+    }
+    const d = await load(token);
+    if (!d){
+      state("\u231b", "This one has expired",
+        "Get in touch and we'll send a fresh set.");
+      return;
+    }
+    CUR = token;
+    render(d);
+    rpc("mark_estimate_viewed", { p_token: token }).catch(() => {});
+  } catch(err){
+    state("\u26a0", "Couldn't load it",
+      /Failed to fetch|NetworkError|Load failed/i.test(err.message || "")
+        ? "Looks like there's no connection. Try again in a moment."
+        : esc(err.message || "Something went wrong."));
+  }
+}
+
 function render(d){
   const p = d.payload || {};
   const items = p.items || [];
@@ -151,7 +260,9 @@ function render(d){
     return;
   }
 
+  const set = SET || [];
   $("#root").innerHTML = `
+    ${set.length > 1 ? `<button class="backlink" type="button" id="back">\u2190 See both options again</button>` : ""}
     <div class="card">
       <div class="head">
         <div>
@@ -160,6 +271,9 @@ function render(d){
         </div>
         <div class="right"><b>Estimate</b>EST-${esc(p.no)}<br>${esc(p.created || "")}</div>
       </div>
+
+      ${p.option ? `<p class="oneof">${esc(p.option)}${set.length > 1
+        ? ` \u2014 one of ${set.length}` : ""}</p>` : ""}
 
       <h2>Prepared for</h2>
       <div style="margin-bottom:14px">${esc(p.customer || "")}${p.address ? `<div class="meta">${esc(p.address)}</div>` : ""}</div>
@@ -178,7 +292,9 @@ function render(d){
 
       <p class="note">Good for ${esc(p.validDays || 30)} days from the date above.
       Approving books the work at this price. Anything found once the wall is open
-      is quoted separately before it's done.</p>
+      is quoted separately before it's done.${set.length > 1
+        ? ` Signing this one closes off the ${set.length === 2 ? "other" : "others"}
+            automatically \u2014 you're only ever agreeing to the one in front of you.` : ""}</p>
     </div>
 
     <div class="card">
@@ -214,6 +330,8 @@ function render(d){
   initPad();
   $("#clear").addEventListener("click", clearPad);
   $("#go").addEventListener("click", submit);
+  const back = $("#back");
+  if (back) back.addEventListener("click", () => chooser(LOADED[CUR] || d));
 }
 
 /* ---- signature pad ---- */
@@ -293,8 +411,18 @@ async function submit(){
   go.disabled = true; go.textContent = "Sending…";
   $("#go-err").classList.remove("on");
   try {
+    /* Last look before her name goes on it. Two links, two phones, and a
+       page that promised the others would close off \u2014 so being sure is
+       the page keeping its word, not an optimisation. */
+    if (SET){
+      const hit = await signedOne(SET.filter(o => o.token !== CUR));
+      if (hit){
+        alreadyState(hit, ((LOADED[CUR] || {}).payload || {}).company);
+        return;
+      }
+    }
     const r = await rpc("sign_estimate", {
-      p_token: TOKEN, p_name: name, p_role: $("#role").value, p_signature: sig
+      p_token: CUR, p_name: name, p_role: $("#role").value, p_signature: sig
     });
     if (!r || !r.ok) throw new Error((r && r.reason) || "that didn't go through");
     state("✓", "Approved — thank you",
@@ -329,15 +457,26 @@ window.addEventListener("hashchange", () => location.reload());
     return;
   }
   try {
-    const d = await rpc("estimate_for_signing", { p_token: TOKEN });
+    const d = await load(TOKEN);
     if (!d) {
-      state("⌛", "This link has expired",
+      state("\u231b", "This link has expired",
         "Or it was already dealt with. Get in touch and we'll send a fresh one.");
       return;
     }
-    render(d);
+    CUR = TOKEN;
+    const set = (d.payload || {}).options || [];
     // Tell him it was opened. Never block the page on it.
     rpc("mark_estimate_viewed", { p_token: TOKEN }).catch(() => {});
+    if (set.length > 1){
+      SET = set;
+      /* One of them already signed means the whole question is settled, and
+         showing her a choice would be inviting her to agree to a second
+         price for the same job. */
+      const hit = await signedOne(set);
+      if (hit) return alreadyState(hit, (d.payload || {}).company);
+      return chooser(d);
+    }
+    render(d);
   } catch(err){
     state("⚠", "Couldn't load it",
       /Failed to fetch|NetworkError|Load failed/i.test(err.message || "")

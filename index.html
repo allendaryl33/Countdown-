@@ -606,6 +606,19 @@ textarea.input{resize:vertical;min-height:76px}
 .clockhint{color:var(--muted)}
 .clockhint.gap{color:var(--amber);font-weight:650}
 .card.invpick{margin:0 0 14px;background:var(--surface)}
+.card.estopts{margin:0;background:var(--surface)}
+.edopt{margin-bottom:16px;break-inside:avoid}
+.edopt-h{font-size:14px;font-weight:700;border-bottom:1.5px solid #0b2a4a;
+  padding-bottom:3px;margin-bottom:5px;display:flex;justify-content:space-between}
+.edopt-note{font-size:11.5px;font-style:italic;margin:-4px 0 12px}
+.optrow{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--line)}
+.optrow:last-of-type{border-bottom:0}
+.optrow.on{background:var(--sunk);margin:0 -14px;padding:7px 14px}
+.optrow .input{flex:1 1 150px;min-width:120px}
+.optbadge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:2px 7px;border-radius:999px;background:var(--sunk);color:var(--muted);white-space:nowrap}
+.optbadge.won{background:var(--green-soft);color:#2d6a4a}
+.optbadge.out{background:var(--purple-soft);color:#4b3f99}
 .card.visitrow{border-color:#e4d3a0;background:#fffdf4}
 .minicard.estcard .mc-win{color:#8a6d12;font-weight:700}
 .minicard.estcard .mc-type{color:#8a6d12}
@@ -1972,43 +1985,86 @@ const Cloud = {
      table at all, only permission to call two functions that each demand
      the token. */
   async publishSignLink(e){
+    const picks = await this.publishSignLinks(e);
+    return picks.length ? picks[0].token : null;
+  },
+
+  /* One signed row per option she is being offered. Each row holds its own
+     frozen payload, and every row also holds the whole set — label, price
+     and token — so a single link can show her both prices and move her to
+     the one she wants without the database needing to know what an option
+     is. No new column, no new grant, nothing to run by hand.
+
+     Not reusing one token for the set is the point: what she signed has to
+     be one specific scope at one specific price, frozen, the same as it has
+     always been. */
+  async publishSignLinks(e){
     await this.ensureToken();
     const st = Store.data.settings;
     const c = Store.estContact(e);
-    const bytes = new Uint8Array(16);
-    (window.crypto || window.msCrypto).getRandomValues(bytes);
-    const token = Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
-
     const days = Math.max(7, Number(e.validDays) || 30);
-    const sub = Store.estimateTotal(e);
-    const tax = Store.estimateTax(e);
-
-    const row = {
-      token, owner: this.uid, estimate_id: e.id,
-      expires_at: new Date(Date.now() + days * 86400000).toISOString(),
-      payload: {
-        no: e.no,
-        created: fmtStamp(e.createdAt).split(" · ")[0],
-        customer: c.name,
-        address: [c.address, c.city].filter(Boolean).join(", "),
-        description: e.description || "",
-        flat: Store.estIsFlat(e),
-        items: (e.items || []).map(i => Store.estIsFlat(e)
-          ? ({ desc: i.desc, qty: 0, price: 0 })
-          : ({ desc:i.desc, qty:i.qty, price:i.price })),
-        taxLabel: Store.taxLabel(),
-        tax, total: Store.estimateGross(e),
-        validDays: days,
-        company: {
-          name: st.company, phone: st.phone ? fmtPhone(st.phone) : "",
-          email: st.email || "", website: st.website || "", address: st.address || ""
-        }
-      }
+    const mint = () => {
+      const bytes = new Uint8Array(16);
+      (window.crypto || window.msCrypto).getRandomValues(bytes);
+      return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
     };
-    await this.call("/rest/v1/estimate_links", {
-      method:"POST", headers:{ "Prefer":"return=minimal" }, body: row
+
+    const live = Store.estLiveOptions(e);
+    const picks = (live.length ? live : [null]).map(o => ({ opt: o, token: mint() }));
+    const many = picks.length > 1;
+    const set = picks.map(pk => ({
+      token: pk.token,
+      label: pk.opt ? Store.estOptLabel(e, pk.opt) : "",
+      total: Store.estimateGross(Store.estAsOption(e, pk.opt))
+    }));
+
+    const rows = picks.map(pk => {
+      const v = Store.estAsOption(e, pk.opt);
+      const flat = Store.estIsFlat(v);
+      return {
+        token: pk.token, owner: this.uid, estimate_id: e.id,
+        expires_at: new Date(Date.now() + days * 86400000).toISOString(),
+        payload: {
+          no: e.no,
+          created: fmtStamp(e.createdAt).split(" \u00b7 ")[0],
+          customer: c.name,
+          address: [c.address, c.city].filter(Boolean).join(", "),
+          description: v.description || "",
+          flat,
+          items: (v.items || []).map(i => flat
+            ? ({ desc: i.desc, qty: 0, price: 0 })
+            : ({ desc:i.desc, qty:i.qty, price:i.price })),
+          taxLabel: Store.taxLabel(),
+          tax: Store.estimateTax(v), total: Store.estimateGross(v),
+          validDays: days,
+          option: pk.opt ? Store.estOptLabel(e, pk.opt) : "",
+          options: many ? set : null,
+          company: {
+            name: st.company, phone: st.phone ? fmtPhone(st.phone) : "",
+            email: st.email || "", website: st.website || "", address: st.address || ""
+          }
+        }
+      };
     });
-    return token;
+
+    await this.call("/rest/v1/estimate_links", {
+      method:"POST", headers:{ "Prefer":"return=minimal" },
+      body: rows.length === 1 ? rows[0] : rows
+    });
+
+    /* Which token is which option is kept here, on the estimate. The signed
+       row that comes back names only its token, and matching it locally means
+       the option she picked is known without asking the database for a column
+       it does not have. */
+    let touched = false;
+    picks.forEach(pk => {
+      if (!pk.opt) return;
+      pk.opt.tokens = pk.opt.tokens || [];
+      pk.opt.tokens.push(pk.token);
+      touched = true;
+    });
+    if (touched) Store.save();
+    return picks;
   },
 
   /* Everything he has out for signature, so the estimate can say where it
@@ -2034,9 +2090,14 @@ const Cloud = {
         if (!l.signed_at || !l.signature) return;
         const e = Store.estimate(l.estimate_id);
         if (!e || e.approval) return;
+        /* Which option that token was for. Matched here rather than trusted
+           from the row, because the row has no idea. */
+        const opt = (Store.estOptions(e) || [])
+          .find(o => (o.tokens || []).indexOf(l.token) !== -1) || null;
         Store.signEstimate(e, {
           name: l.signer_name, role: l.signer_role || "",
-          signature: l.signature, how: "signed from the link"
+          signature: l.signature, how: "signed from the link",
+          optId: opt ? opt.optId : null
         });
         landed++;
       });
@@ -2266,6 +2327,22 @@ const Store = {
     if (this.data.settings.calOn == null) this.data.settings.calOn = false;
     if (!Array.isArray(this.data.settings.calHide)) this.data.settings.calHide = [];
     this.data.estimates.forEach(e => { if (!e.photos) e.photos = []; });
+    /* Added with estimate options. An estimate with no options array behaves
+       exactly as it did before there were any, so nothing he has already
+       quoted moves. These only tidy a half-written shape \u2014 they never
+       fill in a price or a label he has not typed. */
+    this.data.estimates.forEach(e => {
+      if (!Array.isArray(e.options)){ if (e.options !== undefined) e.options = []; return; }
+      e.options.forEach(o => {
+        if (!o.optId) o.optId = uid("opt");
+        if (!Array.isArray(o.items)) o.items = [];
+        if (!Array.isArray(o.tokens)) o.tokens = [];
+        if (o.declinedAt === undefined) o.declinedAt = null;
+        if (o.flatPrice === undefined) o.flatPrice = null;
+      });
+      if (e.chosen && !e.options.some(o => o.optId === e.chosen)) e.chosen = null;
+      if (e.optOpen && !e.options.some(o => o.optId === e.optOpen)) e.optOpen = null;
+    });
     // A demo should always demo. Real work is never moved.
     if (this.data.demo && !this.data.liveSince && this.data.seededOn
         && this.data.seededOn !== todayStr()){
@@ -2443,15 +2520,172 @@ const Store = {
   estLineSum(e){
     return (e.items || []).reduce((s,i) => s + (Number(i.qty)||0) * (Number(i.price)||0), 0);
   },
+
+  /* ---- Options.
+     One estimate, two or three ways to do the same job: patch it, or replace
+     the lot. She picks one and that is what gets built.
+
+     An option holds exactly what an estimate holds \u2014 lines and a flat
+     price \u2014 so estAsOption presents one as a whole estimate and every
+     function that already knew how to price, print, text and publish an
+     estimate reads it unchanged. Nothing was written twice, which is why
+     there is no second copy to drift out of step. */
+  estOptions(e){ return (e && Array.isArray(e.options) && e.options.length) ? e.options : null; },
+  estOpt(e, id){ return (this.estOptions(e) || []).find(o => o.optId === id) || null; },
+  estLiveOptions(e){ return (this.estOptions(e) || []).filter(o => !o.declinedAt); },
+  estChosen(e){ return (e && e.chosen) ? this.estOpt(e, e.chosen) : null; },
+
+  /* The option the line editor is pointed at. */
+  estOpenOpt(e){
+    const opts = this.estOptions(e);
+    if (!opts) return null;
+    return this.estOpt(e, e.optOpen) || this.estLiveOptions(e)[0] || opts[0];
+  },
+  /* Where lines and the flat price live right now. With no options that is
+     the estimate itself, exactly as it has always been. */
+  estBucket(e){ return this.estOpenOpt(e) || e; },
+
+  /* An option, wearing the estimate's clothes. options/chosen/optOpen are
+     stripped deliberately: leave options on it and estimateTotal would look
+     past the option it was handed and start pricing the set again. */
+  estAsOption(e, opt){
+    if (!opt) return e;
+    const v = Object.assign({}, e, opt);
+    delete v.options; delete v.chosen; delete v.optOpen;
+    return v;
+  },
+  estOptLabel(e, opt){
+    if (!opt) return "";
+    if (opt.label) return opt.label;
+    const i = (this.estOptions(e) || []).indexOf(opt);
+    return i >= 0 ? "Option " + (i + 1) : "Option";
+  },
+
+  addEstOption(e){
+    e.options = e.options || [];
+    const opt = { optId: uid("opt"), label: "", items: [], flatPrice: null,
+                  tokens: [], declinedAt: null };
+    /* The first option takes over whatever is already on the estimate. He
+       has usually typed one way of doing it before it occurs to him to quote
+       a second, and leaving those lines behind a container that no longer
+       prices them would read as having lost them. It says how many moved,
+       the same way renaming a work type says how many jobs it carried. */
+    const first = !e.options.length;
+    const moved = first ? (e.items || []).length : 0;
+    const movedFlat = first && Number(e.flatPrice) > 0;
+    if (first){
+      opt.items = (e.items || []).map(i => Object.assign({}, i));
+      opt.flatPrice = movedFlat ? Number(e.flatPrice) : null;
+      e.items = []; e.flatPrice = null;
+    }
+    e.options.push(opt);
+    e.optOpen = opt.optId;
+    const name = this.estOptLabel(e, opt);
+    this.addEstLog(e, `${name} added`);
+    if (moved || movedFlat){
+      this.addEstLog(e, `${moved} line${moved === 1 ? "" : "s"}` +
+        `${movedFlat ? " and the flat price" : ""} moved onto ${name}`);
+    }
+    this.save();
+    return opt;
+  },
+
+  /* Why this one cannot be dropped, in words, or null. A link already out is
+     the hard case: there is no way to reach into somebody's phone and take a
+     link back, so pretending it is gone would be the lie. */
+  canDropOption(e, opt){
+    if (!opt) return "That option is already gone.";
+    if (e.chosen === opt.optId) return "That is the one they signed for.";
+    if ((opt.tokens || []).length)
+      return `${this.estOptLabel(e, opt)}'s link is already out with them and ` +
+             `there's no way to pull it back. Send a fresh set instead.`;
+    return null;
+  },
+  dropEstOption(e, id){
+    const opt = this.estOpt(e, id);
+    const why = this.canDropOption(e, opt);
+    if (why) return why;
+    const name = this.estOptLabel(e, opt);
+    e.options = e.options.filter(o => o.optId !== id);
+    /* Last one out puts its lines back on the estimate, so dropping an
+       option he never finished does not take his work with it. */
+    if (!e.options.length){
+      e.items = (opt.items || []).map(i => Object.assign({}, i));
+      e.flatPrice = Number(opt.flatPrice) > 0 ? Number(opt.flatPrice) : null;
+      e.options = [];
+      this.addEstLog(e, `${name} removed \u2014 back to one price, its ` +
+        `${e.items.length} line${e.items.length === 1 ? "" : "s"} kept`);
+    } else {
+      this.addEstLog(e, `${name} removed`);
+    }
+    if (e.optOpen === id) e.optOpen = (e.options[0] || {}).optId || null;
+    this.save();
+    return null;
+  },
+  renameEstOption(e, id, label){
+    const opt = this.estOpt(e, id);
+    if (!opt) return;
+    const was = this.estOptLabel(e, opt);
+    const next = String(label || "").trim();
+    if (next === (opt.label || "")) return;
+    opt.label = next;
+    this.addEstLog(e, next ? `${was} renamed to ${next}` : `${was} back to its number`);
+    this.save();
+  },
+
+  /* She picked one. The others are done \u2014 said out loud in the log,
+     because the signing page promises her exactly this. */
+  chooseOption(e, opt, who){
+    if (!opt) return;
+    e.chosen = opt.optId;
+    const name = this.estOptLabel(e, opt);
+    const gone = [];
+    (e.options || []).forEach(o => {
+      if (o.optId === opt.optId || o.declinedAt) return;
+      o.declinedAt = Date.now();
+      gone.push(this.estOptLabel(e, o));
+    });
+    this.addEstLog(e, `${name} chosen${who ? " by " + who : ""}` +
+      (gone.length ? ` \u2014 ${gone.join(" and ")} declined` : ""));
+  },
+
   estimateTotal(e){
+    const opts = this.estOptions(e);
+    if (opts){
+      const chosen = this.estChosen(e);
+      if (chosen) return this.estimateTotal(this.estAsOption(e, chosen));
+      const live = this.estLiveOptions(e);
+      if (!live.length) return 0;
+      /* Until she picks, no single figure is the truth. The lowest
+         understates rather than overstates, and nowhere shows it on its own
+         \u2014 estimateRange is what the screens read. */
+      return Math.min.apply(null, live.map(o => this.estimateTotal(this.estAsOption(e, o))));
+    }
     return this.estIsFlat(e) ? Number(e.flatPrice) : this.estLineSum(e);
   },
+  /* What to put on a screen for an estimate that has not been decided yet. */
+  estimateRange(e){
+    const live = this.estChosen(e) ? [] : this.estLiveOptions(e);
+    if (live.length < 2) return null;
+    const totals = live.map(o => this.estimateTotal(this.estAsOption(e, o)));
+    const lo = Math.min.apply(null, totals), hi = Math.max.apply(null, totals);
+    return lo === hi ? null : { lo, hi, n: live.length };
+  },
+  /* One figure or a spread, whichever is honest. */
+  estimateMoney(e){
+    const r = this.estimateRange(e);
+    return r ? `${money(r.lo)}\u2013${money(r.hi)}` : money(this.estimateTotal(e));
+  },
+
   setFlatPrice(e, v){
+    const bk = this.estBucket(e);
     const n = Math.max(0, Number(v) || 0);
-    const was = Number(e.flatPrice) || 0;
+    const was = Number(bk.flatPrice) || 0;
     if (n === was) return;
-    e.flatPrice = n || null;
-    this.addEstLog(e, n ? `Flat price set to ${money(n)}` : "Flat price cleared — back to the line totals");
+    bk.flatPrice = n || null;
+    const where = bk === e ? "" : ` on ${this.estOptLabel(e, bk)}`;
+    this.addEstLog(e, n ? `Flat price set to ${money(n)}${where}`
+                        : `Flat price cleared${where} \u2014 back to the line totals`);
     this.save();
   },
 
@@ -2508,7 +2742,11 @@ const Store = {
      above the board, where he can drop it on a day he can actually see. */
   jobFromApproved(e){
     if (e.jobId) return this.job(e.jobId);
-    if (!(e.items || []).length) return null;
+    /* With options the estimate's own lines are empty on purpose — the
+       work is on the option she chose. Reading e.items here is what would
+       have made an approved estimate quietly produce no job at all. */
+    const v = this.estAsOption(e, this.estChosen(e));
+    if (!(v.items || []).length) return null;
     const c = this.customerFromEstimate(e);
     if (!c) return null;
     return this.convertEstimate(e, {
@@ -2520,7 +2758,11 @@ const Store = {
   /* Approved work becomes a real job. Line items and the agreed price carry
      over, so the board shows what was quoted, not a blank job. */
   convertEstimate(e, opts){
-    const total = this.estimateTotal(e);
+    /* The job is built from the option she picked \u2014 its lines, its
+       price. Without options this is the estimate itself and nothing about
+       the old path changes. */
+    const v = this.estAsOption(e, this.estChosen(e));
+    const total = this.estimateTotal(v);
     const job = {
       id: uid("job"), no: this.nextJobNo(), createdAt: Date.now(),
       customerId: opts.customerId,
@@ -2532,13 +2774,15 @@ const Store = {
       techId: null, status: "new", completedAt: null,
       laborHours: 0, laborRate: this.data.settings.laborRate,
       payment: blankPayment(), timeEntries: [],
-      parts: (e.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
+      parts: (v.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
       // the van list comes with it, unticked items and all
       materials: (e.materials || []).map(m => Object.assign({}, m, { id: uid("mat") })),
       estimateId: e.id, quotedTotal: total,
-      flatPrice: this.estIsFlat(e) ? Number(e.flatPrice) : null,
+      flatPrice: this.estIsFlat(v) ? Number(v.flatPrice) : null,
       billWith: null,
-      log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no} · quoted ${money(total)}` }]
+      log: [{ ts: Date.now(), text: `Created from estimate EST-${e.no}` +
+        `${e.chosen ? " (" + this.estOptLabel(e, this.estChosen(e)) + ")" : ""}` +
+        ` \u00b7 quoted ${money(total)}` }]
     };
     this.data.jobs.push(job);
 
@@ -3245,15 +3489,22 @@ const Store = {
      can never quietly change what somebody put their name to. Same principle
      as a signed waiver freezing its own wording. */
   signEstimate(e, opts){
+    /* Which of them she put her name to. Declining the rest happens here,
+       before the approval is written, so there is never a moment where two
+       options are both live and one of them is signed. */
+    const opt = opts.optId ? this.estOpt(e, opts.optId) : this.estChosen(e);
+    if (opt && e.chosen !== opt.optId) this.chooseOption(e, opt, opts.name);
+    const v = this.estAsOption(e, opt || this.estChosen(e));
     e.approval = {
       name: opts.name,
       role: opts.role || "",
       signature: opts.signature,
       at: Date.now(),
       how: opts.how || "in person",
-      total: this.estimateTotal(e),
-      gross: this.estimateGross(e),
-      items: (e.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
+      option: opt ? this.estOptLabel(e, opt) : "",
+      total: this.estimateTotal(v),
+      gross: this.estimateGross(v),
+      items: (v.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
       validDays: e.validDays || 30
     };
     if (e.status !== "approved"){ e.status = "approved"; e.decidedAt = Date.now(); }
@@ -3267,7 +3518,9 @@ const Store = {
      to know before he bills it. */
   approvalDrift(e){
     if (!e.approval) return 0;
-    return Math.round((this.estimateTotal(e) - e.approval.total) * 100) / 100;
+    // Against the option she actually signed, not the cheapest one going.
+    const v = this.estAsOption(e, this.estChosen(e));
+    return Math.round((this.estimateTotal(v) - e.approval.total) * 100) / 100;
   },
 
   /* ---- Leads from the website.
@@ -4972,7 +5225,7 @@ function viewDashboard(){
           ${estReady.map(e => `
             <div class="clickable" data-estimate="${e.id}" style="padding:10px 16px;border-bottom:1px solid #f2f5f8;cursor:pointer">
               <div class="t-strong">${esc(Store.estContact(e).name)}</div>
-              <div class="t-sub">${esc(e.type)} · ${esc(money(Store.estimateTotal(e)))} — needs converting to a job</div>
+              <div class="t-sub">${esc(e.type)} · ${esc(Store.estimateMoney(e))} — needs converting to a job</div>
             </div>`).join("")}
         </div>
       </div>` : ""}
@@ -5932,7 +6185,7 @@ function viewEstimates(){
                 lk.viewed_at ? "#2d6a4a" : "var(--muted)"}">${
                 lk.viewed_at ? "👀 " : ""}${esc(openedNote(lk))}</div>`;
             })()}</td>
-          <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
+          <td class="num t-strong">${esc(Store.estimateMoney(e))}</td>
           <td class="num" style="white-space:nowrap">
             ${e.status === "approved" && !e.jobId
               ? `<button class="btn sm" data-convert="${e.id}">Make the job →</button>` : ""}
@@ -7007,7 +7260,7 @@ function viewSearch(){
           <td class="t-strong">${esc(Store.estContact(e).name)}</td>
           <td>${esc(e.type)}</td>
           <td>${estBadge(e.status)}</td>
-          <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
+          <td class="num t-strong">${esc(Store.estimateMoney(e))}</td>
         </tr>`).join("")}</tbody>
     </table></div>` : ""}
   <div class="section-title">Jobs</div>
@@ -7489,9 +7742,14 @@ function openEstimate(id){
   if (!e) return;
   rememberPlace({ kind:"estimate", id });
   const c = Store.estContact(e);
-  const total = Store.estimateTotal(e);
   const job = e.jobId ? Store.job(e.jobId) : null;
-  const items = e.items || [];
+  /* Lines and the flat price belong to whichever option is open — or to
+     the estimate itself when there are none, which is every estimate he has
+     written so far. */
+  const bk = Store.estBucket(e);
+  const total = Store.estimateTotal(bk);
+  const items = bk.items || [];
+  const opts = Store.estOptions(e) || [];
   const book = Store.data.priceBook;
 
   const actions = [];
@@ -7626,13 +7884,14 @@ function openEstimate(id){
       ${e.approval ? (() => {
         const drift = Store.approvalDrift(e);
         return `<div class="opt-card on" style="cursor:default;margin-bottom:16px">
-          <div class="oc-t">✍ Approved by ${esc(e.approval.name)}${e.approval.role ? " · " + esc(e.approval.role) : ""}</div>
+          <div class="oc-t">✍ Approved by ${esc(e.approval.name)}${e.approval.role ? " · " + esc(e.approval.role) : ""}${
+            e.approval.option ? " · " + esc(e.approval.option) : ""}</div>
           <div class="oc-s">${esc(fmtStamp(e.approval.at))} · ${esc(e.approval.how)} ·
             agreed at ${esc(money(e.approval.total))}</div>
           ${e.approval.signature ? `<div style="margin-top:8px"><img src="${esc(e.approval.signature)}"
                alt="Signature of ${esc(e.approval.name)}" style="max-height:60px;background:#fff;border-radius:4px"></div>` : ""}
           ${Math.abs(drift) > 0.005 ? `<div class="stop-flag" style="margin:10px -14px -12px;border-radius:0">
-            Edited since they signed — it now comes to ${esc(money(Store.estimateTotal(e)))},
+            Edited since they signed — it now comes to ${esc(Store.estimateMoney(e))},
             ${drift > 0 ? esc(money(drift)) + " more" : esc(money(-drift)) + " less"} than they agreed to.
             Get it re-approved before you bill it.</div>` : ""}
         </div>`;
@@ -7682,7 +7941,48 @@ function openEstimate(id){
       <div class="section-title" style="margin-top:22px">Time quoting</div>
       ${timePanel("estimate", e)}
 
-      <div class="section-title" style="margin-top:22px">Line items</div>
+      <div class="section-title" style="margin-top:22px">Options
+        <span class="t-sub" style="text-transform:none;letter-spacing:0">${opts.length
+          ? "— she picks one; signing it declines the rest"
+          : "— quote the same job two or three ways"}</span></div>
+      <div class="card estopts"><div class="card-body">
+        ${opts.map(o => {
+          const open = o.optId === bk.optId;
+          const t = Store.estimateTotal(Store.estAsOption(e, o));
+          const badge = e.chosen === o.optId ? `<span class="optbadge won">✓ signed for</span>`
+                      : o.declinedAt ? `<span class="optbadge">declined</span>`
+                      : (o.tokens || []).length ? `<span class="optbadge out">🔗 link out</span>` : "";
+          return `<div class="optrow${open ? " on" : ""}">
+            <button class="btn sm${open ? " primary" : ""}" data-opt-open="${e.id}:${o.optId}"
+              ${open ? "disabled" : ""}>${open ? "editing" : "edit"}</button>
+            <input class="input" data-opt-label="${e.id}:${o.optId}" value="${esc(o.label || "")}"
+                   placeholder="${esc(Store.estOptLabel(e, o))}" aria-label="What to call this option">
+            <div class="t-strong" style="white-space:nowrap">${esc(money(t))}
+              ${(o.items || []).length ? `<span class="t-sub" style="font-weight:400">·
+                ${(o.items || []).length} line${(o.items || []).length === 1 ? "" : "s"}</span>` : ""}</div>
+            ${badge}
+            <button class="btn sm ghost" data-opt-drop="${e.id}:${o.optId}" title="Remove this option">×</button>
+          </div>`;
+        }).join("")}
+        <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:${opts.length ? "10px" : "0"}">
+          <button class="btn sm" data-opt-add="${e.id}">+ Option</button>
+          <div class="t-sub" style="margin:0;flex:1 1 220px">${
+            opts.length === 0
+              ? "One price right now. Hit + Option and what's below becomes Option 1, then add the second."
+              : opts.length === 1
+                ? "One option isn't a choice yet — add the second and she gets both prices in the one link."
+                : (() => {
+                    const r = Store.estimateRange(e);
+                    return r ? `${r.n} to choose from, ${esc(money(r.lo))} to ${esc(money(r.hi))}.`
+                             : `${opts.length} options.`;
+                  })()
+          }</div>
+        </div>
+      </div></div>
+
+      <div class="section-title" style="margin-top:22px">Line items${
+        bk === e ? "" : ` <span class="t-sub" style="text-transform:none;letter-spacing:0">—
+          ${esc(Store.estOptLabel(e, bk))}</span>`}</div>
       <table style="border:1px solid var(--line);border-radius:6px">
         <thead><tr>
           <th>Description</th><th style="width:90px">Kind</th><th class="num" style="width:70px">Qty</th>
@@ -7741,16 +8041,17 @@ function openEstimate(id){
             <td colspan="4" style="text-align:right">
               <label for="est-flat" class="t-strong">Flat price for the whole job</label>
               <div class="t-sub" style="font-size:11px;margin-top:2px">
-                ${Store.estIsFlat(e)
+                ${Store.estIsFlat(bk)
                   ? "The lines are the scope; this is the price."
                   : "Leave it empty and the lines are added up instead."}</div>
             </td>
             <td class="num"><input class="input li-edit num" type="number" step="0.01" min="0"
                  id="est-flat" data-est-flat="${e.id}" placeholder="0.00"
-                 value="${esc(Store.estIsFlat(e) ? Number(e.flatPrice) : "")}"></td><td></td>
+                 value="${esc(Store.estIsFlat(bk) ? Number(bk.flatPrice) : "")}"></td><td></td>
           </tr>
           <tr>
-            <td colspan="4" class="t-strong" style="text-align:right">Estimate total</td>
+            <td colspan="4" class="t-strong" style="text-align:right">${bk === e
+              ? "Estimate total" : esc(Store.estOptLabel(e, bk)) + " total"}</td>
             <td class="num money-lg" data-est-total>${esc(money(total))}</td><td></td>
           </tr>
         </tbody>
@@ -8151,6 +8452,12 @@ function openWaiverSign(tplId, jobId){
 
 /* ---------- Signature pad ---------- */
 let SigPad = null;
+
+/* Which option the person in front of him is signing for. Kept out of the
+   record because it is a question being asked, not an answer — nothing is
+   written onto the estimate until the signature is taken. Scoped to one
+   estimate so opening a different one never arrives pre-answered. */
+let EstSignOpt = { eid: null, optId: null };
 function initSigPad(){
   const cv = $("#sigpad");
   if (!cv) return;
@@ -9707,7 +10014,7 @@ function openCustomer(id){
                 <td>${esc(e.type)}</td>
                 <td class="t-sub">${esc(fmtStamp(e.createdAt).split(" · ")[0])}</td>
                 <td>${estBadge(e.status)}</td>
-                <td class="num t-strong">${esc(money(Store.estimateTotal(e)))}</td>
+                <td class="num t-strong">${esc(Store.estimateMoney(e))}</td>
               </tr>`).join("")}</tbody>
           </table></div>` : "";
       })()}
@@ -9988,6 +10295,51 @@ async function invoiceDocHtml(j){
 }
 
 /* A customer-facing estimate — this is the page they get handed or emailed. */
+/* The money on a printed estimate. Handed the estimate itself, or one
+   option wearing the estimate's clothes — it cannot tell the difference,
+   which is why there is only one copy of it. */
+function estDocMoneyTable(v){
+  const total = Store.estimateTotal(v);
+  return Store.estIsFlat(v) ? `
+    <table>
+      <thead><tr><th style="text-align:left">What's included</th></tr></thead>
+      <tbody>
+        ${(v.items||[]).map(i => `<tr><td>${esc(i.desc)}</td></tr>`).join("")}
+        ${Store.taxRate() ? `<tr>
+          <td style="text-align:right">Subtotal &nbsp; ${esc(money(total))}</td></tr>
+        <tr>
+          <td style="text-align:right">${esc(Store.taxLabel())} &nbsp; ${esc(money(Store.estimateTax(v)))}</td></tr>` : ""}
+        <tr class="tot"><td style="text-align:right">Total &nbsp; ${esc(money(Store.estimateGross(v)))}</td></tr>
+      </tbody>
+    </table>` : `
+    <table>
+      <thead><tr>
+        <th style="text-align:left">Description</th>
+        <th style="text-align:right;width:60px">Qty</th>
+        <th style="text-align:right;width:90px">Unit</th>
+        <th style="text-align:right;width:100px">Amount</th>
+      </tr></thead>
+      <tbody>
+        ${(v.items||[]).map(i => `<tr>
+          <td>${esc(i.desc)}</td>
+          <td style="text-align:right">${esc(i.qty)}${esc(KIND_UNIT[i.kind]==="hr"?" hr":"")}</td>
+          <td style="text-align:right">${esc(money(i.price))}</td>
+          <td style="text-align:right">${esc(money((Number(i.qty)||0)*(Number(i.price)||0)))}</td>
+        </tr>`).join("")}
+        ${Store.taxRate() ? `<tr>
+          <td colspan="3" style="text-align:right">Subtotal</td>
+          <td style="text-align:right">${esc(money(total))}</td></tr>
+        <tr>
+          <td colspan="3" style="text-align:right">${esc(Store.taxLabel())}</td>
+          <td style="text-align:right">${esc(money(Store.estimateTax(v)))}</td></tr>` : ""}
+        <tr class="tot">
+          <td colspan="3" style="text-align:right">Total</td>
+          <td style="text-align:right">${esc(money(Store.estimateGross(v)))}</td>
+        </tr>
+      </tbody>
+    </table>`;
+}
+
 function estimateDocHtml(e){
   const c = Store.estContact(e);
   const st = Store.data.settings;
@@ -10016,44 +10368,26 @@ function estimateDocHtml(e){
       <tr><td valign="top"><strong>Scope</strong></td><td>${esc(e.description)}</td></tr>
     </table>
 
-    ${Store.estIsFlat(e) ? `
-    <table>
-      <thead><tr><th style="text-align:left">What's included</th></tr></thead>
-      <tbody>
-        ${(e.items||[]).map(i => `<tr><td>${esc(i.desc)}</td></tr>`).join("")}
-        ${Store.taxRate() ? `<tr>
-          <td style="text-align:right">Subtotal &nbsp; ${esc(money(total))}</td></tr>
-        <tr>
-          <td style="text-align:right">${esc(Store.taxLabel())} &nbsp; ${esc(money(Store.estimateTax(e)))}</td></tr>` : ""}
-        <tr class="tot"><td style="text-align:right">Total &nbsp; ${esc(money(Store.estimateGross(e)))}</td></tr>
-      </tbody>
-    </table>` : `
-    <table>
-      <thead><tr>
-        <th style="text-align:left">Description</th>
-        <th style="text-align:right;width:60px">Qty</th>
-        <th style="text-align:right;width:90px">Unit</th>
-        <th style="text-align:right;width:100px">Amount</th>
-      </tr></thead>
-      <tbody>
-        ${(e.items||[]).map(i => `<tr>
-          <td>${esc(i.desc)}</td>
-          <td style="text-align:right">${esc(i.qty)}${esc(KIND_UNIT[i.kind]==="hr"?" hr":"")}</td>
-          <td style="text-align:right">${esc(money(i.price))}</td>
-          <td style="text-align:right">${esc(money((Number(i.qty)||0)*(Number(i.price)||0)))}</td>
-        </tr>`).join("")}
-        ${Store.taxRate() ? `<tr>
-          <td colspan="3" style="text-align:right">Subtotal</td>
-          <td style="text-align:right">${esc(money(total))}</td></tr>
-        <tr>
-          <td colspan="3" style="text-align:right">${esc(Store.taxLabel())}</td>
-          <td style="text-align:right">${esc(money(Store.estimateTax(e)))}</td></tr>` : ""}
-        <tr class="tot">
-          <td colspan="3" style="text-align:right">Total</td>
-          <td style="text-align:right">${esc(money(Store.estimateGross(e)))}</td>
-        </tr>
-      </tbody>
-    </table>`}
+    ${(() => {
+      /* Signed: print the one she agreed to and nothing else — the others
+         are not on offer any more and a sheet showing all three would read
+         as though the price were still open. */
+      const chosen = Store.estChosen(e);
+      const show = chosen ? [chosen] : Store.estLiveOptions(e);
+      if (!show.length) return estDocMoneyTable(e);
+      if (show.length === 1 && !Store.estOptions(e)) return estDocMoneyTable(e);
+      return show.map(o => {
+        const v = Store.estAsOption(e, o);
+        return `<div class="edopt">
+          <div class="edopt-h">${esc(Store.estOptLabel(e, o))}
+            <span>${esc(money(Store.estimateGross(v)))}</span></div>
+          ${estDocMoneyTable(v)}
+        </div>`;
+      }).join("") + (show.length > 1
+        ? `<div class="edopt-note">Two prices, two ways of doing it — pick
+             whichever suits. Approving one closes the other off.</div>`
+        : "");
+    })()}
 
     <div class="terms">
       Valid for ${esc(valid)} days from the date above. Price covers the scope described;
@@ -10417,8 +10751,15 @@ async function sendForSignature(id){
   const e = Store.estimate(id);
   if (!e) return;
   const c = Store.estContact(e);
-  if (!(e.items || []).length){
-    toast("Put the work on it first — there's nothing to approve", "warn");
+  const live = Store.estLiveOptions(e);
+  /* With options it is every live option that has to have work on it. An
+     empty option would go out as a price of nothing. */
+  const empty = live.filter(o => !(o.items || []).length);
+  if (live.length ? empty.length : !(e.items || []).length){
+    toast(live.length
+      ? `${empty.map(o => Store.estOptLabel(e, o)).join(" and ")} ` +
+        `${empty.length === 1 ? "has" : "have"} no work on ${empty.length === 1 ? "it" : "them"} yet`
+      : "Put the work on it first — there's nothing to approve", "warn");
     return;
   }
   if (!Cloud.configured() || !Cloud.cfg.refreshToken){
@@ -10431,9 +10772,10 @@ async function sendForSignature(id){
       <h2>Making the link…</h2></div><div class="spacer"></div></div>
     <div class="modal-body"><p class="t-sub">One moment.</p></div>`, { noFocus:true });
 
-  let token;
+  let picks, token;
   try {
-    token = await Cloud.publishSignLink(e);
+    picks = await Cloud.publishSignLinks(e);
+    token = picks.length ? picks[0].token : null;
   } catch(err){
     closeModal();
     const why = err.offline ? "No connection — try again when you've got a bar."
@@ -10447,10 +10789,21 @@ async function sendForSignature(id){
   const url = signLinkUrl(token);
   const first = String(c.name).trim().split(/\s+/)[0] || "there";
   const gst = Store.data.settings.gst;
-  const note = `Hi ${first} — here's the estimate for the ${Store.workPhrase(e.type, e.service)}, ` +
-    `${money(gst ? Store.estimateGross(e) : Store.estimateTotal(e))}` +
-    `${gst ? ` (incl. ${Store.taxLabel()})` : ""}. ` +
-    `Have a look and approve it here when you're happy: ${url}`;
+  const priceOf = o => money(gst ? Store.estimateGross(Store.estAsOption(e, o))
+                                 : Store.estimateTotal(Store.estAsOption(e, o)));
+  /* Every option in the message with its own price and its own link, so it
+     reads the same whether she opens the one link or just scrolls the text.
+     The links differ; which one she signs is which one she is buying. */
+  const note = picks.length > 1
+    ? `Hi ${first} — two ways to do the ${Store.workPhrase(e.type, e.service)}. ` +
+      `Have a look and approve whichever suits${gst ? ` (prices incl. ${Store.taxLabel()})` : ""}:` +
+      picks.map(pk => `\n\n${Store.estOptLabel(e, pk.opt)} — ${priceOf(pk.opt)}\n` +
+        signLinkUrl(pk.token)).join("") +
+      `\n\nApproving one closes the other off, so there's no doubling up.`
+    : `Hi ${first} — here's the estimate for the ${Store.workPhrase(e.type, e.service)}, ` +
+      `${money(gst ? Store.estimateGross(e) : Store.estimateTotal(e))}` +
+      `${gst ? ` (incl. ${Store.taxLabel()})` : ""}. ` +
+      `Have a look and approve it here when you're happy: ${url}`;
 
   // Making the link is not sending it. Nothing is recorded until he actually
   // taps Text, Email or Copy — otherwise backing out of this screen leaves an
@@ -10483,7 +10836,9 @@ async function sendForSignature(id){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
         ${c.phone ? `<a class="btn primary" id="lk-sms" href="#" data-link-sent="${e.id}:Texted">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
         ${c.email ? `<a class="btn" id="lk-mail" href="#" data-link-sent="${e.id}:Emailed">✉ Email ${esc(c.email)}</a>` : ""}
-        <button class="btn" data-copy-link="${esc(token)}" data-sent-id="${e.id}">📋 Copy the link</button>
+        <button class="btn" data-copy-link="${esc(token)}" data-sent-id="${e.id}"
+          ${picks.length > 1 ? 'data-copy-note="1"' : ""}>📋 Copy the
+          ${picks.length > 1 ? "message" : "link"}</button>
       </div>`}</div>
       <p class="t-sub" style="margin:14px 0 0;max-width:62ch">
         <strong>The link is the key.</strong> Anyone holding it can see this one
@@ -10509,6 +10864,38 @@ async function sendForSignature(id){
   render();
 }
 
+/* He got the yes over the phone, and the estimate has two prices on it.
+   Which one is not a detail — it is the job, the money and what she is
+   expecting. So it asks, rather than taking the first one. */
+function askWhichOption(e){
+  const c = Store.estContact(e);
+  const live = Store.estLiveOptions(e);
+  openModal(`
+    <div class="modal-head">
+      <div><div class="t-sub">EST-${e.no} · ${esc(c.name)}</div>
+        <h2>Which one did they go for?</h2></div>
+      <div class="spacer"></div><button class="x" data-close>&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="t-sub" style="margin:0 0 12px">The job gets built from whichever
+        you pick, and the other closes off.</p>
+      <div class="card estopts"><div class="card-body">
+        ${live.map(o => {
+          const v = Store.estAsOption(e, o);
+          return `<div class="optrow">
+            <button class="btn sm primary" data-est-pick="${e.id}:${o.optId}">this one</button>
+            <div style="flex:1 1 150px">${esc(Store.estOptLabel(e, o))}
+              <span class="t-sub">· ${(o.items || []).length} line${
+                (o.items || []).length === 1 ? "" : "s"}</span></div>
+            <div class="t-strong" style="white-space:nowrap">${esc(money(Store.estimateGross(v)))}</div>
+          </div>`;
+        }).join("")}
+      </div></div>
+    </div>
+    <div class="modal-foot"><div class="spacer"></div>
+      <button class="btn" data-close>Not yet</button></div>`, { noFocus:true });
+}
+
 /* Approve it on the spot.
    He is standing in their basement with the quote built and the materials
    list already made. Getting the signature here costs nothing; getting it
@@ -10517,9 +10904,19 @@ function openEstimateSign(id){
   const e = Store.estimate(id);
   if (!e) return;
   const c = Store.estContact(e);
-  const total = Store.estimateTotal(e);
-  const items = e.items || [];
-  if (!items.length){
+  const live = Store.estLiveOptions(e);
+
+  /* With options, which one she is approving is the whole question, and
+     nothing picks it for her. A default here would be a confident guess at
+     the scope somebody is about to put their name to — exactly the
+     mistake that put drain cleaning in a text about a shower rebuild. The
+     Approve button is not there until he taps one. */
+  if (EstSignOpt.eid !== id) EstSignOpt = { eid: id, optId: null };
+  const picked = live.length ? Store.estOpt(e, EstSignOpt.optId) : null;
+  const v = Store.estAsOption(e, picked);
+  const total = Store.estimateTotal(v);
+  const items = v.items || [];
+  if (live.length ? !live.some(o => (o.items || []).length) : !items.length){
     toast("Put the work on it first — there's nothing to approve", "warn");
     return;
   }
@@ -10533,24 +10930,42 @@ function openEstimateSign(id){
     <div class="modal-body">
       <p class="t-sub" style="margin:0 0 12px">Hand them the phone. This is what they're agreeing to.</p>
 
+      ${live.length ? `
+      <div class="card estopts" style="margin-bottom:16px"><div class="card-body">
+        <div class="t-strong">Which one are they approving?</div>
+        ${live.map(o => {
+          const on = picked && picked.optId === o.optId;
+          return `<div class="optrow${on ? " on" : ""}">
+            <button class="btn sm${on ? " primary" : ""}" data-sign-opt="${e.id}:${o.optId}">${
+              on ? "✓ this one" : "pick"}</button>
+            <div style="flex:1 1 150px">${esc(Store.estOptLabel(e, o))}</div>
+            <div class="t-strong" style="white-space:nowrap">${esc(money(
+              Store.estimateGross(Store.estAsOption(e, o))))}</div>
+          </div>`;
+        }).join("")}
+        ${picked ? "" : `<div class="t-sub" style="margin:9px 0 0">
+          Tap the one they've gone for. Nothing is chosen until you do.</div>`}
+      </div></div>` : ""}
+
+      ${(live.length && !picked) ? "" : `
       <div class="card" style="margin-bottom:16px">
         <table class="inv-meta" style="width:100%;border-collapse:collapse">
           ${items.map(i => `<tr>
-            <td style="padding:7px 12px;border-bottom:1px solid var(--line)"${Store.estIsFlat(e) ? ' colspan="2"' : ''}>
-              ${Store.estIsFlat(e) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${esc(i.desc)}</td>
-            ${Store.estIsFlat(e) ? "" : `<td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
+            <td style="padding:7px 12px;border-bottom:1px solid var(--line)"${Store.estIsFlat(v) ? ' colspan="2"' : ''}>
+              ${Store.estIsFlat(v) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${esc(i.desc)}</td>
+            ${Store.estIsFlat(v) ? "" : `<td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
               ${esc(money(i.qty * i.price))}</td>`}</tr>`).join("")}
         </table>
         ${Store.taxRate() ? `
         <div class="money-row"><span class="mr-label">Subtotal</span>
           <span class="mr-val">${esc(money(total))}</span></div>
         <div class="money-row"><span class="mr-label">${esc(Store.taxLabel())}</span>
-          <span class="mr-val">${esc(money(Store.estimateTax(e)))}</span></div>` : ""}
+          <span class="mr-val">${esc(money(Store.estimateTax(v)))}</span></div>` : ""}
         <div class="money-row" style="border-bottom:0">
           <span class="mr-label">Total</span>
-          <span class="mr-val" style="font-size:17px">${esc(money(Store.estimateGross(e)))}</span>
+          <span class="mr-val" style="font-size:17px">${esc(money(Store.estimateGross(v)))}</span>
         </div>
-      </div>
+      </div>`}
 
       <p class="t-sub" style="margin:0 0 14px">
         Good for ${e.validDays || 30} days. Approving books the work at this price;
@@ -10582,7 +10997,9 @@ function openEstimateSign(id){
     <div class="modal-foot">
       <div class="spacer"></div>
       <button class="btn" data-close>Cancel</button>
-      <button class="btn primary" data-save-est-sign="${e.id}">Approve &amp; sign</button>
+      ${(live.length && !picked)
+        ? `<button class="btn primary" disabled>Approve &amp; sign</button>`
+        : `<button class="btn primary" data-save-est-sign="${e.id}">Approve &amp; sign</button>`}
     </div>`, { wide:true, noFocus:true });
 
   initSigPad();
@@ -10602,7 +11019,9 @@ function saveEstimateSignature(id){
   if (!signed) ok = false;
   if (!ok) return;
 
-  Store.signEstimate(e, { name, role: $("#es-role").value, signature: exportSignature() });
+  Store.signEstimate(e, { name, role: $("#es-role").value, signature: exportSignature(),
+                          optId: EstSignOpt.eid === id ? EstSignOpt.optId : null });
+  EstSignOpt = { eid: null, optId: null };
   const job = e.jobId ? Store.job(e.jobId) : null;
   closeModal(); render(); openEstimate(e.id);
   toast(job ? `Approved — job #${job.no} is on the board, waiting for a day`
@@ -11322,8 +11741,11 @@ document.addEventListener("click", e => {
 
   const copyLink = hit("[data-copy-link]");
   if (copyLink){
-    const url = signLinkUrl(copyLink.dataset.copyLink);
-    const done = () => toast("Link copied", "ok");
+    /* One link is a link. Two options are a message \u2014 copying just the
+       first would hand her one price and no sign of the other. */
+    const box = copyLink.dataset.copyNote && $("#lk-note");
+    const url = box ? box.value : signLinkUrl(copyLink.dataset.copyLink);
+    const done = () => toast(box ? "Message copied" : "Link copied", "ok");
     if (navigator.clipboard && navigator.clipboard.writeText)
       navigator.clipboard.writeText(url).then(done, () => prompt("Copy this link:", url));
     else prompt("Copy this link:", url);
@@ -11370,6 +11792,18 @@ document.addEventListener("click", e => {
   const signEst = hit("[data-sign-estimate]");
   if (signEst) return openEstimateSign(signEst.dataset.signEstimate);
 
+  const signOpt = hit("[data-sign-opt]");
+  if (signOpt){
+    const [eid, oid] = signOpt.dataset.signOpt.split(":");
+    /* Rebuilding the sheet clears the pad, so if there is already a
+       signature on it, say so rather than wiping her name silently. */
+    if (SigPad && SigPad.dirty &&
+        !confirm("They've already signed. Changing the option clears that signature — sign again?")) return;
+    EstSignOpt = { eid, optId: oid };
+    openEstimateSign(eid);
+    return;
+  }
+
   const saveEstSign = hit("[data-save-est-sign]");
   if (saveEstSign) return saveEstimateSignature(saveEstSign.dataset.saveEstSign);
 
@@ -11392,10 +11826,32 @@ document.addEventListener("click", e => {
     return;
   }
 
+  /* He got the yes on the phone. With options on the estimate there is no
+     answer to "approved" until he says which one — and jobFromApproved
+     would otherwise find no work and make no job, without a word. */
+  const estPick = hit("[data-est-pick]");
+  if (estPick){
+    const [eid, oid] = estPick.dataset.estPick.split(":");
+    const e = Store.estimate(eid);
+    const o = e && Store.estOpt(e, oid);
+    if (!e || !o) return;
+    Store.chooseOption(e, o, "");
+    Store.save();
+    Store.setEstStatus(e, "approved");
+    closeModal(); render(); openEstimate(eid);
+    const job = e.jobId ? Store.job(e.jobId) : null;
+    toast(job ? `${Store.estOptLabel(e, o)} approved — job #${job.no} is on the board`
+              : `${Store.estOptLabel(e, o)} approved`, "ok");
+    return;
+  }
+
   const estSt = hit("[data-est-status]");
   if (estSt){
     const [eid, st] = estSt.dataset.estStatus.split(":");
     const e = Store.estimate(eid);
+    if (!e) return;
+    if (st === "approved" && !Store.estChosen(e) && Store.estLiveOptions(e).length)
+      return askWhichOption(e);
     Store.setEstStatus(e, st);
     const made = st === "approved" && e.jobId ? Store.job(e.jobId) : null;
     render(); openEstimate(eid);
@@ -11406,12 +11862,53 @@ document.addEventListener("click", e => {
   const editEst = hit("[data-edit-estimate]");
   if (editEst) return openEstimateForm(editEst.dataset.editEstimate);
 
+  const optAdd = hit("[data-opt-add]");
+  if (optAdd){
+    const e = Store.estimate(optAdd.dataset.optAdd);
+    if (!e) return;
+    if (e.approval){ toast("It's already signed — options can't change now.", "warn"); return; }
+    const o = Store.addEstOption(e);
+    render(); openEstimate(e.id);
+    toast(`${Store.estOptLabel(e, o)} added — its lines are below`, "ok");
+    return;
+  }
+  const optOpen = hit("[data-opt-open]");
+  if (optOpen){
+    const [eid, oid] = optOpen.dataset.optOpen.split(":");
+    const e = Store.estimate(eid);
+    if (!e || !Store.estOpt(e, oid)) return;
+    e.optOpen = oid; Store.save(); openEstimate(eid);
+    return;
+  }
+  const optDrop = hit("[data-opt-drop]");
+  if (optDrop){
+    const [eid, oid] = optDrop.dataset.optDrop.split(":");
+    const e = Store.estimate(eid);
+    const o = e && Store.estOpt(e, oid);
+    if (!e || !o) return;
+    const why = Store.canDropOption(e, o);
+    if (why){ toast(why, "warn"); return; }
+    const n = (o.items || []).length;
+    const name = Store.estOptLabel(e, o);
+    /* It is his typing on the other side of this, so say what goes. */
+    if (!confirm(`Remove ${name}?` + (n
+      ? `\n\nIts ${n} line${n === 1 ? "" : "s"} go with it` +
+        ((Store.estOptions(e) || []).length > 1 ? "." : ", back onto the estimate.")
+      : ""))) return;
+    const stop = Store.dropEstOption(e, oid);
+    if (stop){ toast(stop, "warn"); return; }
+    render(); openEstimate(eid);
+    toast(`${name} removed`, "ok");
+    return;
+  }
+
   const printEst = hit("[data-print-estimate]");
   if (printEst) return printEstimate(Store.estimate(printEst.dataset.printEstimate));
 
   const addLine = hit("[data-add-line]");
   if (addLine){
     const e = Store.estimate(addLine.dataset.addLine);
+    const bk = Store.estBucket(e);
     const desc = $("#line-desc").value.trim();
     if (!desc){ $("#line-desc").classList.add("invalid"); $("#line-desc").focus(); return; }
     const item = {
@@ -11420,9 +11917,10 @@ document.addEventListener("click", e => {
       qty:   Number($("#line-qty").value) || 1,
       price: Number($("#line-price").value) || 0
     };
-    e.items = e.items || [];
-    e.items.push(item);
-    Store.addEstLog(e, `Line added: ${desc}`);
+    bk.items = bk.items || [];
+    bk.items.push(item);
+    Store.addEstLog(e, `Line added: ${desc}` +
+      (bk === e ? "" : ` (${Store.estOptLabel(e, bk)})`));
     if ($("#line-save").checked){
       Store.addPriceItem({ desc: item.desc, price: item.price, kind: item.kind });
       toast("Added to the price book too", "ok");
@@ -11439,9 +11937,10 @@ document.addEventListener("click", e => {
   if (lineMove){
     const [eid, idx, dir] = lineMove.dataset.lineMove.split(":");
     const e = Store.estimate(eid);
+    const bk = e && Store.estBucket(e);
     const i = Number(idx), j = i + Number(dir);
-    if (e && e.items && j >= 0 && j < e.items.length){
-      [e.items[i], e.items[j]] = [e.items[j], e.items[i]];
+    if (bk && bk.items && j >= 0 && j < bk.items.length){
+      [bk.items[i], bk.items[j]] = [bk.items[j], bk.items[i]];
       Store.save(); openEstimate(eid);
     }
     return;
@@ -11451,7 +11950,9 @@ document.addEventListener("click", e => {
   if (delLine){
     const [eid, idx] = delLine.dataset.delLine.split(":");
     const e = Store.estimate(eid);
-    e.items.splice(Number(idx), 1);
+    const bk = e && Store.estBucket(e);
+    if (!bk || !bk.items) return;
+    bk.items.splice(Number(idx), 1);
     Store.save(); openEstimate(eid);
     return;
   }
@@ -11775,7 +12276,8 @@ document.addEventListener("click", e => {
 function saveLineEdit(t){
   const [eid, idx, field] = String(t.dataset.lineEdit).split(":");
   const est = Store.estimate(eid);
-  const it  = est && (est.items || [])[Number(idx)];
+  const bk  = est && Store.estBucket(est);
+  const it  = bk && (bk.items || [])[Number(idx)];
   if (!it) return;
 
   const was = it[field];
@@ -11789,7 +12291,7 @@ function saveLineEdit(t){
   const cell = row && row.querySelector("[data-line-total]");
   if (cell) cell.textContent = money((Number(it.qty)||0) * (Number(it.price)||0));
   const tot = document.querySelector("[data-est-total]");
-  if (tot) tot.textContent = money(Store.estimateTotal(est));
+  if (tot) tot.textContent = money(Store.estimateTotal(bk));
   renderQuiet();
 }
 
@@ -11797,6 +12299,15 @@ document.addEventListener("change", e => {
   const t = e.target;
 
   if (t.dataset && t.dataset.lineEdit) return saveLineEdit(t);
+
+  if (t.dataset && t.dataset.optLabel){
+    const [eid, oid] = String(t.dataset.optLabel).split(":");
+    const est = Store.estimate(eid);
+    if (!est) return;
+    Store.renameEstOption(est, oid, t.value);
+    renderQuiet();
+    return;
+  }
 
   if (t.dataset && t.dataset.jobFlat){
     const j = Store.job(t.dataset.jobFlat);
@@ -11826,7 +12337,7 @@ document.addEventListener("change", e => {
     if (!est) return;
     Store.setFlatPrice(est, t.value);
     const tot = document.querySelector("[data-est-total]");
-    if (tot) tot.textContent = money(Store.estimateTotal(est));
+    if (tot) tot.textContent = money(Store.estimateTotal(Store.estBucket(est)));
     renderQuiet();
     return;
   }
