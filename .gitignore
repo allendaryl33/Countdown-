@@ -11,4 +11,4 @@ tests/pcp-dispatch-*.json
 # the real shop. Screenshots of his customers, or a signing page with a live
 # key baked in, must not land in a public repo by accident.
 tests/shots/
-tests/sign-baked.html
+tests/sign-baked*.html

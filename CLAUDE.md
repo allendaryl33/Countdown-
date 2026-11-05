@@ -119,6 +119,16 @@ and estimates because he asked and it says how many moved. Deleting one carries
 nothing. Dropdowns always include the record's own current value so a stale
 value can't be silently replaced on the next save.
 
+That last rule is why line tags are **retired, never renamed**. `LINE_KINDS` is
+what a new line may be tagged (`labor`, `part`, `sub`); `RETIRED_KINDS` holds
+tags that still exist on records but are offered nowhere new (`flat`, shown as
+"Fixed price"). `kindOptions(cur)` always includes `cur`, including a tag this
+version has never heard of. Renaming `flat`'s label to "Sub" — which is the
+obvious reading of "change Flat rate to Sub" — would have marked ten of his own
+fixed-price jobs (sewer camera, backflow test, boiler service, haul-away) as
+subcontracted, in the records the tag exists for. `tests/linetags.js` fails six
+ways if anyone tries it again, and names all ten.
+
 **Anything already sent is frozen.** Signing and invoice payloads are captured
 at publish time. A later edit must never change what somebody already agreed
 to. Re-sending creates a *second* live link, it does not replace the first.
@@ -194,6 +204,26 @@ would. They don't test internals. Names are sentences about what he gets
   `poseidon-website/supabase/functions/nightly-reminder/index.ts`.
   `supabase-reminders-cron.sql` sends that header — with a **placeholder**, as
   it does for the service key, because this repo is public.
+
+## Parked, waiting on him (he asked these be set aside, not dropped)
+
+- **What the ten retired `flat` price-book items should become.** They sit
+  under "Fixed price" and nothing moves them. Options put to him: leave them,
+  move them to Labor, or something else. He was driving and wants to think.
+- **Carrying the line tag onto the job, and a breakdown that uses it.**
+  `convertEstimate` drops `kind` when an estimate becomes a job, so subcontract
+  spend appears in no report — which is what he actually wants the Sub tag for.
+  Told him plainly before he tags fifty lines expecting totals. Not built.
+
+## What a line tag actually drives
+
+Asked directly, and worth not having to re-derive: **not invoicing, and not
+any cost breakdown.** Totals are `qty × price` whatever the tag. Three
+consumers only — the `hr` suffix after the qty on the printed estimate, the
+Price Book page's headings, and the optgroups in "Add from price book". The
+tag is dropped entirely by `convertEstimate`, so a job's `parts` have none.
+Neither the signing payload nor a frozen approval carries one, which is why
+re-tagging can never change an estimate already out for signature.
 
 ## Open, as of the last session
 

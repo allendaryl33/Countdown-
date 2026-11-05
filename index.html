@@ -1086,12 +1086,44 @@ const EST_STATUSES = [
 const EST_STATUS_LABEL = Object.fromEntries(EST_STATUSES.map(s => [s.id, s.label]));
 
 // Line kinds price-book items and estimate lines are grouped by.
+/* What a line is: the work, the stuff that goes in, or somebody else's trade.
+   Sub is for tile, glass doors, anything he brings a subcontractor in for, so
+   his own records can tell that apart from his labour.
+
+   "Flat rate" used to be one of these and is not offered any more. He is right
+   that it never belonged here — a flat price is set on the option or the job,
+   not on a line of it. But it is retired, not deleted: ten price-book entries
+   carry it today, and they are all his own fixed-price work (sewer camera,
+   backflow test, boiler service, haul-away). Relabelling those as Sub would
+   start his subcontract records out wrong by ten entries, which is the exact
+   shape of mistake this project keeps paying for. So it keeps its own honest
+   name, shows wherever it is already set, and is offered nowhere new. */
 const LINE_KINDS = [
-  { id:"labor", label:"Labor",     unit:"hr" },
-  { id:"part",  label:"Part",      unit:"ea" },
-  { id:"flat",  label:"Flat rate", unit:"job" }
+  { id:"labor", label:"Labor",            unit:"hr" },
+  { id:"part",  label:"Material / Parts", unit:"ea" },
+  { id:"sub",   label:"Sub",              unit:"job" }
 ];
-const KIND_UNIT = Object.fromEntries(LINE_KINDS.map(k => [k.id, k.unit]));
+const RETIRED_KINDS = [
+  { id:"flat",  label:"Fixed price",      unit:"job" }
+];
+const ALL_KINDS  = LINE_KINDS.concat(RETIRED_KINDS);
+const KIND_UNIT  = Object.fromEntries(ALL_KINDS.map(k => [k.id, k.unit]));
+const KIND_BY_ID = Object.fromEntries(ALL_KINDS.map(k => [k.id, k]));
+
+/* Options for a kind picker. Always includes whatever the record already
+   says, even a tag no longer on offer and even one this version has never
+   heard of — because a select that cannot show the current value silently
+   re-tags the line on the next save, and that is his record, not ours. */
+function kindOption(id, cur, withUnit){
+  const k = KIND_BY_ID[id] || { id, label: id, unit: "" };
+  return `<option value="${esc(k.id)}"${k.id === cur ? " selected" : ""}>` +
+    `${esc(k.label)}${withUnit && k.unit ? ` (per ${esc(k.unit)})` : ""}</option>`;
+}
+function kindOptions(cur, withUnit){
+  const ids = LINE_KINDS.map(k => k.id);
+  if (cur && ids.indexOf(cur) === -1) ids.push(cur);
+  return ids.map(id => kindOption(id, cur, withUnit)).join("");
+}
 
 const PAY_STATUSES = [
   { id:"unbilled", label:"Not invoiced" },
@@ -6702,7 +6734,13 @@ function cloudCard(){
 
 function viewPriceBook(){
   const book = Store.data.priceBook;
-  const groups = LINE_KINDS.map(k => ({ k, items: book.filter(i => i.kind === k.id) }));
+  /* Retired tags get a heading only while something is still filed under
+     them, so the page tidies itself up as he moves things, rather than
+     carrying an empty section about forever. */
+  const groups = ALL_KINDS
+    .map(k => ({ k, items: book.filter(i => i.kind === k.id),
+                 retired: RETIRED_KINDS.some(r => r.id === k.id) }))
+    .filter(g => !g.retired || g.items.length);
 
   return `
   <div class="toolbar">
@@ -6711,7 +6749,9 @@ function viewPriceBook(){
     <button class="btn sm accent" data-action="new-price">＋ Add item</button>
   </div>
   ${groups.map(g => `
-    <div class="section-title">${esc(g.k.label)}${g.items.length ? ` · ${g.items.length}` : ""}</div>
+    <div class="section-title">${esc(g.k.label)}${g.items.length ? ` · ${g.items.length}` : ""}${
+      g.retired ? ` <span class="t-sub" style="text-transform:none;letter-spacing:0">— not
+        offered on new lines any more; these are kept as they are, edit one to re-tag it</span>` : ""}</div>
     <div class="card"><table>
       <thead><tr><th>Description</th><th class="num" style="width:140px">Price</th><th style="width:110px"></th></tr></thead>
       <tbody>
@@ -7993,7 +8033,7 @@ function openEstimate(id){
             <td><textarea class="input li-edit li-desc" rows="1"
                   data-line-edit="${e.id}:${i}:desc">${esc(it.desc)}</textarea></td>
             <td><select class="input li-edit" data-line-edit="${e.id}:${i}:kind">
-                  ${LINE_KINDS.map(k => `<option value="${esc(k.id)}"${k.id===it.kind?" selected":""}>${esc(k.label)}</option>`).join("")}
+                  ${kindOptions(it.kind)}
                 </select></td>
             <td><input class="input li-edit num" type="number" step="0.5" min="0"
                   data-line-edit="${e.id}:${i}:qty" value="${esc(it.qty)}"></td>
@@ -8014,7 +8054,7 @@ function openEstimate(id){
                 <label>Add from price book</label>
                 <select class="input" id="pb-pick">
                   <option value="">— pick a saved item, or just type below —</option>
-                  ${LINE_KINDS.map(k => {
+                  ${ALL_KINDS.map(k => {
                     const its = book.filter(b => b.kind === k.id);
                     return its.length ? `<optgroup label="${esc(k.label)}">${its.map(b =>
                       `<option value="${b.id}">${esc(b.desc)} — ${esc(money(b.price))}/${esc(k.unit)}</option>`).join("")}</optgroup>` : "";
@@ -8025,7 +8065,7 @@ function openEstimate(id){
                 <div class="field" style="margin-bottom:0"><label>Description</label>
                   <input class="input" id="line-desc" placeholder="What's being done or supplied"></div>
                 <div class="field" style="margin-bottom:0"><label>Kind</label>
-                  <select class="input" id="line-kind">${LINE_KINDS.map(k=>`<option value="${k.id}">${esc(k.label)}</option>`).join("")}</select></div>
+                  <select class="input" id="line-kind">${kindOptions("")}</select></div>
                 <div class="field" style="margin-bottom:0"><label>Qty</label>
                   <input class="input" id="line-qty" type="number" min="0" step="0.25" value="1"></div>
                 <div class="field" style="margin-bottom:0"><label>Unit price</label>
@@ -9950,7 +9990,7 @@ function openPriceForm(id){
         <input class="input" id="pb-desc" value="${esc(i?i.desc:"")}" placeholder="Water heater, 50 gal gas — installed"></div>
       <div class="row2">
         <div class="field"><label>Kind</label>
-          <select class="input" id="pb-kind">${LINE_KINDS.map(k=>`<option value="${k.id}"${i&&i.kind===k.id?" selected":""}>${esc(k.label)} (per ${esc(k.unit)})</option>`).join("")}</select></div>
+          <select class="input" id="pb-kind">${kindOptions(i ? i.kind : "", true)}</select></div>
         <div class="field"><label>Price *</label>
           <input class="input" id="pb-price" type="number" min="0" step="0.01" value="${esc(i?i.price:"")}"></div>
       </div>
@@ -12366,7 +12406,16 @@ document.addEventListener("change", e => {
     if (i){
       $("#line-desc").value  = i.desc;
       $("#line-price").value = i.price;
-      $("#line-kind").value  = i.kind;
+      /* A saved item can carry a retired tag. Setting a value the select has
+         no option for leaves it showing the first one instead, so the line
+         would come out tagged Labor without a word — the item's own tag
+         goes in as an option rather than being quietly swapped. */
+      const kindSel = $("#line-kind");
+      if (kindSel){
+        if (!Array.prototype.some.call(kindSel.options, o => o.value === i.kind))
+          kindSel.insertAdjacentHTML("beforeend", kindOption(i.kind, i.kind));
+        kindSel.value = i.kind;
+      }
       $("#line-qty").focus();
       $("#line-qty").select();
     }
