@@ -3,12 +3,24 @@
 -- Run this AFTER Victor has deployed the nightly-reminder function, not
 -- before: it only sets the alarm clock, it doesn't make the thing it rings.
 --
--- Two values to fill in below, both from Supabase:
---   <PROJECT-REF>  Project Settings → General → Reference ID
---   <SERVICE-KEY>  Project Settings → API → service_role key
+-- Three values to fill in below, all from Supabase:
+--   <PROJECT-REF>       Project Settings → General → Reference ID
+--   <SERVICE-KEY>       Project Settings → API → service_role key
+--   <REMINDER-SECRET>   the value of the REMINDER_SECRET function secret
+--                       (Edge Functions → Secrets), which the function
+--                       checks against the x-reminder-secret header
 --
--- The service_role key is the SECRET one. It belongs in this SQL editor and
--- nowhere else — never in the app, never in a link, never in the repo.
+-- The service_role key and the reminder secret are both SECRET. They belong
+-- in this SQL editor and nowhere else — never in the app, never in a link,
+-- and never committed here. This repo is public, because GitHub Pages will
+-- not serve a private one on a free plan, so a real value pasted into this
+-- file is a real value published to the world. Fill them in in the editor,
+-- leave the placeholders in the file.
+--
+-- The function returns 401 to anything without the matching header, so the
+-- cron jobs stop working the moment REMINDER_SECRET is set and this has not
+-- been re-run. If the night-before buzz goes quiet, that is the first thing
+-- to check: cron.job_run_details will show the 401.
 
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
@@ -34,7 +46,7 @@ select cron.unschedule('poseidon-reminder-mst') where exists
 select cron.schedule('poseidon-reminder-mdt', '30 1 * * *', $$
   select net.http_post(
     url     := 'https://<PROJECT-REF>.supabase.co/functions/v1/nightly-reminder',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer <SERVICE-KEY>"}'::jsonb,
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer <SERVICE-KEY>","x-reminder-secret":"<REMINDER-SECRET>"}'::jsonb,
     body    := '{}'::jsonb
   ) where (now() at time zone 'America/Edmonton')::time
           between '19:00' and '20:00';
@@ -44,7 +56,7 @@ $$);
 select cron.schedule('poseidon-reminder-mst', '30 2 * * *', $$
   select net.http_post(
     url     := 'https://<PROJECT-REF>.supabase.co/functions/v1/nightly-reminder',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer <SERVICE-KEY>"}'::jsonb,
+    headers := '{"Content-Type":"application/json","Authorization":"Bearer <SERVICE-KEY>","x-reminder-secret":"<REMINDER-SECRET>"}'::jsonb,
     body    := '{}'::jsonb
   ) where (now() at time zone 'America/Edmonton')::time
           between '19:00' and '20:00';
@@ -56,3 +68,16 @@ $$);
 -- To see it worked:
 --   select * from cron.job;
 --   select * from cron.job_run_details order by start_time desc limit 10;
+--
+-- A 401 in job_run_details means the header and the function secret do not
+-- match. To check the header is in there at all without printing either
+-- secret back at yourself:
+--
+--   select jobname,
+--          command like '%x-reminder-secret%' as sends_the_header
+--     from cron.job
+--    where jobname like 'poseidon-reminder%';
+--
+-- Both rows should say true. Note that cron.job.command holds the filled-in
+-- values, so that table is as sensitive as the keys in it — which was
+-- already true of the service_role key before this.

@@ -59,8 +59,13 @@ broken because a package changed. Keep it that way.
 
 ### The other pages
 
-- `sign.html` — the customer signs an estimate. Hosted on **his own domain**
-  (`poseidonplumbing.ca/sign`), not here.
+- `sign.html` — the customer signs an estimate. Served from **his own domain**
+  (`poseidonplumbing.ca/sign`), not here. It is a Cloudflare Workers static-assets
+  site built from `allendaryl33/poseidon-website`, whose `build.sh` curls this
+  repo's `sign.html` and `invoice.html` from `main` on every build. So a change
+  here reaches customers only when that site is rebuilt — pushing to this repo
+  alone does not deploy it. Before that was set up, both pages sat untracked in
+  the site's `dist/` and a rebuild could have dropped them.
 - `invoice.html` — the customer views an invoice and can save a PDF.
 - Both get everything from the URL **hash** (`#…`), which browsers never send
   to a server, so tokens and keys stay out of access logs and referrers.
@@ -180,12 +185,27 @@ would. They don't test internals. Names are sentences about what he gets
 
 ---
 
+## Settled since, so don't re-raise it
+
+- The reminder function's open endpoint is closed. `nightly-reminder` now
+  checks an `x-reminder-secret` header against the `REMINDER_SECRET` function
+  secret and returns 401 otherwise, skipping the check only when the secret is
+  unset. Its source is tracked at
+  `poseidon-website/supabase/functions/nightly-reminder/index.ts`.
+  `supabase-reminders-cron.sql` sends that header — with a **placeholder**, as
+  it does for the service key, because this repo is public.
+
 ## Open, as of the last session
 
 - **The waiver templates have never been reviewed by a lawyer or an insurer**,
   and they are attached to live jobs. Flagged repeatedly. Still open.
 - Stripe: bank account → Stripe account → webhook. The one-tap receipt prompt
   is designed but parked until that lands.
-- The reminder Edge Function is deployed with `--no-verify-jwt`, so anyone with
-  the URL can trigger it. Harmless today (it only pushes to his phone) but
-  worth a shared-secret header next time it's touched.
+- **`stripe-paid`'s source is in neither repo.** Victor reports it is at
+  `poseidon-website/supabase/functions/stripe-paid/index.ts` with a full
+  `verifyStripeSignature()` over `crypto.subtle` — 300s timestamp tolerance,
+  HMAC-SHA256, constant-time compare, run before anything else. That is not in
+  git on `main` and `git log --all` finds no trace of it, so it was presumably
+  read out of the Supabase dashboard. Nobody can review or reproducibly
+  redeploy it as things stand. Before real cards: get it committed, and set the
+  Stripe webhook endpoint plus `STRIPE_WEBHOOK_SECRET`.
