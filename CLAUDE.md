@@ -248,6 +248,17 @@ would. They don't test internals. Names are sentences about what he gets
 
 ## Talking to him
 
+- **Pushing is not shipping, and he reads "pushed" as "done".** The harness
+  rule is to open no pull request unless asked, which is right — but stopping
+  there and saying "pushed" has already cost him an evening: good work sat on
+  a branch, he looked at the app, saw nothing, and assumed the session had
+  failed or lacked access. So whenever work stops short of the live app, say
+  so in those words and say what is left: *"this is on branch X, nothing is
+  live — say the word and I'll open the PR and merge it."* Then after merging,
+  fetch the live page and grep for it, because GitHub Pages can take five
+  minutes and a merge is not a deploy. The same goes for a change to
+  `sign.html` or `invoice.html`, which needs a `poseidon-website` rebuild on
+  top of that.
 - **Lead with what's wrong.** Then what works.
 - **Give him clickable links and pasteable code.** He does not browse file
   trees or open files from a repo. If a step needs a file's contents, put the
@@ -266,6 +277,20 @@ would. They don't test internals. Names are sentences about what he gets
   rights, so permissions won't contain him.
 
 ---
+
+## Working alongside his other sessions
+
+He runs more than one session on this repo, and they do not see each other.
+Two things follow:
+
+- **A session's repositories are chosen when it starts.** A new chat without
+  `allendaryl33/Countdown-` attached has no code and no copy of this file, so
+  it will know none of this. If he says a session "doesn't have access", that
+  is almost always it — not a permissions problem.
+- **Verify another session's work rather than relaying it**, the same as
+  Victor's. Branch and commit exist? Diff does what it claims? Suite green on
+  that commit, run here? All four were true of
+  `claude/great-faraday-sx80a5`, and checking took minutes.
 
 ## Settled since, so don't re-raise it
 
