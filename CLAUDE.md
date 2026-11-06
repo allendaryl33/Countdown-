@@ -42,7 +42,7 @@ that wasn't, a green test run that had already been invalidated, a contractor's
 
 ## What it is
 
-One file: `index.html`, about 10,000 lines. **No framework, no build step, no
+One file: `index.html`, about 12,500 lines. **No framework, no build step, no
 dependencies, no bundler.** That is deliberate and it is why it has never once
 broken because a package changed. Keep it that way.
 
@@ -80,8 +80,17 @@ broken because a package changed. Keep it that way.
   and the role matters: the signed-in app is `authenticated`, not `anon`. Both
   the push functions and the `shops` read failed in production for exactly this.
 - The `.sql` files in the root are run by hand in the Supabase SQL editor, in
-  order. `supabase-reminders-cron.sql` goes **last**, after its Edge Function
-  exists.
+  order. `supabase-estimate-options.sql` goes after `supabase-signing.sql` (it
+  replaces `sign_estimate`, same signature, so the existing grants carry);
+  `supabase-reminders-cron.sql` goes **last**, after its Edge Function exists.
+- **Nothing in a session can verify that a `.sql` file was actually run** —
+  `anon` has no table rights and the RPCs answer identically either way. Both of
+  the recent ones were confirmed by someone pasting a query back, not by the
+  session: the options guard with
+  `select pg_get_functiondef('public.sign_estimate(text,text,text,text)'::regprocedure)
+  ilike '%already been approved%'`, and the cron header with
+  `select jobname, command like '%x-reminder-secret%' from cron.job`. Ask for
+  the output; do not take "it's done" and do not claim it yourself.
 
 ### Hosting
 
@@ -94,6 +103,69 @@ broken because a package changed. Keep it that way.
   installed app opens `start_url: "./"` with no cache-buster, so cache-first
   would silently serve last week's build. Supabase traffic bypasses the cache
   entirely — an offline copy of the shop would show yesterday's jobs as today's.
+
+---
+
+## What is actually in there
+
+A map, not a tour. 12,500 lines is too many to read, and the risk is not that
+you break a rule — the rules are below — but that you rebuild something that
+already exists, or miss the thing your change is about to collide with. Grep
+the names.
+
+**Estimates can hold options.** One estimate, two or three ways to do the same
+job, each with its own lines and price; she picks one. An option *is* an
+estimate in shape, so `estAsOption(e, opt)` hands one to the pricing, the
+payload builder, the printed sheet and the signing page and none of them can
+tell the difference — there is deliberately no second copy of that logic.
+`LINE_KINDS` / `estOptions` / `estLiveOptions` / `estBucket` (which bucket the
+line editor writes to) / `chooseOption` / `estimateRange`. `estimateTotal` on an
+undecided multi-option estimate returns the **lowest**; screens show the spread
+via `estimateMoney`, never one of two prices as the answer. Nothing picks an
+option for the customer — not the signing sheet, not the approved-by-phone
+button. `tests/estopts.js`, `tests/signopts.js`.
+
+**Publishing an estimate makes one signing row per option.** `publishSignLinks`
+mints a token each and puts the whole set (label, price, token) in every row's
+payload, so one link can show her both without the database knowing what an
+option is. `sign.html` renders the chooser from `payload.options`.
+`supabase-estimate-options.sql` makes "approving one closes the others" true in
+the database rather than only on the page. Which token was which option is
+matched locally, off `opt.tokens`.
+
+**A quote visit is an appointment.** An estimate can be booked for a look
+before it can be priced: `visitDate` / `estVisitsOn` / `setVisit` / `estCard`,
+and it sits in a tray above the schedule until it is dragged onto a day.
+`msgView` / `msgSubject` present a job and an estimate in the one shape the
+message templates read, so "I'm on my way" works for both without a second set
+of templates. `tests/estvisit.js`, `tests/estmsg.js`.
+
+**Several jobs can go on one invoice.** `billWith` points a job at the one
+being billed; `billedTotal` / `invoiceLines` / `taxOn` aggregate, while
+`jobTotal` stays **per job** because Time & Money's revenue reads it and rolling
+children in would double-count. `canBillTogether` refuses in plain English
+rather than quietly. `couldJoin` offers her other finished work at the moment he
+is looking at the invoice. A change of scope quoted against a job lands on that
+job's invoice (`scopeOf`). `tests/billwith.js`, `tests/scopejob.js`,
+`tests/invpick.js`.
+
+**A second visit keeps the job number.** #1005 then #1005B, not a new number:
+`anotherVisit` / `nextVisitLetter`, and the letter comes from a `visitSeq`
+counter on the parent, never recomputed from whoever is left — deleting C must
+not hand C back out to a different day. `tests/revisit.js`.
+
+**The clock and the bill are two different numbers, and nothing copies one into
+the other.** He worked twelve hours on Deanna's job and it billed zero, which
+also dropped it out of `invToSend` entirely. The job now says so in words and
+offers one tap (`clockOkAt` records that he said they are meant to differ), and
+`clockedNotBilled` names such jobs on the money screen. It never writes his
+hours for him. `tests/clockbill.js`.
+
+**His own Google Calendar shows on the board.** The `Cal` module reads it
+through the `personal-calendar` Edge Function; `Cal.knows(d)` gates everything,
+so a day that has not been read is never drawn as free, and `personalStrip`
+has an error state that says so out loud rather than showing an empty day.
+`tests/calendar.js`.
 
 ---
 
@@ -140,7 +212,7 @@ overwrite first.
 
 ## Tests
 
-`tests/` — about 50 suites, plus `mock-supabase.js` and screenshot tools.
+`tests/` — 64 suites, plus `mock-supabase.js` and screenshot tools.
 
     npm install --no-save playwright-core
     ./tests/run.sh
