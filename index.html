@@ -271,6 +271,10 @@ nav button .count.alert{background:var(--amber);color:#fff}
 .time-row .when{color:var(--muted);min-width:148px}
 .time-row .dur{margin-left:auto;font-weight:650;font-variant-numeric:tabular-nums}
 .time-row.live .dur{color:var(--green)}
+.time-row .t-label{font-weight:600}
+.te-picks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.te-picks button{border:1px solid var(--line);background:#fff;border-radius:14px;padding:5px 11px;font-size:13px;color:var(--text)}
+.te-picks button:hover{background:#eef2f6}
 .time-sum{
   display:flex;align-items:baseline;gap:10px;padding:11px 0 0;margin-top:4px;
   border-top:2px solid var(--line);font-weight:700;
@@ -3061,22 +3065,40 @@ const Store = {
     this.save();
   },
 
-  addEntry(kind, id, startedAt, endedAt, note){
+  /* opts.label is his own word for the block ("wholesaler run", "work time").
+     It is only ever what he typed or tapped — an entry without one has no
+     label, and nothing guesses one for it. It doesn't split any total.
+
+     opts.untimed is a bare duration: he knows it was half an hour, not when.
+     It still needs a start and an end, because an entry with no end reads as
+     a clock still running everywhere that asks. So it's anchored at local
+     midnight of the day he picked and runs for the length he gave. That
+     midnight is not a clock time, and nothing may show it as one: anything
+     that prints an entry's times has to check `untimed` first. */
+  addEntry(kind, id, startedAt, endedAt, note, opts){
     const rec = this.recordOf(kind, id);
     if (!rec) return;
+    const o = opts || {};
     rec.timeEntries = rec.timeEntries || [];
-    rec.timeEntries.push({ id: uid("te"), startedAt, endedAt, note: note || "" });
+    const entry = { id: uid("te"), startedAt, endedAt, note: note || "" };
+    if (o.label) entry.label = o.label;
+    if (o.untimed) entry.untimed = true;
+    rec.timeEntries.push(entry);
     rec.timeEntries.sort((a,b) => a.startedAt - b.startedAt);
-    this.logOn(kind, rec, `Time added by hand — ${fmtDur(endedAt - startedAt)}`);
+    this.logOn(kind, rec, `Time added by hand — ${fmtDur(endedAt - startedAt)}${o.label ? ` (${o.label})` : ""}`);
     this.save();
   },
 
-  updateEntry(kind, id, entryId, startedAt, endedAt){
+  updateEntry(kind, id, entryId, startedAt, endedAt, opts){
     const rec = this.recordOf(kind, id);
     const e = this.entriesOf(rec).find(x => x.id === entryId);
     if (!e) return;
     e.startedAt = startedAt;
     e.endedAt = endedAt;
+    if (opts){
+      if (opts.label) e.label = opts.label; else delete e.label;
+      if (opts.untimed) e.untimed = true; else delete e.untimed;
+    }
     this.logOn(kind, rec, "Time corrected");
     this.save();
   },
@@ -9193,7 +9215,10 @@ function timePanel(kind, rec){
     ${entries.length ? `<div>
       ${entries.map(e => `
         <div class="time-row ${e.endedAt ? "" : "live"}">
-          <span class="when">${esc(fmtStamp(e.startedAt))}${e.endedAt ? ` → ${esc(new Date(e.endedAt).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}))}` : " → running"}</span>
+          <span class="when">${e.untimed
+            ? `${esc(new Date(e.startedAt).toLocaleDateString(undefined,{month:"short",day:"numeric"}))} · no clock times`
+            : `${esc(fmtStamp(e.startedAt))}${e.endedAt ? ` → ${esc(new Date(e.endedAt).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"}))}` : " → running"}`}</span>
+          ${e.label ? `<span class="t-label">${esc(e.label)}</span>` : ""}
           ${e.note ? `<span class="t-sub">${esc(e.note)}</span>` : ""}
           <span class="dur">${esc(fmtDur((e.endedAt || Date.now()) - e.startedAt))}</span>
           <button class="btn sm ghost" data-edit-time="${kind}:${rec.id}:${e.id}" title="Correct this">✎</button>
@@ -9219,22 +9244,44 @@ function timePanel(kind, rec){
 function openTimeEdit(kind, recId, entryId){
   const rec = Store.recordOf(kind, recId);
   const e = entryId ? Store.entriesOf(rec).find(x => x.id === entryId) : null;
-  const start = e ? e.startedAt : Date.now() - 3600000;
-  const end = e ? (e.endedAt || Date.now()) : Date.now();
+  const untimed = !!(e && e.untimed);
+  const running = !!(e && !e.endedAt);
+  /* A bare-duration entry's stored times are a midnight anchor, not when he
+     was there, so they must not be offered back as Arrived/Left. Switching
+     one to clock times starts from a plain guess he has to correct. */
+  const start = e && !untimed ? e.startedAt : Date.now() - 3600000;
+  const end = e && !untimed ? (e.endedAt || Date.now()) : Date.now();
+  const day = untimed ? ymd(new Date(e.startedAt)) : todayStr();
+  const hrs = untimed ? String(Math.round(hoursOf(e.endedAt - e.startedAt) * 100) / 100) : "";
 
   openModal(`
     <div class="modal-head"><h2>${e ? "Correct this time" : "Add time"}</h2>
       <div class="spacer"></div><button class="x" data-close>×</button></div>
     <div class="modal-body">
-      ${e && !e.endedAt ? `<div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
+      ${running ? `<div class="legal-note" style="border-color:#f0c9a8;background:#fdf3ea">
         This one is still running. Setting an end time stops it.</div>` : ""}
-      <div class="row2">
+      ${running ? "" : `<div class="segmented" style="margin-bottom:12px">
+        <button type="button" class="${untimed ? "" : "on"}" data-te-mode="clock">Clock times</button>
+        <button type="button" class="${untimed ? "on" : ""}" data-te-mode="dur">Just how long</button>
+      </div>`}
+      <div class="row2" id="te-clock" ${untimed ? `style="display:none"` : ""}>
         <div class="field"><label>Arrived</label>
           <input class="input" id="te-start" type="datetime-local" value="${esc(toLocalInput(start))}"></div>
         <div class="field"><label>Left</label>
           <input class="input" id="te-end" type="datetime-local" value="${esc(toLocalInput(end))}"></div>
       </div>
-      <div class="err" id="te-err" style="display:none">The leaving time has to be after the arriving time.</div>
+      <div class="row2" id="te-dur" ${untimed ? "" : `style="display:none"`}>
+        <div class="field"><label>Day</label>
+          <input class="input" id="te-day" type="date" value="${esc(day)}"></div>
+        <div class="field"><label>Hours</label>
+          <input class="input" id="te-hours" inputmode="decimal" placeholder="0.5" value="${esc(hrs)}"></div>
+      </div>
+      <div class="field" style="margin-top:4px"><label>What was it <span class="t-sub">(optional)</span></label>
+        <input class="input" id="te-label" maxlength="60" placeholder="e.g. wholesaler run" value="${esc((e && e.label) || "")}">
+        <div class="te-picks">${timeLabelPicks().map(l =>
+          `<button type="button" data-te-pick="${esc(l)}">${esc(l)}</button>`).join("")}</div>
+      </div>
+      <div class="err" id="te-err" style="display:none"></div>
     </div>
     <div class="modal-foot"><div class="spacer"></div>
       <button class="btn" data-close>Cancel</button>
@@ -9242,13 +9289,64 @@ function openTimeEdit(kind, recId, entryId){
     </div>`);
 }
 
+/* The common ones first, then whatever he has typed before, so his own words
+   come back without retyping. Tapping one only fills the box. */
+const TIME_LABELS = ["Work time", "Driving", "Wholesaler run", "Dump run", "Quoting"];
+function timeLabelPicks(){
+  const seen = new Set(TIME_LABELS.map(l => l.toLowerCase()));
+  const mine = [];
+  [...Store.data.jobs, ...Store.data.estimates]
+    .flatMap(r => Store.entriesOf(r))
+    .filter(x => x.label)
+    .sort((a,b) => b.startedAt - a.startedAt)
+    .forEach(x => {
+      const k = x.label.toLowerCase();
+      if (!seen.has(k) && mine.length < 4){ seen.add(k); mine.push(x.label); }
+    });
+  return TIME_LABELS.concat(mine);
+}
+
+/* "0.5", ".5", "1.25", "2h", "1:30" — however he'd write it on a work order.
+   Anything else is refused rather than read as something he didn't mean. */
+function parseHours(v){
+  const s = String(v || "").trim().toLowerCase().replace(/\s*(h|hr|hrs|hours?)$/, "");
+  let h = NaN;
+  const hm = s.match(/^(\d+):([0-5]\d)$/);
+  if (hm) h = Number(hm[1]) + Number(hm[2]) / 60;
+  else if (/^(\d+(\.\d*)?|\.\d+)$/.test(s)) h = Number(s);
+  return Number.isFinite(h) && h > 0 && h <= 24 ? h : null;
+}
+
+function setTimeMode(mode){
+  const m = $(".modal");
+  if (!m) return;
+  m.querySelectorAll("[data-te-mode]").forEach(b => b.classList.toggle("on", b.dataset.teMode === mode));
+  $("#te-clock").style.display = mode === "clock" ? "" : "none";
+  $("#te-dur").style.display = mode === "dur" ? "" : "none";
+  $("#te-err").style.display = "none";
+}
+
 function saveTimeEdit(payload){
   const [kind, recId, entryId] = payload.split(":");
-  const start = fromLocalInput($("#te-start").value);
-  const end = fromLocalInput($("#te-end").value);
-  if (!start || !end || end <= start){ $("#te-err").style.display = "block"; return; }
-  if (entryId) Store.updateEntry(kind, recId, entryId, start, end);
-  else Store.addEntry(kind, recId, start, end, "");
+  const err = msg => { const x = $("#te-err"); x.textContent = msg; x.style.display = "block"; };
+  const label = $("#te-label").value.trim().replace(/\s+/g, " ");
+  const durMode = $("#te-dur").style.display !== "none";
+  let start, end;
+  if (durMode){
+    const d = parseYmd($("#te-day").value);
+    const h = parseHours($("#te-hours").value);
+    if (!d) return err("Pick the day it was.");
+    if (!h) return err("Hours has to be a number, like 0.5 or 1.25, up to 24.");
+    start = d.getTime();
+    end = start + Math.round(h * 3600000);
+  } else {
+    start = fromLocalInput($("#te-start").value);
+    end = fromLocalInput($("#te-end").value);
+    if (!start || !end || end <= start) return err("The leaving time has to be after the arriving time.");
+  }
+  const opts = { label, untimed: durMode };
+  if (entryId) Store.updateEntry(kind, recId, entryId, start, end, opts);
+  else Store.addEntry(kind, recId, start, end, "", opts);
   closeModal(); render();
   if (kind === "estimate") openEstimate(recId); else openJob(recId);
   toast("Time saved", "ok");
@@ -11590,6 +11688,10 @@ document.addEventListener("click", e => {
   if (tEdit){ const [k,r,e] = tEdit.dataset.editTime.split(":"); return openTimeEdit(k, r, e); }
   const tAdd = hit("[data-add-time]");
   if (tAdd){ const [k,r] = tAdd.dataset.addTime.split(":"); return openTimeEdit(k, r, null); }
+  const tMode = hit("[data-te-mode]");
+  if (tMode) return setTimeMode(tMode.dataset.teMode);
+  const tPick = hit("[data-te-pick]");
+  if (tPick){ const box = $("#te-label"); if (box) box.value = tPick.dataset.tePick; return; }
   const tSave = hit("[data-save-time]");
   if (tSave) return saveTimeEdit(tSave.dataset.saveTime);
   const tDel = hit("[data-del-time]");
