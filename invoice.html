@@ -136,7 +136,7 @@ function render(p){
       </div>
 
       <div class="cols">
-        <div><h2>Billed to</h2>${[p.customer, p.address, p.city, p.phone]
+        <div><h2>Billed to</h2>${[p.customer, p.org, p.site, p.address, p.city, p.phone]
           .filter(Boolean).map(x => `<div>${esc(x)}</div>`).join("")}</div>
         <div><h2>Work done</h2>
           <div>${[p.type || "", p.jobNo ? "Job #" + p.jobNo : ""]

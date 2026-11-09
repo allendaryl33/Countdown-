@@ -272,6 +272,8 @@ nav button .count.alert{background:var(--amber);color:#fff}
 .time-row .dur{margin-left:auto;font-weight:650;font-variant-numeric:tabular-nums}
 .time-row.live .dur{color:var(--green)}
 .time-row .t-label{font-weight:600}
+.li-desc.li-bold{font-weight:700}
+.btn.ghost.on{background:var(--navy);color:#fff}
 .te-picks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .te-picks button{border:1px solid var(--line);background:#fff;border-radius:14px;padding:5px 11px;font-size:13px;color:var(--text)}
 .te-picks button:hover{background:#eef2f6}
@@ -1090,26 +1092,30 @@ const EST_STATUSES = [
 const EST_STATUS_LABEL = Object.fromEntries(EST_STATUSES.map(s => [s.id, s.label]));
 
 // Line kinds price-book items and estimate lines are grouped by.
-/* What a line is: the work, the stuff that goes in, or somebody else's trade.
+/* What a line is: the work, the stuff that goes in, somebody else's trade, or
+   a flat-rate piece of work sold at one price.
+
    Sub is for tile, glass doors, anything he brings a subcontractor in for, so
    his own records can tell that apart from his labour.
 
-   "Flat rate" used to be one of these and is not offered any more. He is right
-   that it never belonged here — a flat price is set on the option or the job,
-   not on a line of it. But it is retired, not deleted: ten price-book entries
-   carry it today, and they are all his own fixed-price work (sewer camera,
-   backflow test, boiler service, haul-away). Relabelling those as Sub would
-   start his subcontract records out wrong by ten entries, which is the exact
-   shape of mistake this project keeps paying for. So it keeps its own honest
-   name, shows wherever it is already set, and is offered nowhere new. */
+   Flat rate was retired for a while (as "Fixed price") and is back on offer,
+   because he sells that way: a camera job sold as a flat $350 including two
+   hours on site, and quantity × hourly price made the quote read as hourly.
+   A flat-rate line is one dollar amount — quantity is always 1 and never
+   printed — and the words say what's included. It is NOT Sub, and was never
+   renamed to it: the ten price-book items carrying it (sewer camera, backflow
+   test, boiler service, haul-away) are his own fixed-price work, and Nov 9 he
+   confirmed Flat rate stays and Sub sits beside it.
+
+   RETIRED_KINDS stays as the mechanism for a tag that's still on records but
+   offered nowhere new. Nothing is in it today. */
 const LINE_KINDS = [
   { id:"labor", label:"Labor",            unit:"hr" },
   { id:"part",  label:"Material / Parts", unit:"ea" },
-  { id:"sub",   label:"Sub",              unit:"job" }
+  { id:"sub",   label:"Sub",              unit:"job" },
+  { id:"flat",  label:"Flat rate",        unit:"job" }
 ];
-const RETIRED_KINDS = [
-  { id:"flat",  label:"Fixed price",      unit:"job" }
-];
+const RETIRED_KINDS = [];
 const ALL_KINDS  = LINE_KINDS.concat(RETIRED_KINDS);
 const KIND_UNIT  = Object.fromEntries(ALL_KINDS.map(k => [k.id, k.unit]));
 const KIND_BY_ID = Object.fromEntries(ALL_KINDS.map(k => [k.id, k]));
@@ -1978,7 +1984,8 @@ const Cloud = {
     const payload = {
       no: "INV-" + Store.invoiceNoFor(job),
       date: fmtDate(job.invoicedOn || todayStr(), { month:"long", day:"numeric", year:"numeric" }),
-      customer: c.name || "", address: c.address || "", city: c.city || "", phone: c.phone ? fmtPhone(c.phone) : "",
+      customer: c.name || "", org: c.company || "", site: c.site || "",
+      address: c.address || "", city: c.city || "", phone: c.phone ? fmtPhone(c.phone) : "",
       type: Store.workLabel(job.type, job.service), jobNo: job.no,
       when: job.scheduledDate ? fmtDateLong(job.scheduledDate) : "",
       terms: Store.termsLine(job),
@@ -2100,12 +2107,14 @@ const Cloud = {
           no: e.no,
           created: fmtStamp(e.createdAt).split(" \u00b7 ")[0],
           customer: c.name,
+          org: c.company || "", site: c.site || "",
           address: [c.address, c.city].filter(Boolean).join(", "),
           description: v.description || "",
           flat,
           items: (v.items || []).map(i => flat
             ? ({ desc: i.desc, qty: 0, price: 0 })
-            : ({ desc:i.desc, qty:i.qty, price:i.price })),
+            : ({ desc:i.desc, qty:i.qty, price:i.price }))
+            .map((x, n) => (v.items[n] || {}).bold ? Object.assign(x, { bold: true }) : x),
           taxLabel: Store.taxLabel(),
           tax: Store.estimateTax(v), total: Store.estimateGross(v),
           validDays: days,
@@ -2846,7 +2855,11 @@ const Store = {
       techId: null, status: "new", completedAt: null,
       laborHours: 0, laborRate: this.data.settings.laborRate,
       payment: blankPayment(), timeEntries: [],
-      parts: (v.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
+      /* The tag and bold come across so the job's split by kind is the
+         estimate's. Neither reaches the customer's invoice: jobOwnLines
+         copies only desc, qty and price. */
+      parts: (v.items || []).map(i => Object.assign({ desc: i.desc, qty: i.qty, price: i.price },
+        i.kind ? { kind: i.kind } : {}, i.bold ? { bold: true } : {})),
       // the van list comes with it, unticked items and all
       materials: (e.materials || []).map(m => Object.assign({}, m, { id: uid("mat") })),
       estimateId: e.id, quotedTotal: total,
@@ -3598,7 +3611,8 @@ const Store = {
       option: opt ? this.estOptLabel(e, opt) : "",
       total: this.estimateTotal(v),
       gross: this.estimateGross(v),
-      items: (v.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
+      items: (v.items || []).map(i => i.bold ? { desc:i.desc, qty:i.qty, price:i.price, bold:true }
+                                             : { desc:i.desc, qty:i.qty, price:i.price }),
       validDays: e.validDays || 30
     };
     if (e.status !== "approved"){ e.status = "approved"; e.decidedAt = Date.now(); }
@@ -6982,7 +6996,14 @@ function viewData(){
           <div class="row2">
             <div class="field"><label>Business email</label>
               <input class="input" id="set-email" type="email" value="${esc(d.settings.email)}"
-                     placeholder="admin@yourdomain.ca"></div>
+                     placeholder="admin@yourdomain.ca">
+              <div class="field" style="margin:8px 0 0"><label>Email buttons open</label>
+                <select class="input" id="set-mailvia">
+                  <option value="device"${d.settings.mailVia === "gmail" ? "" : " selected"}>This phone's mail app</option>
+                  <option value="gmail"${d.settings.mailVia === "gmail" ? " selected" : ""}>Gmail, as the business email</option>
+                </select>
+                <div class="hint">Gmail opens a new message from the address above, so it doesn't land in a personal inbox.
+                  You still press send there.</div></div></div>
             <div class="field"><label>Website</label>
               <input class="input" id="set-website" value="${esc(d.settings.website)}"
                      placeholder="yourdomain.ca"></div>
@@ -7311,6 +7332,8 @@ function viewSearch(){
   const custHit = c =>
     c.name.toLowerCase().includes(q) ||
     (c.address||"").toLowerCase().includes(q) ||
+    (c.company||"").toLowerCase().includes(q) ||
+    (c.site||"").toLowerCase().includes(q) ||
     (c.email||"").toLowerCase().includes(q) ||
     (digits.length >= 3 && String(c.phone||"").replace(/\D/g,"").includes(digits));
 
@@ -7521,14 +7544,16 @@ function openJob(id){
         <thead><tr><th>Item</th><th class="num" style="width:70px">Qty</th><th class="num" style="width:100px">Price</th><th class="num" style="width:100px">Line</th><th style="width:40px"></th></tr></thead>
         <tbody>
           ${parts.map((p,i) => `<tr>
-            <td>${esc(p.desc)}</td>
+            <td>${lineDescHtml(p)}${p.kind ? ` <span class="chip">${esc((KIND_BY_ID[p.kind] || { label: p.kind }).label)}</span>` : ""}</td>
             <td class="num">${esc(p.qty)}</td>
             <td class="num">${esc(money(p.price))}</td>
             <td class="num">${esc(money((Number(p.qty)||0)*(Number(p.price)||0)))}</td>
             <td class="num"><button class="btn sm ghost" data-del-part="${j.id}:${i}" title="Remove">×</button></td>
           </tr>`).join("")}
           <tr>
-            <td><input class="input" id="part-desc" placeholder="Add a part or material…"></td>
+            <td style="display:flex;gap:6px"><input class="input" id="part-desc" placeholder="Add a part or material…">
+              <select class="input" id="part-kind" style="width:auto;flex:0 0 auto" aria-label="Tag">
+                <option value="">No tag</option>${LINE_KINDS.map(k => kindOption(k.id, "")).join("")}</select></td>
             <td><input class="input num" id="part-qty" type="text" inputmode="decimal" value="1"></td>
             <td><input class="input" id="part-price" type="text" inputmode="decimal" placeholder="0.00"></td>
             <td colspan="2"><button class="btn sm" data-add-part="${j.id}">Add</button></td>
@@ -7545,6 +7570,9 @@ function openJob(id){
             <td colspan="3" class="t-strong" style="text-align:right">Job total</td>
             <td class="num t-strong">${esc(money(partsTotal + laborTotal))}</td><td></td>
           </tr>
+          ${(() => { const h = kindSplitHtml(parts.concat((Number(j.laborHours)||0)
+              ? [{ kind:"labor", qty: j.laborHours, price: j.laborRate }] : []));
+            return h ? `<tr><td colspan="5" style="text-align:right">${h}</td></tr>` : ""; })()}
           <tr>
             <td colspan="2" style="text-align:right">
               <label for="job-flat" class="t-strong">Flat price for the whole job</label>
@@ -8099,18 +8127,22 @@ function openEstimate(id){
         </tr></thead>
         <tbody>
           ${items.map((it,i) => `<tr data-line-row="${i}">
-            <td><textarea class="input li-edit li-desc" rows="1"
+            <td><textarea class="input li-edit li-desc${it.bold ? " li-bold" : ""}" rows="1"
                   data-line-edit="${e.id}:${i}:desc">${esc(it.desc)}</textarea></td>
             <td><select class="input li-edit" data-line-edit="${e.id}:${i}:kind">
                   ${kindOptions(it.kind)}
                 </select></td>
-            <td><input class="input li-edit num" type="text" inputmode="decimal"
-                  data-line-edit="${e.id}:${i}:qty" value="${esc(it.qty)}"></td>
+            <td>${it.kind === "flat"
+              ? `<span class="t-sub" title="A flat-rate line is one amount — no quantity">flat</span>`
+              : `<input class="input li-edit num" type="text" inputmode="decimal"
+                  data-line-edit="${e.id}:${i}:qty" value="${esc(it.qty)}">`}</td>
             <td><input class="input li-edit num" type="text" inputmode="decimal"
                   data-line-edit="${e.id}:${i}:price" value="${esc(Number(it.price) || 0)}"></td>
             <td class="num t-strong" data-line-total="${i}">${esc(money((Number(it.qty)||0)*(Number(it.price)||0)))}</td>
             <td class="li-act">
-              <button class="btn sm ghost" data-line-move="${e.id}:${i}:-1"
+              <button class="btn sm ghost${it.bold ? " on" : ""}" data-line-bold="${e.id}:${i}"
+                      title="${it.bold ? "Bold — tap for plain" : "Make this line bold"}" aria-pressed="${!!it.bold}"
+                      style="font-weight:800">B</button><button class="btn sm ghost" data-line-move="${e.id}:${i}:-1"
                       title="Move up" ${i===0?"disabled":""}>↑</button><button
                       class="btn sm ghost" data-line-move="${e.id}:${i}:1"
                       title="Move down" ${i===items.length-1?"disabled":""}>↓</button><button
@@ -8135,9 +8167,9 @@ function openEstimate(id){
                   <input class="input" id="line-desc" placeholder="What's being done or supplied"></div>
                 <div class="field" style="margin-bottom:0"><label>Kind</label>
                   <select class="input" id="line-kind">${kindOptions("")}</select></div>
-                <div class="field" style="margin-bottom:0"><label>Qty</label>
+                <div class="field" style="margin-bottom:0" id="line-qty-f"><label>Qty</label>
                   <input class="input" id="line-qty" type="text" inputmode="decimal" value="1"></div>
-                <div class="field" style="margin-bottom:0"><label>Unit price</label>
+                <div class="field" style="margin-bottom:0"><label id="line-price-l">Unit price</label>
                   <input class="input" id="line-price" type="text" inputmode="decimal" placeholder="0.00"></div>
                 <button class="btn primary" data-add-line="${e.id}">Add line</button>
               </div>
@@ -8163,6 +8195,8 @@ function openEstimate(id){
               ? "Estimate total" : esc(Store.estOptLabel(e, bk)) + " total"}</td>
             <td class="num money-lg" data-est-total>${esc(money(total))}</td><td></td>
           </tr>
+          ${(() => { const h = kindSplitHtml(items);
+            return h ? `<tr><td colspan="6" style="text-align:right">${h}</td></tr>` : ""; })()}
         </tbody>
       </table>
 
@@ -9490,9 +9524,7 @@ function renderMessageSheet(){
     const sms = $("#msg-sms"), mail = $("#msg-mail");
     // "?&body=" keeps both iOS and Android happy.
     if (sms) sms.href = `sms:${tel}?&body=${encodeURIComponent(txt)}`;
-    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
-      `?subject=${encodeURIComponent(Store.data.settings.company + " — job #" + job.no)}` +
-      `&body=${encodeURIComponent(txt)}`;
+    setMailLink(mail, c.email, Store.data.settings.company + " — job #" + job.no, txt);
   };
   ta.addEventListener("input", sync);
   sync();
@@ -10239,7 +10271,14 @@ function openCustomerForm(id){
         <div class="field"><label>Name *</label><input class="input" id="c-name" value="${esc(c?c.name:"")}" placeholder="Homeowner or business"></div>
         <div class="field"><label>Phone</label><input class="input" id="c-phone" value="${esc(c?fmtPhone(c.phone):"")}"></div>
       </div>
-      <div class="field"><label>Email</label><input class="input" id="c-email" value="${esc(c?c.email:"")}"></div>
+      <div class="row2">
+        <div class="field"><label>Email</label><input class="input" id="c-email" value="${esc(c?c.email:"")}"></div>
+        <div class="field"><label>Company <span class="t-sub">(optional)</span></label>
+          <input class="input" id="c-company" value="${esc(c&&c.company||"")}" placeholder="If they're quoting for one"></div>
+      </div>
+      <div class="hint" style="margin:-6px 0 10px">Quotes and invoices still go to the person by name; the company shows under it.</div>
+      <div class="field"><label>Place name <span class="t-sub">(optional)</span></label>
+        <input class="input" id="c-site" value="${esc(c&&c.site||"")}" placeholder="e.g. a building or business at the address"></div>
       <div class="row2">
         <div class="field"><label>Service address</label><input class="input" id="c-address" value="${esc(c?c.address:"")}"></div>
         <div class="field"><label>City</label><input class="input" id="c-city" value="${esc(c?c.city:"Edmonton")}"></div>
@@ -10265,6 +10304,7 @@ function saveCustomerFromForm(id){
   const fields = {
     name, phone:$("#c-phone").value.trim(), email:$("#c-email").value.trim(),
     address:$("#c-address").value.trim(), city:$("#c-city").value.trim(),
+    company:$("#c-company").value.trim(), site:$("#c-site").value.trim(),
     zone:$("#c-zone").value, notes:$("#c-notes").value.trim()
   };
   if (id){ Object.assign(Store.customer(id), fields); toast("Customer updated","ok"); }
@@ -10407,6 +10447,8 @@ async function invoiceDocHtml(j){
         <td style="width:50%" valign="top">
           <strong>Billed to</strong><br>
           ${esc(c ? c.name : "—")}<br>
+          ${c && c.company ? esc(c.company) + "<br>" : ""}
+          ${c && c.site ? esc(c.site) + "<br>" : ""}
           ${c && c.address ? esc(c.address) + "<br>" : ""}
           ${c && c.city ? esc(c.city) + "<br>" : ""}
           ${c && c.phone ? esc(fmtPhone(c.phone)) : ""}
@@ -10490,7 +10532,7 @@ function estDocMoneyTable(v){
     <table>
       <thead><tr><th style="text-align:left">What's included</th></tr></thead>
       <tbody>
-        ${(v.items||[]).map(i => `<tr><td>${esc(i.desc)}</td></tr>`).join("")}
+        ${(v.items||[]).map(i => `<tr><td>${lineDescHtml(i)}</td></tr>`).join("")}
         ${Store.taxRate() ? `<tr>
           <td style="text-align:right">Subtotal &nbsp; ${esc(money(total))}</td></tr>
         <tr>
@@ -10507,9 +10549,11 @@ function estDocMoneyTable(v){
       </tr></thead>
       <tbody>
         ${(v.items||[]).map(i => `<tr>
-          <td>${esc(i.desc)}</td>
-          <td style="text-align:right">${esc(i.qty)}${esc(KIND_UNIT[i.kind]==="hr"?" hr":"")}</td>
-          <td style="text-align:right">${esc(money(i.price))}</td>
+          <td>${lineDescHtml(i)}</td>
+          ${i.kind === "flat"
+            ? `<td></td><td></td>`
+            : `<td style="text-align:right">${esc(i.qty)}${esc(KIND_UNIT[i.kind]==="hr"?" hr":"")}</td>
+          <td style="text-align:right">${esc(money(i.price))}</td>`}
           <td style="text-align:right">${esc(money((Number(i.qty)||0)*(Number(i.price)||0)))}</td>
         </tr>`).join("")}
         ${Store.taxRate() ? `<tr>
@@ -10548,8 +10592,9 @@ function estimateDocHtml(e){
 
     <table style="margin-bottom:14px">
       <tr><td style="width:130px"><strong>Prepared for</strong></td>
-          <td>${esc(c.name)}${c.phone?` · ${esc(fmtPhone(c.phone))}`:""}</td></tr>
-      <tr><td><strong>Address</strong></td><td>${esc([c.address,c.city].filter(Boolean).join(", "))}</td></tr>
+          <td>${esc(c.name)}${c.phone?` · ${esc(fmtPhone(c.phone))}`:""}${
+            c.company ? `<br>${esc(c.company)}` : ""}</td></tr>
+      <tr><td><strong>Address</strong></td><td>${c.site ? `${esc(c.site)}<br>` : ""}${esc([c.address,c.city].filter(Boolean).join(", "))}</td></tr>
       <tr><td><strong>Work</strong></td><td>${esc(e.type)}</td></tr>
       <tr><td valign="top"><strong>Scope</strong></td><td>${esc(e.description)}</td></tr>
     </table>
@@ -10825,9 +10870,7 @@ async function sendInvoiceLink(id){
     const txt = ta.value;
     const sms = $("#iv-sms"), mail = $("#iv-mail");
     if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(txt)}`;
-    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
-      `?subject=${encodeURIComponent(Store.data.settings.company + " — invoice INV-" + j.invoiceNo)}` +
-      `&body=${encodeURIComponent(txt)}`;
+    setMailLink(mail, c.email, Store.data.settings.company + " — invoice INV-" + j.invoiceNo, txt);
   };
   ta.addEventListener("input", sync); sync();
   if (fresh) toast(`INV-${j.invoiceNo} is in Invoices now`, "ok");
@@ -11041,9 +11084,7 @@ async function sendForSignature(id){
     const txt = ta.value;
     const sms = $("#lk-sms"), mail = $("#lk-mail");
     if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(txt)}`;
-    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
-      `?subject=${encodeURIComponent(Store.data.settings.company + " — estimate EST-" + e.no)}` +
-      `&body=${encodeURIComponent(txt)}`;
+    setMailLink(mail, c.email, Store.data.settings.company + " — estimate EST-" + e.no, txt);
   };
   ta.addEventListener("input", sync);
   sync();
@@ -11138,7 +11179,7 @@ function openEstimateSign(id){
         <table class="inv-meta" style="width:100%;border-collapse:collapse">
           ${items.map(i => `<tr>
             <td style="padding:7px 12px;border-bottom:1px solid var(--line)"${Store.estIsFlat(v) ? ' colspan="2"' : ''}>
-              ${Store.estIsFlat(v) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${esc(i.desc)}</td>
+              ${Store.estIsFlat(v) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${lineDescHtml(i)}</td>
             ${Store.estIsFlat(v) ? "" : `<td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
               ${esc(money(i.qty * i.price))}</td>`}</tr>`).join("")}
         </table>
@@ -11299,8 +11340,7 @@ ${st.company}`;
     const n = $("#est-count");
     if (n) n.textContent = txt.length + " characters";
     const mail = $("#est-mail"), sms = $("#est-sms");
-    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
-      `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(txt)}`;
+    setMailLink(mail, c.email, subject, txt);
     if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(txt)}`;
   };
   ta.addEventListener("input", sync);
@@ -11515,7 +11555,9 @@ document.addEventListener("click", e => {
     j.parts = j.parts || [];
     const qty = amountFrom($("#part-qty"), 1), price = amountFrom($("#part-price"), 0);
     if (qty === null || price === null) return;
-    j.parts.push({ desc, qty: qty || 1, price });
+    const kind = ($("#part-kind") || {}).value || "";
+    j.parts.push(kind ? { desc, qty: kind === "flat" ? 1 : (qty || 1), price, kind }
+                      : { desc, qty: qty || 1, price });
     Store.addLog(j, `Part added: ${desc}`);
     Store.save(); openJob(j.id);
     return;
@@ -12115,7 +12157,7 @@ document.addEventListener("click", e => {
       price: amountFrom($("#line-price"), 0)
     };
     if (item.qty === null || item.price === null) return;
-    item.qty = item.qty || 1;
+    item.qty = item.kind === "flat" ? 1 : (item.qty || 1);
     bk.items = bk.items || [];
     bk.items.push(item);
     Store.addEstLog(e, `Line added: ${desc}` +
@@ -12132,6 +12174,19 @@ document.addEventListener("click", e => {
      sequence was to delete and retype the lot. Same splice-and-reopen as
      the remove button; a line edit saves on blur, which happens before this
      click, so nothing typed is lost to the rebuild. */
+  /* Bold: a heading, or a flat-rate section subtotal that should stand out.
+     The rebuild is safe for the same reason as moving a line: a line edit
+     saves on blur, before this click lands. */
+  const lineBold = hit("[data-line-bold]");
+  if (lineBold){
+    const [eid, idx] = lineBold.dataset.lineBold.split(":");
+    const est = Store.estimate(eid);
+    const it = est && (Store.estBucket(est).items || [])[Number(idx)];
+    if (!it) return;
+    if (it.bold) delete it.bold; else it.bold = true;
+    Store.save(); openEstimate(eid);
+    return;
+  }
   const lineMove = hit("[data-line-move]");
   if (lineMove){
     const [eid, idx, dir] = lineMove.dataset.lineMove.split(":");
@@ -12442,6 +12497,7 @@ document.addEventListener("click", e => {
       s.company = $("#set-company").value.trim() || "Poseidon Plumbing & Gasfitting Ltd.";
       s.phone   = $("#set-phone").value.trim();
       s.email   = $("#set-email").value.trim();
+      s.mailVia = $("#set-mailvia").value === "gmail" ? "gmail" : "device";
       s.website = $("#set-website").value.trim().replace(/^https?:\/\//, "");
       s.address = $("#set-address").value.trim();
       s.gst     = $("#set-gst").value.trim();
@@ -12481,6 +12537,20 @@ function saveLineEdit(t){
 
   const was = it[field];
   const lineWas = (Number(it.qty)||0) * (Number(it.price)||0);
+  /* Made flat: two hours at $175 becomes one $350 amount, so the line is
+     worth exactly what it was and nothing on it reads as hourly any more.
+     The sheet is rebuilt so the quantity box goes. */
+  if (field === "kind" && t.value === "flat" && was !== "flat"){
+    it.kind = "flat";
+    if ((Number(it.qty)||0) !== 1){ it.price = cents(lineWas); it.qty = 1; }
+    Store.save();
+    return openEstimate(eid);
+  }
+  if (field === "kind" && was === "flat" && t.value !== "flat"){
+    it.kind = t.value.trim();
+    Store.save();
+    return openEstimate(eid);
+  }
   if (field === "desc" || field === "kind") it[field] = t.value.trim();
   else {
     // An empty box is a deliberate 0; something unreadable changes nothing.
@@ -12504,6 +12574,69 @@ function saveLineEdit(t){
   if (cell) cell.textContent = money(lineNow);
   refreshEstTotals(est);
   renderQuiet();
+}
+
+/* Every Email button goes through here. Left alone it hands the message to
+   the phone's own mail app, which on his phone is a personal Hotmail inbox:
+   a quote went out from there and had to be moved to the business Gmail
+   by hand, in a parking lot. With "Gmail" chosen in Settings it opens a new
+   Gmail message instead, with authuser naming the business address so a
+   browser signed in to more than one Google account picks that one. Either
+   way he presses send himself, and the app still asks whether it went. */
+function setMailLink(a, to, subject, body){
+  if (!a) return;
+  const st = Store.data.settings;
+  if (st.mailVia === "gmail"){
+    const enc = encodeURIComponent;   // %20 for spaces, not "+"
+    a.href = "https://mail.google.com/mail/?" + (st.email ? `authuser=${enc(st.email)}&` : "") +
+      `view=cm&fs=1&to=${enc(to || "")}&su=${enc(subject || "")}&body=${enc(body || "")}`;
+    a.target = "_blank"; a.rel = "noopener";
+  } else {
+    a.href = `mailto:${encodeURIComponent(to || "")}` +
+      `?subject=${encodeURIComponent(subject || "")}&body=${encodeURIComponent(body || "")}`;
+    a.removeAttribute("target");
+  }
+}
+
+/* A line's words for a printed sheet: bold when he's marked it as a heading
+   or subtotal, otherwise plain. Only a line he marked carries the flag, so
+   nothing already sent changes shape. */
+function lineDescHtml(i){
+  const d = esc(i && i.desc || "");
+  return i && i.bold ? `<strong>${d}</strong>` : d;
+}
+
+/* Labour, materials, sub and flat rate, added up separately — the reason
+   the tags exist. Only lines with money count. A line with no tag shows as
+   "Not tagged", never folded into Labor: unknown reads as unknown. */
+function kindSplit(lines){
+  const by = new Map();
+  (lines || []).forEach(l => {
+    const amt = (Number(l.qty)||0) * (Number(l.price)||0);
+    if (!amt) return;
+    const k = l.kind || "";
+    by.set(k, (by.get(k) || 0) + amt);
+  });
+  const order = LINE_KINDS.map(k => k.id);
+  return [...by.entries()]
+    .sort((a,b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99))
+    .map(([k, amt]) => ({ kind: k, label: k ? (KIND_BY_ID[k] || { label: k }).label : "Not tagged", amt: cents(amt) }));
+}
+function kindSplitHtml(lines){
+  const sp = kindSplit(lines);
+  if (!sp.length || (sp.length === 1 && !sp[0].kind)) return "";
+  return `<div class="t-sub kind-split" style="margin-top:8px">Lines by kind: ${
+    sp.map(x => `${esc(x.label)} <strong>${esc(money(x.amt))}</strong>`).join(" · ")}</div>`;
+}
+
+/* A flat-rate line is one amount: the add-line form drops its quantity box
+   and calls the price what it is. */
+function lineFormKind(){
+  const flat = ($("#line-kind") || {}).value === "flat";
+  const f = $("#line-qty-f"), l = $("#line-price-l"), q = $("#line-qty");
+  if (f) f.style.display = flat ? "none" : "";
+  if (l) l.textContent = flat ? "Amount" : "Unit price";
+  if (flat && q) q.value = "1";
 }
 
 /* The estimate's total and every option's price, redrawn in place. The
@@ -12603,11 +12736,13 @@ document.addEventListener("change", e => {
           kindSel.insertAdjacentHTML("beforeend", kindOption(i.kind, i.kind));
         kindSel.value = i.kind;
       }
-      $("#line-qty").focus();
-      $("#line-qty").select();
+      lineFormKind();
+      if (i.kind === "flat") $("#line-price").focus();
+      else { $("#line-qty").focus(); $("#line-qty").select(); }
     }
     return;
   }
+  if (t.id === "line-kind"){ lineFormKind(); return; }
 
   if (t.dataset.setstatus){
     const j = Store.job(t.dataset.setstatus);

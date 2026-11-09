@@ -197,7 +197,8 @@ function chooser(d){
       </div>
 
       <h2>Prepared for</h2>
-      <div style="margin-bottom:14px">${esc(p.customer || "")}${p.address ? `<div class="meta">${esc(p.address)}</div>` : ""}</div>
+      <div style="margin-bottom:14px">${esc(p.customer || "")}${p.org ? `<div>${esc(p.org)}</div>` : ""}${
+        p.site ? `<div class="meta">${esc(p.site)}</div>` : ""}${p.address ? `<div class="meta">${esc(p.address)}</div>` : ""}</div>
 
       ${p.description ? `<h2>The work</h2><p class="desc">${esc(p.description)}</p>` : ""}
 
@@ -276,15 +277,16 @@ function render(d){
         ? ` \u2014 one of ${set.length}` : ""}</p>` : ""}
 
       <h2>Prepared for</h2>
-      <div style="margin-bottom:14px">${esc(p.customer || "")}${p.address ? `<div class="meta">${esc(p.address)}</div>` : ""}</div>
+      <div style="margin-bottom:14px">${esc(p.customer || "")}${p.org ? `<div>${esc(p.org)}</div>` : ""}${
+        p.site ? `<div class="meta">${esc(p.site)}</div>` : ""}${p.address ? `<div class="meta">${esc(p.address)}</div>` : ""}</div>
 
       ${p.description ? `<h2>The work</h2><p class="desc">${esc(p.description)}</p>` : ""}
 
       <table>
         ${items.map(i => p.flat
-          ? `<tr><td colspan="2">${esc(i.desc)}</td></tr>`
+          ? `<tr><td colspan="2">${i.bold ? `<strong>${esc(i.desc)}</strong>` : esc(i.desc)}</td></tr>`
           : `<tr>
-          <td>${i.qty > 1 ? esc(i.qty) + " &times; " : ""}${esc(i.desc)}</td>
+          <td>${i.qty > 1 ? esc(i.qty) + " &times; " : ""}${i.bold ? `<strong>${esc(i.desc)}</strong>` : esc(i.desc)}</td>
           <td class="n">${esc(money(i.qty * i.price))}</td></tr>`).join("")}
         ${p.taxLabel ? `<tr><td>${esc(p.taxLabel)}</td><td class="n">${esc(money(p.tax))}</td></tr>` : ""}
         <tr class="total"><td>Total</td><td class="n">${esc(money(p.total))}</td></tr>
