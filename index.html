@@ -272,6 +272,8 @@ nav button .count.alert{background:var(--amber);color:#fff}
 .time-row .dur{margin-left:auto;font-weight:650;font-variant-numeric:tabular-nums}
 .time-row.live .dur{color:var(--green)}
 .time-row .t-label{font-weight:600}
+.li-desc.li-bold{font-weight:700}
+.btn.ghost.on{background:var(--navy);color:#fff}
 .te-picks{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .te-picks button{border:1px solid var(--line);background:#fff;border-radius:14px;padding:5px 11px;font-size:13px;color:var(--text)}
 .te-picks button:hover{background:#eef2f6}
@@ -1090,26 +1092,30 @@ const EST_STATUSES = [
 const EST_STATUS_LABEL = Object.fromEntries(EST_STATUSES.map(s => [s.id, s.label]));
 
 // Line kinds price-book items and estimate lines are grouped by.
-/* What a line is: the work, the stuff that goes in, or somebody else's trade.
+/* What a line is: the work, the stuff that goes in, somebody else's trade, or
+   a flat-rate piece of work sold at one price.
+
    Sub is for tile, glass doors, anything he brings a subcontractor in for, so
    his own records can tell that apart from his labour.
 
-   "Flat rate" used to be one of these and is not offered any more. He is right
-   that it never belonged here — a flat price is set on the option or the job,
-   not on a line of it. But it is retired, not deleted: ten price-book entries
-   carry it today, and they are all his own fixed-price work (sewer camera,
-   backflow test, boiler service, haul-away). Relabelling those as Sub would
-   start his subcontract records out wrong by ten entries, which is the exact
-   shape of mistake this project keeps paying for. So it keeps its own honest
-   name, shows wherever it is already set, and is offered nowhere new. */
+   Flat rate was retired for a while (as "Fixed price") and is back on offer,
+   because he sells that way: a camera job sold as a flat $350 including two
+   hours on site, and quantity × hourly price made the quote read as hourly.
+   A flat-rate line is one dollar amount — quantity is always 1 and never
+   printed — and the words say what's included. It is NOT Sub, and was never
+   renamed to it: the ten price-book items carrying it (sewer camera, backflow
+   test, boiler service, haul-away) are his own fixed-price work, and Nov 9 he
+   confirmed Flat rate stays and Sub sits beside it.
+
+   RETIRED_KINDS stays as the mechanism for a tag that's still on records but
+   offered nowhere new. Nothing is in it today. */
 const LINE_KINDS = [
   { id:"labor", label:"Labor",            unit:"hr" },
   { id:"part",  label:"Material / Parts", unit:"ea" },
-  { id:"sub",   label:"Sub",              unit:"job" }
+  { id:"sub",   label:"Sub",              unit:"job" },
+  { id:"flat",  label:"Flat rate",        unit:"job" }
 ];
-const RETIRED_KINDS = [
-  { id:"flat",  label:"Fixed price",      unit:"job" }
-];
+const RETIRED_KINDS = [];
 const ALL_KINDS  = LINE_KINDS.concat(RETIRED_KINDS);
 const KIND_UNIT  = Object.fromEntries(ALL_KINDS.map(k => [k.id, k.unit]));
 const KIND_BY_ID = Object.fromEntries(ALL_KINDS.map(k => [k.id, k]));
@@ -1343,6 +1349,42 @@ function fmtClock(ms){
   return h ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
 }
 function hoursOf(ms){ return (Number(ms) || 0) / 3600000; }
+
+/* Money and quantities, read the way he'd write them: "1625", "1,625",
+   "$1,625.00", ".5", "12.345". These boxes used to be type="number", and a
+   number box on an iPhone shows "$1,625" on screen while handing the app an
+   empty string — which every reader then took as $0, or as nothing typed.
+   That is how a price looked entered and wasn't, and how a line could drop to
+   $0 when focus left it. Desktop number boxes also nudge by a step on a
+   scroll or arrow key, which is the stray cent.
+   Returns null for an empty box, NaN for something it can't read — never a
+   guess. A comma is a thousands separator only when exactly three digits
+   follow it; "4,20" is refused rather than read as 420 or 4.20. */
+function readAmount(v){
+  const s = String(v == null ? "" : v).trim().replace(/^\$\s*/, "").replace(/\s+/g, "");
+  if (s === "") return null;
+  const t = /^\d{1,3}(,\d{3})+(\.\d*)?$/.test(s) ? s.replace(/,/g, "") : s;
+  return /^(\d+(\.\d*)?|\.\d+)$/.test(t) ? Number(t) : NaN;
+}
+/* Rounded to the cent the way a till does it. The toFixed step stops
+   1.005 * 100 = 100.49999… from rounding down. */
+function cents(x){ return Math.round(Number(((Number(x) || 0) * 100).toFixed(6))) / 100; }
+/* Say so out loud and leave the record alone. The box keeps what he typed,
+   marked red, so he can see what was refused and fix it. */
+function refuseAmount(input){
+  // No focus-grab: this often runs as he's leaving the box, and yanking him
+  // back mid-tap is worse than the red border and the message.
+  if (input) input.classList.add("invalid");
+  const raw = input ? String(input.value).trim() : "";
+  toast(`Couldn't read "${raw}" as a number — not saved. Type it like 1625 or 1,625.50.`, "err");
+}
+/* Read a box: the number, or null when it was refused (and he's been told). */
+function amountFrom(input, emptyAs){
+  const n = readAmount(input && input.value);
+  if (Number.isNaN(n)){ refuseAmount(input); return null; }
+  if (input) input.classList.remove("invalid");
+  return n === null ? emptyAs : n;
+}
 /* For the datetime-local inputs used to correct a forgotten clock-out. */
 function toLocalInput(ts){
   if (!ts) return "";
@@ -1942,7 +1984,8 @@ const Cloud = {
     const payload = {
       no: "INV-" + Store.invoiceNoFor(job),
       date: fmtDate(job.invoicedOn || todayStr(), { month:"long", day:"numeric", year:"numeric" }),
-      customer: c.name || "", address: c.address || "", city: c.city || "", phone: c.phone ? fmtPhone(c.phone) : "",
+      customer: c.name || "", org: c.company || "", site: c.site || "",
+      address: c.address || "", city: c.city || "", phone: c.phone ? fmtPhone(c.phone) : "",
       type: Store.workLabel(job.type, job.service), jobNo: job.no,
       when: job.scheduledDate ? fmtDateLong(job.scheduledDate) : "",
       terms: Store.termsLine(job),
@@ -2064,12 +2107,14 @@ const Cloud = {
           no: e.no,
           created: fmtStamp(e.createdAt).split(" \u00b7 ")[0],
           customer: c.name,
+          org: c.company || "", site: c.site || "",
           address: [c.address, c.city].filter(Boolean).join(", "),
           description: v.description || "",
           flat,
           items: (v.items || []).map(i => flat
             ? ({ desc: i.desc, qty: 0, price: 0 })
-            : ({ desc:i.desc, qty:i.qty, price:i.price })),
+            : ({ desc:i.desc, qty:i.qty, price:i.price }))
+            .map((x, n) => (v.items[n] || {}).bold ? Object.assign(x, { bold: true }) : x),
           taxLabel: Store.taxLabel(),
           tax: Store.estimateTax(v), total: Store.estimateGross(v),
           validDays: days,
@@ -2810,7 +2855,11 @@ const Store = {
       techId: null, status: "new", completedAt: null,
       laborHours: 0, laborRate: this.data.settings.laborRate,
       payment: blankPayment(), timeEntries: [],
-      parts: (v.items || []).map(i => ({ desc: i.desc, qty: i.qty, price: i.price })),
+      /* The tag and bold come across so the job's split by kind is the
+         estimate's. Neither reaches the customer's invoice: jobOwnLines
+         copies only desc, qty and price. */
+      parts: (v.items || []).map(i => Object.assign({ desc: i.desc, qty: i.qty, price: i.price },
+        i.kind ? { kind: i.kind } : {}, i.bold ? { bold: true } : {})),
       // the van list comes with it, unticked items and all
       materials: (e.materials || []).map(m => Object.assign({}, m, { id: uid("mat") })),
       estimateId: e.id, quotedTotal: total,
@@ -2989,9 +3038,13 @@ const Store = {
   /* What the list says the parts came to, for anyone who bothered to enter
      costs. Offered to the job's parts-cost box rather than forced into it —
      the supplier's invoice is the real number. */
+  /* Each line is rounded to the cent before it's added, the way the till
+     prints a receipt. Unit prices come off receipts with three decimals, and
+     multiplying those out and rounding only at the end came to $86.30
+     against a receipt of $86.32. The receipt is the real number. */
   materialsCost(rec){
-    return this.materialsOf(rec)
-      .reduce((s,m) => s + (Number(m.cost) || 0) * (Number(m.qty) || 1), 0);
+    return cents(this.materialsOf(rec)
+      .reduce((s,m) => s + cents((Number(m.cost) || 0) * (Number(m.qty) || 1)), 0));
   },
 
   /* Everything still to be picked up, across every open job and estimate.
@@ -3558,7 +3611,8 @@ const Store = {
       option: opt ? this.estOptLabel(e, opt) : "",
       total: this.estimateTotal(v),
       gross: this.estimateGross(v),
-      items: (v.items || []).map(i => ({ desc:i.desc, qty:i.qty, price:i.price })),
+      items: (v.items || []).map(i => i.bold ? { desc:i.desc, qty:i.qty, price:i.price, bold:true }
+                                             : { desc:i.desc, qty:i.qty, price:i.price }),
       validDays: e.validDays || 30
     };
     if (e.status !== "approved"){ e.status = "approved"; e.decidedAt = Date.now(); }
@@ -5996,7 +6050,7 @@ function viewPickup(){
                     aria-label="Mark ${esc(m.text)} as picked up"></button>
             <span class="mat-q">${m.qty > 1 ? esc(m.qty) + "&times;" : ""}</span>
             <span class="mat-t">${esc(m.text)}</span>
-            <input class="input mat-c" type="number" min="0" step="0.01" placeholder="cost"
+            <input class="input mat-c" type="text" inputmode="decimal" placeholder="cost"
                    value="${m.cost == null ? "" : esc(m.cost)}"
                    data-mat-cost="${g.kind}:${g.rec.id}:${m.id}" aria-label="What it cost">
           </li>`).join("")}
@@ -6571,7 +6625,7 @@ function openInvPayment(id){
       </div>
       <div class="row2">
         <div class="field"><label>How much came in</label>
-          <input class="input" id="ipay-amt" type="number" min="0" step="0.01" value="${esc(bal.toFixed(2))}">
+          <input class="input" id="ipay-amt" type="text" inputmode="decimal" value="${esc(bal.toFixed(2))}">
           <div class="hint">The whole balance is filled in already. Change it for a part payment.</div></div>
         <div class="field"><label>How it came in</label>
           <select class="input" id="ipay-method">
@@ -6942,7 +6996,14 @@ function viewData(){
           <div class="row2">
             <div class="field"><label>Business email</label>
               <input class="input" id="set-email" type="email" value="${esc(d.settings.email)}"
-                     placeholder="admin@yourdomain.ca"></div>
+                     placeholder="admin@yourdomain.ca">
+              <div class="field" style="margin:8px 0 0"><label>Email buttons open</label>
+                <select class="input" id="set-mailvia">
+                  <option value="device"${d.settings.mailVia === "gmail" ? "" : " selected"}>This phone's mail app</option>
+                  <option value="gmail"${d.settings.mailVia === "gmail" ? " selected" : ""}>Gmail, as the business email</option>
+                </select>
+                <div class="hint">Gmail opens a new message from the address above, so it doesn't land in a personal inbox.
+                  You still press send there.</div></div></div>
             <div class="field"><label>Website</label>
               <input class="input" id="set-website" value="${esc(d.settings.website)}"
                      placeholder="yourdomain.ca"></div>
@@ -7271,6 +7332,8 @@ function viewSearch(){
   const custHit = c =>
     c.name.toLowerCase().includes(q) ||
     (c.address||"").toLowerCase().includes(q) ||
+    (c.company||"").toLowerCase().includes(q) ||
+    (c.site||"").toLowerCase().includes(q) ||
     (c.email||"").toLowerCase().includes(q) ||
     (digits.length >= 3 && String(c.phone||"").replace(/\D/g,"").includes(digits));
 
@@ -7348,6 +7411,13 @@ function openModal(html, opts){
   if (typeof fillLeadShots === "function") fillLeadShots();
 }
 function closeModal(){
+  /* Escape, or anything else that closes the sheet with the cursor still in
+     a box, used to throw away what was typed: the box was removed before it
+     ever lost focus, so its change never fired. Blurring first saves it
+     through the same path as tabbing out. If that refuses the value, the
+     warning says "not saved" and the record keeps what it had. */
+  const a = document.activeElement;
+  if (a && a.blur && $("#modal-root").contains(a)) a.blur();
   $("#modal-root").innerHTML = "";
   document.body.style.overflow = "";
   forgetPlaceModal();
@@ -7474,16 +7544,18 @@ function openJob(id){
         <thead><tr><th>Item</th><th class="num" style="width:70px">Qty</th><th class="num" style="width:100px">Price</th><th class="num" style="width:100px">Line</th><th style="width:40px"></th></tr></thead>
         <tbody>
           ${parts.map((p,i) => `<tr>
-            <td>${esc(p.desc)}</td>
+            <td>${lineDescHtml(p)}${p.kind ? ` <span class="chip">${esc((KIND_BY_ID[p.kind] || { label: p.kind }).label)}</span>` : ""}</td>
             <td class="num">${esc(p.qty)}</td>
             <td class="num">${esc(money(p.price))}</td>
             <td class="num">${esc(money((Number(p.qty)||0)*(Number(p.price)||0)))}</td>
             <td class="num"><button class="btn sm ghost" data-del-part="${j.id}:${i}" title="Remove">×</button></td>
           </tr>`).join("")}
           <tr>
-            <td><input class="input" id="part-desc" placeholder="Add a part or material…"></td>
-            <td><input class="input num" id="part-qty" type="number" min="0" step="1" value="1"></td>
-            <td><input class="input" id="part-price" type="number" min="0" step="0.01" placeholder="0.00"></td>
+            <td style="display:flex;gap:6px"><input class="input" id="part-desc" placeholder="Add a part or material…">
+              <select class="input" id="part-kind" style="width:auto;flex:0 0 auto" aria-label="Tag">
+                <option value="">No tag</option>${LINE_KINDS.map(k => kindOption(k.id, "")).join("")}</select></td>
+            <td><input class="input num" id="part-qty" type="text" inputmode="decimal" value="1"></td>
+            <td><input class="input" id="part-price" type="text" inputmode="decimal" placeholder="0.00"></td>
             <td colspan="2"><button class="btn sm" data-add-part="${j.id}">Add</button></td>
           </tr>
           <tr>
@@ -7498,6 +7570,9 @@ function openJob(id){
             <td colspan="3" class="t-strong" style="text-align:right">Job total</td>
             <td class="num t-strong">${esc(money(partsTotal + laborTotal))}</td><td></td>
           </tr>
+          ${(() => { const h = kindSplitHtml(parts.concat((Number(j.laborHours)||0)
+              ? [{ kind:"labor", qty: j.laborHours, price: j.laborRate }] : []));
+            return h ? `<tr><td colspan="5" style="text-align:right">${h}</td></tr>` : ""; })()}
           <tr>
             <td colspan="2" style="text-align:right">
               <label for="job-flat" class="t-strong">Flat price for the whole job</label>
@@ -7505,7 +7580,7 @@ function openJob(id){
                 ${Store.jobIsFlat(j)
                   ? "Quoted flat — the lines above are the scope."
                   : "Leave it empty and the lines above are added up."}</div></td>
-            <td class="num"><input class="input num" type="number" min="0" step="0.01"
+            <td class="num"><input class="input num" type="text" inputmode="decimal"
                  id="job-flat" data-job-flat="${j.id}" placeholder="0.00" style="width:90px"
                  value="${esc(Store.jobIsFlat(j) ? Number(j.flatPrice) : "")}"></td>
             <td class="num t-sub">${Store.jobIsFlat(j) ? "what they owe" : ""}</td><td></td>
@@ -7513,7 +7588,7 @@ function openJob(id){
           <tr>
             <td colspan="2" class="t-sub" style="text-align:right">
               What the parts cost <em>you</em> <span class="t-sub">(optional)</span></td>
-            <td class="num"><input class="input" id="mat-cost" type="number" min="0" step="0.01"
+            <td class="num"><input class="input" id="mat-cost" type="text" inputmode="decimal"
                  value="${j.materialCost ? esc(j.materialCost) : ""}" placeholder="0.00" style="width:90px"></td>
             <td class="num t-sub">${j.materialCost
               ? "leaves " + esc(money(partsTotal + laborTotal - j.materialCost))
@@ -7578,7 +7653,7 @@ function openJob(id){
               ${PAY_STATUSES.map(x=>`<option value="${x.id}"${x.id===pay.status?" selected":""}>${esc(x.label)}</option>`).join("")}
             </select></div>
           <div class="field"><label>Amount received</label>
-            <input class="input" id="pay-amount" type="number" min="0" step="0.01" value="${esc(pay.amountPaid||0)}">
+            <input class="input" id="pay-amount" type="text" inputmode="decimal" value="${esc(pay.amountPaid||0)}">
             <div class="hint">Leave at 0 and mark Paid to record payment in full.</div></div>
           <div class="field"><label>Method</label>
             <select class="input" id="pay-method">
@@ -8019,7 +8094,7 @@ function openEstimate(id){
               ${open ? "disabled" : ""}>${open ? "editing" : "edit"}</button>
             <input class="input" data-opt-label="${e.id}:${o.optId}" value="${esc(o.label || "")}"
                    placeholder="${esc(Store.estOptLabel(e, o))}" aria-label="What to call this option">
-            <div class="t-strong" style="white-space:nowrap">${esc(money(t))}
+            <div class="t-strong" style="white-space:nowrap"><span data-opt-total="${esc(o.optId)}">${esc(money(t))}</span>
               ${(o.items || []).length ? `<span class="t-sub" style="font-weight:400">·
                 ${(o.items || []).length} line${(o.items || []).length === 1 ? "" : "s"}</span>` : ""}</div>
             ${badge}
@@ -8052,18 +8127,22 @@ function openEstimate(id){
         </tr></thead>
         <tbody>
           ${items.map((it,i) => `<tr data-line-row="${i}">
-            <td><textarea class="input li-edit li-desc" rows="1"
+            <td><textarea class="input li-edit li-desc${it.bold ? " li-bold" : ""}" rows="1"
                   data-line-edit="${e.id}:${i}:desc">${esc(it.desc)}</textarea></td>
             <td><select class="input li-edit" data-line-edit="${e.id}:${i}:kind">
                   ${kindOptions(it.kind)}
                 </select></td>
-            <td><input class="input li-edit num" type="number" step="0.5" min="0"
-                  data-line-edit="${e.id}:${i}:qty" value="${esc(it.qty)}"></td>
-            <td><input class="input li-edit num" type="number" step="0.01" min="0"
+            <td>${it.kind === "flat"
+              ? `<span class="t-sub" title="A flat-rate line is one amount — no quantity">flat</span>`
+              : `<input class="input li-edit num" type="text" inputmode="decimal"
+                  data-line-edit="${e.id}:${i}:qty" value="${esc(it.qty)}">`}</td>
+            <td><input class="input li-edit num" type="text" inputmode="decimal"
                   data-line-edit="${e.id}:${i}:price" value="${esc(Number(it.price) || 0)}"></td>
             <td class="num t-strong" data-line-total="${i}">${esc(money((Number(it.qty)||0)*(Number(it.price)||0)))}</td>
             <td class="li-act">
-              <button class="btn sm ghost" data-line-move="${e.id}:${i}:-1"
+              <button class="btn sm ghost${it.bold ? " on" : ""}" data-line-bold="${e.id}:${i}"
+                      title="${it.bold ? "Bold — tap for plain" : "Make this line bold"}" aria-pressed="${!!it.bold}"
+                      style="font-weight:800">B</button><button class="btn sm ghost" data-line-move="${e.id}:${i}:-1"
                       title="Move up" ${i===0?"disabled":""}>↑</button><button
                       class="btn sm ghost" data-line-move="${e.id}:${i}:1"
                       title="Move down" ${i===items.length-1?"disabled":""}>↓</button><button
@@ -8088,10 +8167,10 @@ function openEstimate(id){
                   <input class="input" id="line-desc" placeholder="What's being done or supplied"></div>
                 <div class="field" style="margin-bottom:0"><label>Kind</label>
                   <select class="input" id="line-kind">${kindOptions("")}</select></div>
-                <div class="field" style="margin-bottom:0"><label>Qty</label>
-                  <input class="input" id="line-qty" type="number" min="0" step="0.25" value="1"></div>
-                <div class="field" style="margin-bottom:0"><label>Unit price</label>
-                  <input class="input" id="line-price" type="number" min="0" step="0.01" placeholder="0.00"></div>
+                <div class="field" style="margin-bottom:0" id="line-qty-f"><label>Qty</label>
+                  <input class="input" id="line-qty" type="text" inputmode="decimal" value="1"></div>
+                <div class="field" style="margin-bottom:0"><label id="line-price-l">Unit price</label>
+                  <input class="input" id="line-price" type="text" inputmode="decimal" placeholder="0.00"></div>
                 <button class="btn primary" data-add-line="${e.id}">Add line</button>
               </div>
               <label style="display:flex;gap:7px;align-items:center;margin-top:10px;font-size:12.5px;color:var(--muted)">
@@ -8107,7 +8186,7 @@ function openEstimate(id){
                   ? "The lines are the scope; this is the price."
                   : "Leave it empty and the lines are added up instead."}</div>
             </td>
-            <td class="num"><input class="input li-edit num" type="number" step="0.01" min="0"
+            <td class="num"><input class="input li-edit num" type="text" inputmode="decimal"
                  id="est-flat" data-est-flat="${e.id}" placeholder="0.00"
                  value="${esc(Store.estIsFlat(bk) ? Number(bk.flatPrice) : "")}"></td><td></td>
           </tr>
@@ -8116,6 +8195,8 @@ function openEstimate(id){
               ? "Estimate total" : esc(Store.estOptLabel(e, bk)) + " total"}</td>
             <td class="num money-lg" data-est-total>${esc(money(total))}</td><td></td>
           </tr>
+          ${(() => { const h = kindSplitHtml(items);
+            return h ? `<tr><td colspan="6" style="text-align:right">${h}</td></tr>` : ""; })()}
         </tbody>
       </table>
 
@@ -9160,7 +9241,7 @@ function materialsPanel(kind, rec){
             <span class="mat-t">${esc(m.text)}</span>
             ${m.from === "estimate" && kind === "job"
               ? `<span class="mat-src" title="Listed when you quoted it">quoted</span>` : ""}
-            <input class="input mat-c" type="number" min="0" step="0.01" placeholder="cost"
+            <input class="input mat-c" type="text" inputmode="decimal" placeholder="cost"
                    value="${m.cost == null ? "" : esc(m.cost)}"
                    data-mat-cost="${kind}:${rec.id}:${m.id}" aria-label="What it cost">
             <button class="btn sm ghost" data-mat-del="${kind}:${rec.id}:${m.id}" title="Remove">&times;</button>
@@ -9274,7 +9355,8 @@ function openTimeEdit(kind, recId, entryId){
         <div class="field"><label>Day</label>
           <input class="input" id="te-day" type="date" value="${esc(day)}"></div>
         <div class="field"><label>Hours</label>
-          <input class="input" id="te-hours" inputmode="decimal" placeholder="0.5" value="${esc(hrs)}"></div>
+          <input class="input" id="te-hours" inputmode="decimal" value="${esc(hrs)}">
+          <div class="t-sub" style="margin-top:3px">Like 0.5 or 1:30</div></div>
       </div>
       <div class="field" style="margin-top:4px"><label>What was it <span class="t-sub">(optional)</span></label>
         <input class="input" id="te-label" maxlength="60" placeholder="e.g. wholesaler run" value="${esc((e && e.label) || "")}">
@@ -9442,9 +9524,7 @@ function renderMessageSheet(){
     const sms = $("#msg-sms"), mail = $("#msg-mail");
     // "?&body=" keeps both iOS and Android happy.
     if (sms) sms.href = `sms:${tel}?&body=${encodeURIComponent(txt)}`;
-    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
-      `?subject=${encodeURIComponent(Store.data.settings.company + " — job #" + job.no)}` +
-      `&body=${encodeURIComponent(txt)}`;
+    setMailLink(mail, c.email, Store.data.settings.company + " — job #" + job.no, txt);
   };
   ta.addEventListener("input", sync);
   sync();
@@ -10090,7 +10170,7 @@ function openPriceForm(id){
         <div class="field"><label>Kind</label>
           <select class="input" id="pb-kind">${kindOptions(i ? i.kind : "", true)}</select></div>
         <div class="field"><label>Price *</label>
-          <input class="input" id="pb-price" type="number" min="0" step="0.01" value="${esc(i?i.price:"")}"></div>
+          <input class="input" id="pb-price" type="text" inputmode="decimal" value="${esc(i?i.price:"")}"></div>
       </div>
     </div>
     <div class="modal-foot"><div class="spacer"></div>
@@ -10101,9 +10181,9 @@ function openPriceForm(id){
 
 function savePriceFromForm(id){
   const desc = $("#pb-desc").value.trim();
-  const price = Number($("#pb-price").value);
   if (!desc){ $("#pb-desc").classList.add("invalid"); $("#pb-desc").focus(); return; }
-  if (!(price >= 0)){ $("#pb-price").classList.add("invalid"); $("#pb-price").focus(); return; }
+  const price = amountFrom($("#pb-price"), 0);
+  if (price === null) return;
   const fields = { desc, price, kind: $("#pb-kind").value };
   if (id){ Object.assign(Store.priceItem(id), fields); toast("Price updated", "ok"); }
   else { Store.addPriceItem(fields); toast("Added to price book", "ok"); }
@@ -10191,7 +10271,14 @@ function openCustomerForm(id){
         <div class="field"><label>Name *</label><input class="input" id="c-name" value="${esc(c?c.name:"")}" placeholder="Homeowner or business"></div>
         <div class="field"><label>Phone</label><input class="input" id="c-phone" value="${esc(c?fmtPhone(c.phone):"")}"></div>
       </div>
-      <div class="field"><label>Email</label><input class="input" id="c-email" value="${esc(c?c.email:"")}"></div>
+      <div class="row2">
+        <div class="field"><label>Email</label><input class="input" id="c-email" value="${esc(c?c.email:"")}"></div>
+        <div class="field"><label>Company <span class="t-sub">(optional)</span></label>
+          <input class="input" id="c-company" value="${esc(c&&c.company||"")}" placeholder="If they're quoting for one"></div>
+      </div>
+      <div class="hint" style="margin:-6px 0 10px">Quotes and invoices still go to the person by name; the company shows under it.</div>
+      <div class="field"><label>Place name <span class="t-sub">(optional)</span></label>
+        <input class="input" id="c-site" value="${esc(c&&c.site||"")}" placeholder="e.g. a building or business at the address"></div>
       <div class="row2">
         <div class="field"><label>Service address</label><input class="input" id="c-address" value="${esc(c?c.address:"")}"></div>
         <div class="field"><label>City</label><input class="input" id="c-city" value="${esc(c?c.city:"Edmonton")}"></div>
@@ -10217,6 +10304,7 @@ function saveCustomerFromForm(id){
   const fields = {
     name, phone:$("#c-phone").value.trim(), email:$("#c-email").value.trim(),
     address:$("#c-address").value.trim(), city:$("#c-city").value.trim(),
+    company:$("#c-company").value.trim(), site:$("#c-site").value.trim(),
     zone:$("#c-zone").value, notes:$("#c-notes").value.trim()
   };
   if (id){ Object.assign(Store.customer(id), fields); toast("Customer updated","ok"); }
@@ -10359,6 +10447,8 @@ async function invoiceDocHtml(j){
         <td style="width:50%" valign="top">
           <strong>Billed to</strong><br>
           ${esc(c ? c.name : "—")}<br>
+          ${c && c.company ? esc(c.company) + "<br>" : ""}
+          ${c && c.site ? esc(c.site) + "<br>" : ""}
           ${c && c.address ? esc(c.address) + "<br>" : ""}
           ${c && c.city ? esc(c.city) + "<br>" : ""}
           ${c && c.phone ? esc(fmtPhone(c.phone)) : ""}
@@ -10442,7 +10532,7 @@ function estDocMoneyTable(v){
     <table>
       <thead><tr><th style="text-align:left">What's included</th></tr></thead>
       <tbody>
-        ${(v.items||[]).map(i => `<tr><td>${esc(i.desc)}</td></tr>`).join("")}
+        ${(v.items||[]).map(i => `<tr><td>${lineDescHtml(i)}</td></tr>`).join("")}
         ${Store.taxRate() ? `<tr>
           <td style="text-align:right">Subtotal &nbsp; ${esc(money(total))}</td></tr>
         <tr>
@@ -10459,9 +10549,11 @@ function estDocMoneyTable(v){
       </tr></thead>
       <tbody>
         ${(v.items||[]).map(i => `<tr>
-          <td>${esc(i.desc)}</td>
-          <td style="text-align:right">${esc(i.qty)}${esc(KIND_UNIT[i.kind]==="hr"?" hr":"")}</td>
-          <td style="text-align:right">${esc(money(i.price))}</td>
+          <td>${lineDescHtml(i)}</td>
+          ${i.kind === "flat"
+            ? `<td></td><td></td>`
+            : `<td style="text-align:right">${esc(i.qty)}${esc(KIND_UNIT[i.kind]==="hr"?" hr":"")}</td>
+          <td style="text-align:right">${esc(money(i.price))}</td>`}
           <td style="text-align:right">${esc(money((Number(i.qty)||0)*(Number(i.price)||0)))}</td>
         </tr>`).join("")}
         ${Store.taxRate() ? `<tr>
@@ -10500,8 +10592,9 @@ function estimateDocHtml(e){
 
     <table style="margin-bottom:14px">
       <tr><td style="width:130px"><strong>Prepared for</strong></td>
-          <td>${esc(c.name)}${c.phone?` · ${esc(fmtPhone(c.phone))}`:""}</td></tr>
-      <tr><td><strong>Address</strong></td><td>${esc([c.address,c.city].filter(Boolean).join(", "))}</td></tr>
+          <td>${esc(c.name)}${c.phone?` · ${esc(fmtPhone(c.phone))}`:""}${
+            c.company ? `<br>${esc(c.company)}` : ""}</td></tr>
+      <tr><td><strong>Address</strong></td><td>${c.site ? `${esc(c.site)}<br>` : ""}${esc([c.address,c.city].filter(Boolean).join(", "))}</td></tr>
       <tr><td><strong>Work</strong></td><td>${esc(e.type)}</td></tr>
       <tr><td valign="top"><strong>Scope</strong></td><td>${esc(e.description)}</td></tr>
     </table>
@@ -10777,9 +10870,7 @@ async function sendInvoiceLink(id){
     const txt = ta.value;
     const sms = $("#iv-sms"), mail = $("#iv-mail");
     if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(txt)}`;
-    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
-      `?subject=${encodeURIComponent(Store.data.settings.company + " — invoice INV-" + j.invoiceNo)}` +
-      `&body=${encodeURIComponent(txt)}`;
+    setMailLink(mail, c.email, Store.data.settings.company + " — invoice INV-" + j.invoiceNo, txt);
   };
   ta.addEventListener("input", sync); sync();
   if (fresh) toast(`INV-${j.invoiceNo} is in Invoices now`, "ok");
@@ -10993,9 +11084,7 @@ async function sendForSignature(id){
     const txt = ta.value;
     const sms = $("#lk-sms"), mail = $("#lk-mail");
     if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g,"")}?&body=${encodeURIComponent(txt)}`;
-    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
-      `?subject=${encodeURIComponent(Store.data.settings.company + " — estimate EST-" + e.no)}` +
-      `&body=${encodeURIComponent(txt)}`;
+    setMailLink(mail, c.email, Store.data.settings.company + " — estimate EST-" + e.no, txt);
   };
   ta.addEventListener("input", sync);
   sync();
@@ -11090,7 +11179,7 @@ function openEstimateSign(id){
         <table class="inv-meta" style="width:100%;border-collapse:collapse">
           ${items.map(i => `<tr>
             <td style="padding:7px 12px;border-bottom:1px solid var(--line)"${Store.estIsFlat(v) ? ' colspan="2"' : ''}>
-              ${Store.estIsFlat(v) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${esc(i.desc)}</td>
+              ${Store.estIsFlat(v) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${lineDescHtml(i)}</td>
             ${Store.estIsFlat(v) ? "" : `<td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
               ${esc(money(i.qty * i.price))}</td>`}</tr>`).join("")}
         </table>
@@ -11251,8 +11340,7 @@ ${st.company}`;
     const n = $("#est-count");
     if (n) n.textContent = txt.length + " characters";
     const mail = $("#est-mail"), sms = $("#est-sms");
-    if (mail) mail.href = `mailto:${encodeURIComponent(c.email)}` +
-      `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(txt)}`;
+    setMailLink(mail, c.email, subject, txt);
     if (sms) sms.href = `sms:${String(c.phone).replace(/[^\d+]/g, "")}?&body=${encodeURIComponent(txt)}`;
   };
   ta.addEventListener("input", sync);
@@ -11465,7 +11553,11 @@ document.addEventListener("click", e => {
     const desc = $("#part-desc").value.trim();
     if (!desc){ $("#part-desc").focus(); return; }
     j.parts = j.parts || [];
-    j.parts.push({ desc, qty: Number($("#part-qty").value) || 1, price: Number($("#part-price").value) || 0 });
+    const qty = amountFrom($("#part-qty"), 1), price = amountFrom($("#part-price"), 0);
+    if (qty === null || price === null) return;
+    const kind = ($("#part-kind") || {}).value || "";
+    j.parts.push(kind ? { desc, qty: kind === "flat" ? 1 : (qty || 1), price, kind }
+                      : { desc, qty: qty || 1, price });
     Store.addLog(j, `Part added: ${desc}`);
     Store.save(); openJob(j.id);
     return;
@@ -11565,7 +11657,8 @@ document.addEventListener("click", e => {
   if (ipaySave){
     const j = Store.job(ipaySave.dataset.ipaySave);
     if (!j) return;
-    const came  = Math.max(0, Number($("#ipay-amt").value) || 0);
+    const came  = amountFrom($("#ipay-amt"), 0);
+    if (came === null) return;
     const had   = Number((j.payment || {}).amountPaid) || 0;
     const total = Store.invoiceTotal(j);
     const now   = Math.round((had + came) * 100) / 100;
@@ -11764,9 +11857,11 @@ document.addEventListener("click", e => {
   const savePay = hit("[data-save-pay]");
   if (savePay){
     const j = Store.job(savePay.dataset.savePay);
+    const paid = amountFrom($("#pay-amount"), 0);
+    if (paid === null) return;
     Store.setPayment(j, {
       status: $("#pay-status").value,
-      amountPaid: Number($("#pay-amount").value) || 0,
+      amountPaid: paid,
       method: $("#pay-method").value,
       ref: $("#pay-ref").value.trim(),
       url: $("#pay-url").value.trim()
@@ -11818,7 +11913,9 @@ document.addEventListener("click", e => {
   const saveMat = hit("[data-save-matcost]");
   if (saveMat){
     const j = Store.job(saveMat.dataset.saveMatcost);
-    j.materialCost = Number($("#mat-cost").value) || 0;
+    const mc = amountFrom($("#mat-cost"), 0);
+    if (mc === null) return;
+    j.materialCost = mc;
     Store.save(); openJob(j.id); toast("Parts cost saved", "ok");
     return;
   }
@@ -12056,9 +12153,11 @@ document.addEventListener("click", e => {
     const item = {
       desc,
       kind:  $("#line-kind").value,
-      qty:   Number($("#line-qty").value) || 1,
-      price: Number($("#line-price").value) || 0
+      qty:   amountFrom($("#line-qty"), 1),
+      price: amountFrom($("#line-price"), 0)
     };
+    if (item.qty === null || item.price === null) return;
+    item.qty = item.kind === "flat" ? 1 : (item.qty || 1);
     bk.items = bk.items || [];
     bk.items.push(item);
     Store.addEstLog(e, `Line added: ${desc}` +
@@ -12075,6 +12174,19 @@ document.addEventListener("click", e => {
      sequence was to delete and retype the lot. Same splice-and-reopen as
      the remove button; a line edit saves on blur, which happens before this
      click, so nothing typed is lost to the rebuild. */
+  /* Bold: a heading, or a flat-rate section subtotal that should stand out.
+     The rebuild is safe for the same reason as moving a line: a line edit
+     saves on blur, before this click lands. */
+  const lineBold = hit("[data-line-bold]");
+  if (lineBold){
+    const [eid, idx] = lineBold.dataset.lineBold.split(":");
+    const est = Store.estimate(eid);
+    const it = est && (Store.estBucket(est).items || [])[Number(idx)];
+    if (!it) return;
+    if (it.bold) delete it.bold; else it.bold = true;
+    Store.save(); openEstimate(eid);
+    return;
+  }
   const lineMove = hit("[data-line-move]");
   if (lineMove){
     const [eid, idx, dir] = lineMove.dataset.lineMove.split(":");
@@ -12385,6 +12497,7 @@ document.addEventListener("click", e => {
       s.company = $("#set-company").value.trim() || "Poseidon Plumbing & Gasfitting Ltd.";
       s.phone   = $("#set-phone").value.trim();
       s.email   = $("#set-email").value.trim();
+      s.mailVia = $("#set-mailvia").value === "gmail" ? "gmail" : "device";
       s.website = $("#set-website").value.trim().replace(/^https?:\/\//, "");
       s.address = $("#set-address").value.trim();
       s.gst     = $("#set-gst").value.trim();
@@ -12423,18 +12536,119 @@ function saveLineEdit(t){
   if (!it) return;
 
   const was = it[field];
+  const lineWas = (Number(it.qty)||0) * (Number(it.price)||0);
+  /* Made flat: two hours at $175 becomes one $350 amount, so the line is
+     worth exactly what it was and nothing on it reads as hourly any more.
+     The sheet is rebuilt so the quantity box goes. */
+  if (field === "kind" && t.value === "flat" && was !== "flat"){
+    it.kind = "flat";
+    if ((Number(it.qty)||0) !== 1){ it.price = cents(lineWas); it.qty = 1; }
+    Store.save();
+    return openEstimate(eid);
+  }
+  if (field === "kind" && was === "flat" && t.value !== "flat"){
+    it.kind = t.value.trim();
+    Store.save();
+    return openEstimate(eid);
+  }
   if (field === "desc" || field === "kind") it[field] = t.value.trim();
-  else it[field] = Math.max(0, Number(t.value) || 0);
+  else {
+    // An empty box is a deliberate 0; something unreadable changes nothing.
+    const n = amountFrom(t, 0);
+    if (n === null) return;
+    it[field] = n;
+  }
   if (String(was) === String(it[field])) return;
 
+  /* A line's money only moves when that line is edited, and now every time
+     it does there's a line in the activity saying so — a price that changed
+     with nobody looking is exactly what that log is for. */
+  const lineNow = (Number(it.qty)||0) * (Number(it.price)||0);
+  if (lineNow !== lineWas)
+    Store.addEstLog(est, `Line changed: ${String(it.desc || "").split("\n")[0].slice(0,60) || "(no description)"}` +
+      ` — ${money(lineWas)} → ${money(lineNow)}` + (bk === est ? "" : ` (${Store.estOptLabel(est, bk)})`));
   Store.save();
 
   const row = t.closest("tr");
   const cell = row && row.querySelector("[data-line-total]");
-  if (cell) cell.textContent = money((Number(it.qty)||0) * (Number(it.price)||0));
-  const tot = document.querySelector("[data-est-total]");
-  if (tot) tot.textContent = money(Store.estimateTotal(bk));
+  if (cell) cell.textContent = money(lineNow);
+  refreshEstTotals(est);
   renderQuiet();
+}
+
+/* Every Email button goes through here. Left alone it hands the message to
+   the phone's own mail app, which on his phone is a personal Hotmail inbox:
+   a quote went out from there and had to be moved to the business Gmail
+   by hand, in a parking lot. With "Gmail" chosen in Settings it opens a new
+   Gmail message instead, with authuser naming the business address so a
+   browser signed in to more than one Google account picks that one. Either
+   way he presses send himself, and the app still asks whether it went. */
+function setMailLink(a, to, subject, body){
+  if (!a) return;
+  const st = Store.data.settings;
+  if (st.mailVia === "gmail"){
+    const enc = encodeURIComponent;   // %20 for spaces, not "+"
+    a.href = "https://mail.google.com/mail/?" + (st.email ? `authuser=${enc(st.email)}&` : "") +
+      `view=cm&fs=1&to=${enc(to || "")}&su=${enc(subject || "")}&body=${enc(body || "")}`;
+    a.target = "_blank"; a.rel = "noopener";
+  } else {
+    a.href = `mailto:${encodeURIComponent(to || "")}` +
+      `?subject=${encodeURIComponent(subject || "")}&body=${encodeURIComponent(body || "")}`;
+    a.removeAttribute("target");
+  }
+}
+
+/* A line's words for a printed sheet: bold when he's marked it as a heading
+   or subtotal, otherwise plain. Only a line he marked carries the flag, so
+   nothing already sent changes shape. */
+function lineDescHtml(i){
+  const d = esc(i && i.desc || "");
+  return i && i.bold ? `<strong>${d}</strong>` : d;
+}
+
+/* Labour, materials, sub and flat rate, added up separately — the reason
+   the tags exist. Only lines with money count. A line with no tag shows as
+   "Not tagged", never folded into Labor: unknown reads as unknown. */
+function kindSplit(lines){
+  const by = new Map();
+  (lines || []).forEach(l => {
+    const amt = (Number(l.qty)||0) * (Number(l.price)||0);
+    if (!amt) return;
+    const k = l.kind || "";
+    by.set(k, (by.get(k) || 0) + amt);
+  });
+  const order = LINE_KINDS.map(k => k.id);
+  return [...by.entries()]
+    .sort((a,b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99))
+    .map(([k, amt]) => ({ kind: k, label: k ? (KIND_BY_ID[k] || { label: k }).label : "Not tagged", amt: cents(amt) }));
+}
+function kindSplitHtml(lines){
+  const sp = kindSplit(lines);
+  if (!sp.length || (sp.length === 1 && !sp[0].kind)) return "";
+  return `<div class="t-sub kind-split" style="margin-top:8px">Lines by kind: ${
+    sp.map(x => `${esc(x.label)} <strong>${esc(money(x.amt))}</strong>`).join(" · ")}</div>`;
+}
+
+/* A flat-rate line is one amount: the add-line form drops its quantity box
+   and calls the price what it is. */
+function lineFormKind(){
+  const flat = ($("#line-kind") || {}).value === "flat";
+  const f = $("#line-qty-f"), l = $("#line-price-l"), q = $("#line-qty");
+  if (f) f.style.display = flat ? "none" : "";
+  if (l) l.textContent = flat ? "Amount" : "Unit price";
+  if (flat && q) q.value = "1";
+}
+
+/* The estimate's total and every option's price, redrawn in place. The
+   option rows were only drawn when the estimate opened, so a price typed in
+   showed up there only after a reload. */
+function refreshEstTotals(est){
+  const tot = document.querySelector("[data-est-total]");
+  if (tot) tot.textContent = money(Store.estimateTotal(Store.estBucket(est)));
+  (Store.estOptions(est) || []).forEach(o => {
+    const c = document.querySelector(`[data-opt-total="${o.optId}"]`);
+    if (c) c.textContent = money(Store.estimateTotal(Store.estAsOption(est, o)));
+  });
 }
 
 document.addEventListener("change", e => {
@@ -12454,7 +12668,9 @@ document.addEventListener("change", e => {
   if (t.dataset && t.dataset.jobFlat){
     const j = Store.job(t.dataset.jobFlat);
     if (!j) return;
-    Store.setJobFlatPrice(j, t.value);
+    const n = amountFrom(t, 0);
+    if (n === null) return;
+    Store.setJobFlatPrice(j, n);
     render(); openJob(j.id);
     return;
   }
@@ -12466,7 +12682,8 @@ document.addEventListener("change", e => {
     const btn = row && row.querySelector("[data-save-matcost]");
     const j = btn && Store.job(btn.dataset.saveMatcost);
     if (!j) return;
-    const n = Math.max(0, Number(t.value) || 0);
+    const n = amountFrom(t, 0);
+    if (n === null) return;
     if (n === (Number(j.materialCost) || 0)) return;
     j.materialCost = n || null;
     Store.save(); render(); openJob(j.id);
@@ -12477,9 +12694,10 @@ document.addEventListener("change", e => {
   if (t.dataset && t.dataset.estFlat){
     const est = Store.estimate(t.dataset.estFlat);
     if (!est) return;
-    Store.setFlatPrice(est, t.value);
-    const tot = document.querySelector("[data-est-total]");
-    if (tot) tot.textContent = money(Store.estimateTotal(Store.estBucket(est)));
+    const n = amountFrom(t, 0);
+    if (n === null) return;
+    Store.setFlatPrice(est, n);
+    refreshEstTotals(est);
     renderQuiet();
     return;
   }
@@ -12518,11 +12736,13 @@ document.addEventListener("change", e => {
           kindSel.insertAdjacentHTML("beforeend", kindOption(i.kind, i.kind));
         kindSel.value = i.kind;
       }
-      $("#line-qty").focus();
-      $("#line-qty").select();
+      lineFormKind();
+      if (i.kind === "flat") $("#line-price").focus();
+      else { $("#line-qty").focus(); $("#line-qty").select(); }
     }
     return;
   }
+  if (t.id === "line-kind"){ lineFormKind(); return; }
 
   if (t.dataset.setstatus){
     const j = Store.job(t.dataset.setstatus);
@@ -12582,11 +12802,30 @@ document.addEventListener("change", e => {
   const c = e.target.closest("[data-mat-cost]");
   if (!c) return;
   const [k,id,mid] = c.dataset.matCost.split(":");
-  const v = c.value.trim();
-  Store.setMaterial(k, id, mid, { cost: v === "" ? null : Number(v) });
+  const v = amountFrom(c, "");
+  if (v === null) return;
+  const was = (Store.materialsOf(Store.recordOf(k, id)).find(x => x.id === mid) || {}).cost;
+  const now = v === "" ? null : v;
+  if (was === now) return;   // nothing changed — don't rebuild under his cursor
+  Store.setMaterial(k, id, mid, { cost: now });
   if (App.view === "pickup") return;
   const sum = $(".mat-sum");
   if (sum) refreshMaterials(k, id);
+});
+
+/* Anything copied out of the app goes as plain words. A browser copy of a
+   selection carries the page's colours and fonts with it, and pasted into an
+   email those came out as text nobody could see until it was recoloured.
+   The Copy buttons already wrote plain text; this covers a hand selection. */
+document.addEventListener("copy", e => {
+  const f = document.activeElement;
+  let text = "";
+  if (f && (f.tagName === "TEXTAREA" || f.tagName === "INPUT") && typeof f.selectionStart === "number")
+    text = f.value.slice(f.selectionStart, f.selectionEnd);
+  else text = String(window.getSelection ? window.getSelection() : "");
+  if (!text || !e.clipboardData) return;   // nothing we can see: leave the browser to it
+  e.clipboardData.setData("text/plain", text);
+  e.preventDefault();
 });
 
 let searchTimer = null;

@@ -12,6 +12,12 @@
    for, without a word. So the tag is retired rather than renamed: offered
    nowhere new, shown wherever it is already set, and nothing moves.
 
+   Nov 9 he settled it the other way round from renaming: Flat rate stays,
+   on offer again, AND Sub sits beside it. A flat-rate line is one amount
+   (he sells a flat $350 camera job; quantity x hourly made it read hourly).
+   So the pick list has four, the ten keep their tag under its own name, and
+   the guard against any of them reading as Sub is unchanged.
+
    These tests are mostly about that: the things that must NOT have happened. */
 
 const REPO_DIR = process.env.APP_DIR || require('path').join(__dirname, '..');
@@ -50,15 +56,15 @@ const errs=[];
 
   console.log('--- what the dropdown offers ---');
 
-  await t('the pick list is Labor, Material / Parts, Sub — and no Flat rate', async () => {
+  await t('the pick list is Labor, Material / Parts, Sub and Flat rate — Sub beside it, not instead of it', async () => {
     await open();
     const o = await opts('#line-kind');
     const ids = o.map(x => x.split('=')[0]);
-    if (ids.join(',') !== 'labor,part,sub')
+    if (ids.join(',') !== 'labor,part,sub,flat')
       throw new Error('the list is: ' + o.join(' | '));
     if (!/Material \/ Parts/.test(o.join(' '))) throw new Error('Part was not relabelled: ' + o.join(' | '));
     if (!/sub=Sub/.test(o.join(' '))) throw new Error('Sub is not there: ' + o.join(' | '));
-    if (/Flat rate/.test(o.join(' '))) throw new Error('Flat rate is still on offer: ' + o.join(' | '));
+    if (!/flat=Flat rate/.test(o.join(' '))) throw new Error('Flat rate is not on offer: ' + o.join(' | '));
   });
 
   await t('a line he already tagged Flat rate still shows its own tag, selected', async () => {
@@ -66,8 +72,8 @@ const errs=[];
     const sel = await pg.evaluate(([i]) => document.querySelector(`[data-line-edit="${i}:2:kind"]`).value, [eid]);
     if (sel !== 'flat')
       throw new Error('the select shows ' + sel + ' for a line tagged flat — it would re-tag on save');
-    if (!/flat=Fixed price/.test(o.join(' ')))
-      throw new Error('no honest name for the retired tag: ' + o.join(' | '));
+    if (!/flat=Flat rate/.test(o.join(' ')))
+      throw new Error('the tag does not show under its own name: ' + o.join(' | '));
   });
 
   /* The whole point. A select that cannot show the current value re-tags the
@@ -110,7 +116,7 @@ const errs=[];
       });
       return { by,
                subs: seen.filter(x => /sub/i.test(x.shown)).map(x => x.desc),
-               fixed: seen.filter(x => /fixed price/i.test(x.shown)).length };
+               fixed: seen.filter(x => /flat rate/i.test(x.shown)).length };
     });
     if (r.subs.length)
       throw new Error('his own work reads as subcontracted: ' + r.subs.join(', '));
@@ -131,7 +137,7 @@ const errs=[];
     });
     if (r.got !== r.want)
       throw new Error(r.got + ' of his ' + r.want + ' fixed-price items are reachable');
-    if (!r.groups.some(g => /Fixed price/.test(g)))
+    if (!r.groups.some(g => /Flat rate/.test(g)))
       throw new Error('no heading for them: ' + r.groups.join(' | '));
   });
 
@@ -149,7 +155,7 @@ const errs=[];
     if (added.kind !== 'flat') throw new Error('the line was added as ' + added.kind);
   });
 
-  await t('the price book page keeps a heading for them, and says it is retired', async () => {
+  await t('the price book page files them under Flat rate, and no longer calls it retired', async () => {
     await pg.evaluate(() => { closeModal(); go('pricebook'); render(); });
     await pg.waitForTimeout(500);
     /* innerText comes back with the headings upper-cased, because the
@@ -157,14 +163,16 @@ const errs=[];
        rendered text. Matching case here is matching a stylesheet. */
     const x = (await pg.evaluate(() => (document.querySelector('#view')||{}).innerText || ''))
       .replace(/\s+/g, ' ');
-    if (!/fixed price/i.test(x)) throw new Error('no heading: ' + x.slice(0,400));
-    if (!/not offered on new lines/i.test(x))
-      throw new Error('it does not say the tag is retired: ' + x.slice(0,400));
+    if (!/flat rate/i.test(x)) throw new Error('no heading: ' + x.slice(0,400));
+    if (/not offered on new lines/i.test(x))
+      throw new Error('it still calls the tag retired: ' + x.slice(0,400));
     if (!/material \/ parts/i.test(x)) throw new Error('Part was not relabelled on this page either');
-    if (/flat rate/i.test(x)) throw new Error('the old name is still on the page: ' + x.slice(0,400));
+    if (/fixed price/i.test(x)) throw new Error('the retired name is still on the page: ' + x.slice(0,400));
   });
 
-  await t('and the heading goes once nothing is filed under it', async () => {
+  /* Flat rate is an offered tag again, so like Labor its heading stays when
+     empty — the place to file the next one is always there. */
+  await t('moving them all off Flat rate leaves its heading, empty, rather than hiding the tag', async () => {
     const x = await pg.evaluate(() => {
       // He re-tags them himself one day; the page should tidy up after him.
       Store.data.priceBook.filter(i => i.kind === 'flat').forEach(i => { i.kind = 'labor'; });
@@ -172,8 +180,8 @@ const errs=[];
       return ((document.querySelector('#view')||{}).innerText || '').replace(/\s+/g,' ');
     });
     await pg.waitForTimeout(300);
-    if (/fixed price/i.test(x))
-      throw new Error('an empty retired section is still being carried about');
+    if (!/flat rate/i.test(x) || !/nothing saved under flat rate/i.test(x))
+      throw new Error('the Flat rate heading went: ' + x.slice(0,400));
   });
 
   console.log('--- what the tag must not reach ---');
