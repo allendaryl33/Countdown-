@@ -79,8 +79,9 @@ const fs = require('fs'); const errs=[];
     if (wiped) throw new Error('clear did not actually wipe');
 
     await pg.evaluate(() => go('data')); await pg.waitForTimeout(350);
-    pg.once('dialog', d => d.accept());          // import asks before overwriting
     await pg.setInputFiles('#import-file', saved);
+    // import asks before overwriting — in the app's own box now
+    await pg.waitForTimeout(250); if (!await pg.$('[data-ask="yes"]')) throw new Error('it did not ask first'); await pg.click('[data-ask="yes"]');
     await pg.waitForTimeout(700);
 
     const after = await pg.evaluate(() => JSON.stringify(Store.data));

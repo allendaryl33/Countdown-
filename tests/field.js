@@ -108,8 +108,8 @@ const APP=`file://${REPO_DIR}/index.html`, SHOTS=process.env.SP+'/shots', errs=[
     await pc.fill('#gl-techphone','7805550199');
     await pc.fill('#gl-rate','155');
     await pc.fill('#gl-jobno','1200');
-    pc.once('dialog', d => d.accept());
-    await pc.click('[data-do-golive]'); await pc.waitForTimeout(600);
+    await pc.click('[data-do-golive]');
+    await pc.waitForTimeout(250); if (!await pc.$('[data-ask="yes"]')) throw new Error('it did not ask first'); await pc.click('[data-ask="yes"]'); await pc.waitForTimeout(600);
     const after = await pc.evaluate(() => ({
       cust: Store.data.customers.length, jobs: Store.data.jobs.length,
       est: Store.data.estimates.length, wv: Store.data.signedWaivers.length,

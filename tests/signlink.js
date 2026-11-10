@@ -217,7 +217,9 @@ const errs=[];
       + ' :: ' + JSON.stringify(r.which));
   });
 
-  await t('the Estimates list says how many are awaiting a signature', async () => {
+  /* It counts estimates with a live link now, not links: one estimate can
+     carry a link per option and per re-send (Nov 10). */
+  await t('the Estimates list says how many estimates have a signing link out', async () => {
     const e3 = await pg.evaluate(async () => {
       const e = Store.data.estimates.find(x => (x.items||[]).length && !x.approval);
       if (!e) return null;
@@ -228,7 +230,7 @@ const errs=[];
     if (!e3) { console.log('       (no spare estimate)'); return; }
     await pg.waitForTimeout(400);
     const tx = await pg.evaluate(() => document.querySelector('#view').textContent.replace(/\s+/g,' '));
-    if (!/awaiting signature/.test(tx)) throw new Error('not shown: ' + tx.slice(0,220));
+    if (!/[1-9]\d* with a signing link out/.test(tx)) throw new Error('not shown: ' + tx.slice(0,220));
   });
 
   console.log('--- when the lookup itself fails ---');
