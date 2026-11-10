@@ -221,6 +221,87 @@ const errs=[];
     if (before !== after) throw new Error('overwrote the payment on a re-sync');
   });
 
+  /* What came in is what's recorded. It used to mark any Stripe payment as
+     paid in full: $100 on a $1,500 invoice read as settled, and a payment
+     with no amount was assumed to be the whole total. */
+  console.log('--- only what Stripe says came in ---');
+  const freshJob = () => pg.evaluate(async () => {
+    const j = Store.data.jobs.find(x => x.id !== window.__paidJob && (x.parts||[]).length && !(x.stripeSeen||[]).length
+                                    && (!x.payment || x.payment.status !== 'paid'))
+           || Store.data.jobs.find(x => x.id !== window.__paidJob && (!x.payment || x.payment.status !== 'paid'));
+    j.status = 'complete'; j.laborHours = 2; j.laborRate = 145; j.payment = blankPayment();
+    Store.setPayment(j, { status:'invoiced', amountPaid:0 });
+    const tok = await Cloud.publishInvoiceLink(j);
+    return { id: j.id, tok, total: Store.invoiceTotal(j) };
+  });
+  const stripePays = (tok, amount, ref) => fetch(URL_+'/__stripe-paid', { method:'POST',
+    body: JSON.stringify({ token: tok, amount, ref }) });
+  const state = id => pg.evaluate(id => { const j = Store.job(id);
+    return { st: Store.payState(j), got: j.payment.amountPaid, bal: Store.balance(j),
+             log: j.log.map(l => l.text).join(' | ') }; }, id);
+  await pg.evaluate(id => { window.__paidJob = id; }, jid);
+
+  let part;
+  await t('a part payment is recorded as a part payment, with the rest still owing', async () => {
+    part = await freshJob();
+    await stripePays(part.tok, 100, 'pi_part1');
+    await pg.evaluate(() => Cloud.pullInvoiceLinks()); await pg.waitForTimeout(500);
+    const r = await state(part.id);
+    if (r.st !== 'partial') throw new Error('state ' + r.st + ' — $100 of ' + part.total + ' is not paid');
+    if (Math.abs(r.got - 100) > 0.005) throw new Error('recorded ' + r.got);
+    if (Math.abs(r.bal - (part.total - 100)) > 0.005) throw new Error('balance ' + r.bal);
+    if (!/\$100\.00 paid by card — Stripe told us\. \$[\d,]+\.\d\d still owing/.test(r.log)) throw new Error(r.log.slice(-200));
+    console.log('       $100 of ' + part.total + ' recorded; ' + r.bal.toFixed(2) + ' still owing');
+  });
+  await t('syncing again does not add the same part payment twice', async () => {
+    await pg.evaluate(() => Cloud.pullInvoiceLinks()); await pg.waitForTimeout(400);
+    await pg.evaluate(() => Cloud.pullInvoiceLinks()); await pg.waitForTimeout(400);
+    const r = await state(part.id);
+    if (Math.abs(r.got - 100) > 0.005) throw new Error('now recorded ' + r.got);
+  });
+  await t('the rest paid on a second link settles it', async () => {
+    const tok2 = await pg.evaluate(async id => Cloud.publishInvoiceLink(Store.job(id)), part.id);
+    await stripePays(tok2, Math.round((part.total - 100) * 100) / 100, 'pi_part2');
+    await pg.evaluate(() => Cloud.pullInvoiceLinks()); await pg.waitForTimeout(500);
+    const r = await state(part.id);
+    if (r.st !== 'paid') throw new Error('state ' + r.st + ', balance ' + r.bal);
+    if (r.bal > 0.005) throw new Error('balance ' + r.bal);
+  });
+  await t('a payment with no amount records no money and says to check Stripe', async () => {
+    const x = await freshJob();
+    await stripePays(x.tok, 0, 'pi_noamt');
+    await pg.evaluate(() => Cloud.pullInvoiceLinks()); await pg.waitForTimeout(500);
+    const r = await state(x.id);
+    if (r.st === 'paid') throw new Error('assumed the whole total');
+    if ((Number(r.got) || 0) !== 0) throw new Error('recorded ' + r.got);
+    if (!/didn't say how much — check Stripe/.test(r.log)) throw new Error(r.log.slice(-200));
+  });
+  await t('a Stripe payment on an invoice already paid another way is flagged, not added', async () => {
+    const x = await freshJob();
+    await pg.evaluate(id => Store.setPayment(Store.job(id), { status:'paid', method:'E-transfer' }), x.id);
+    const before = await state(x.id);
+    await stripePays(x.tok, x.total, 'pi_double');
+    await pg.evaluate(() => Cloud.pullInvoiceLinks()); await pg.waitForTimeout(500);
+    const r = await state(x.id);
+    if (Math.abs(r.got - before.got) > 0.005) throw new Error('added to it: ' + before.got + ' → ' + r.got);
+    if (!/already marked paid — check Stripe for a double payment/.test(r.log)) throw new Error(r.log.slice(-200));
+  });
+
+  /* Invoices Stripe already paid before stripeSeen existed carry no record
+     of the token. Their own payment must not come back as a "double". */
+  await t('an invoice Stripe already paid before this change is left quiet', async () => {
+    const x = await freshJob();
+    await pg.evaluate(id => { const j = Store.job(id);
+      Store.setPayment(j, { status:'paid', method:'Card', ref:'pi_before', amountPaid: Store.invoiceTotal(j) });
+      delete j.stripeSeen; Store.save(); }, x.id);
+    const before = await state(x.id);
+    await stripePays(x.tok, x.total, 'pi_before');
+    await pg.evaluate(() => Cloud.pullInvoiceLinks()); await pg.waitForTimeout(500);
+    const r = await state(x.id);
+    if (r.log !== before.log) throw new Error('logged something: ' + r.log.slice(before.log.length));
+    if (Math.abs(r.got - before.got) > 0.005) throw new Error('amount moved');
+  });
+
   console.log('--- links that should not work ---');
   await t('a guessed token shows nothing', async () => {
     await cust.goto('about:blank');

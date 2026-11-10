@@ -2122,20 +2122,62 @@ const Cloud = {
       /* Stripe cannot tell the app anything. A webhook on Supabase can, by
          writing paid_at onto the row — so the same trip that fetches the
          links brings the money news back with it. */
-      let landed = 0;
+      /* What came in is what's recorded — not "paid in full". This used to
+         mark the invoice paid whatever the amount, and assume the full total
+         when Stripe sent none: $100 on a $1,500 invoice read as settled. Now
+         it adds what Stripe says came in to what was already paid, and it's
+         Paid only if that covers the total (the same half-a-cent rule as
+         recording a payment by hand); otherwise the rest stays owing. With
+         no amount it records no money and says so.
+         Each Stripe payment is handled once: its token goes on the job in
+         stripeSeen, so a partly paid invoice isn't paid again every sync. */
+      let landed = 0, short = 0, odd = 0;
       this.invoiceLinks.forEach(l => {
         if (!l.paid_at) return;
         const j = Store.job(l.job_id);
-        if (!j || Store.payState(j) === "paid") return;
-        const amount = Number(l.paid_amount) > 0 ? Number(l.paid_amount) : Store.invoiceTotal(j);
-        Store.setPayment(j, { status:"paid", amountPaid: amount, method: "Card",
-                              ref: l.paid_ref || (j.payment && j.payment.ref) || "" });
-        Store.addLog(j, `Paid ${money(amount)} by card — Stripe told us`);
-        landed++;
+        if (!j) return;
+        const seen = j.stripeSeen || [];
+        if (seen.indexOf(l.token) !== -1) return;
+        const pay = j.payment || {};
+        const ref = l.paid_ref || "";
+        const mark = () => { j.stripeSeen = seen.concat([l.token]); };
+
+        if (Store.payState(j) === "paid"){
+          mark();
+          // Already settled. Its own Stripe payment, from before this
+          // bookkeeping existed, is quiet; anything else could be paying twice.
+          if (pay.method === "Card" && (!ref || pay.ref === ref)) return;
+          Store.addLog(j, `Stripe reports a card payment${Number(l.paid_amount) > 0 ? " of " + money(Number(l.paid_amount)) : ""}` +
+            ` on an invoice already marked paid — check Stripe for a double payment${ref ? " (" + ref + ")" : ""}`);
+          odd++; return;
+        }
+
+        const amount = Number(l.paid_amount);
+        if (!(amount > 0)){
+          mark();
+          Store.addLog(j, `Stripe reports a card payment but didn't say how much — check Stripe${ref ? " (" + ref + ")" : ""}. Nothing recorded.`);
+          odd++; return;
+        }
+
+        const total = Store.invoiceTotal(j);
+        const now = cents((Number(pay.amountPaid) || 0) + amount);
+        const full = now >= total - 0.005;
+        Store.setPayment(j, { status: full ? "paid" : "invoiced", amountPaid: now, method: "Card",
+                              ref: ref || pay.ref || "" });
+        Store.addLog(j, full
+          ? `Paid ${money(amount)} by card — Stripe told us`
+          : `${money(amount)} paid by card — Stripe told us. ${money(cents(total - now))} still owing.`);
+        mark();
+        if (full) landed++; else short++;
       });
-      if (landed){
+      if (landed || short || odd){
         this.markDirty();
-        toast(landed === 1 ? "An invoice just got paid" : landed + " invoices just got paid", "ok");
+        const bits = [];
+        if (landed) bits.push(landed === 1 ? "An invoice just got paid" : landed + " invoices just got paid");
+        if (short)  bits.push(short === 1 ? "a part payment came in — the rest is still owing" : short + " part payments came in");
+        if (odd)    bits.push(odd === 1 ? "a Stripe payment needs checking — see the job" : odd + " Stripe payments need checking");
+        const msg = bits.join("; ");
+        toast(msg.charAt(0).toUpperCase() + msg.slice(1), odd ? "warn" : "ok");
         renderQuiet();
       }
     } catch(err){ this.invoiceLinks = []; }
