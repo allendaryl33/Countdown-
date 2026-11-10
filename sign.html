@@ -285,6 +285,10 @@ function render(d){
       <table>
         ${items.map(i => p.flat
           ? `<tr><td colspan="2">${i.bold ? `<strong>${esc(i.desc)}</strong>` : esc(i.desc)}</td></tr>`
+          : !(i.qty * i.price)
+          /* A line with no money on it is a heading or a step: words only,
+             no "$0.00" beside it. */
+          ? `<tr><td colspan="2">${i.bold ? `<strong>${esc(i.desc)}</strong>` : esc(i.desc)}</td></tr>`
           : `<tr>
           <td>${i.qty > 1 ? esc(i.qty) + " &times; " : ""}${i.bold ? `<strong>${esc(i.desc)}</strong>` : esc(i.desc)}</td>
           <td class="n">${esc(money(i.qty * i.price))}</td></tr>`).join("")}

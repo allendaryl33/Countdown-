@@ -179,6 +179,81 @@ const errs=[];
     await pg.keyboard.press('Escape'); await pg.waitForTimeout(200);
   });
 
+  /* EST-2010's shape: bold section titles and work steps with no price,
+     one Flat rate line carrying the section price. Before, the customer saw
+     "$0.00" beside 18 of 21 lines. */
+  console.log('--- lines with no price show no price ---');
+  let e2;
+  await t('Text is on the tag list, and a Text line has no quantity or price box', async () => {
+    e2 = await pg.evaluate(cid => {
+      const e = { id: uid('est'), no: 7110, createdAt: Date.now(), status:'draft',
+        type:'Other', service:'water softener install', description:'Softener install',
+        validDays:30, customerId: cid, items:[], flatPrice:null,
+        materials:[], timeEntries:[], photos:[], log:[], visitDate:null,
+        window:'Anytime', techId:null, scopeOf:null, chosen:null };
+      Store.data.estimates.push(e); Store.save(); return e.id;
+    }, cid);
+    await pg.evaluate(i => { closeModal(); openEstimate(i); }, e2); await pg.waitForTimeout(400);
+    const kinds = await pg.$$eval('#line-kind option', os => os.map(o => o.value).join(','));
+    if (kinds !== 'labor,part,sub,flat,text') throw new Error(kinds);
+    await pg.selectOption('#line-kind', 'text'); await pg.waitForTimeout(100);
+    const hidden = await pg.evaluate(() => [getComputedStyle(document.querySelector('#line-qty-f')).display,
+                                            getComputedStyle(document.querySelector('#line-price-f')).display]);
+    if (hidden.join() !== 'none,none') throw new Error('boxes still showing: ' + hidden);
+    await pg.fill('#line-desc', 'SOFTENER INSTALL');
+    await pg.click(`[data-add-line="${e2}"]`); await pg.waitForTimeout(400);
+    const it = await pg.evaluate(i => Store.estimate(i).items[0], e2);
+    if (it.kind !== 'text' || it.qty !== 1 || it.price !== 0) throw new Error(JSON.stringify(it));
+    const row = await pg.$eval('[data-line-row="0"]', r => r.textContent.replace(/\s+/g,' '));
+    if (!/text/.test(row) || !/no price/.test(row) || /\$0\.00/.test(row)) throw new Error(row);
+  });
+  await t('a line with a price on it is not turned into Text — the money stays', async () => {
+    await pg.evaluate(i => { const e = Store.estimate(i);
+      e.items.push({ desc:'Softener install — flat rate', kind:'flat', qty:1, price:1450 }); Store.save(); }, e2);
+    await pg.evaluate(i => { closeModal(); openEstimate(i); }, e2); await pg.waitForTimeout(400);
+    await pg.selectOption(`[data-line-edit="${e2}:1:kind"]`, 'text'); await pg.waitForTimeout(300);
+    const it = await pg.evaluate(i => Store.estimate(i).items[1], e2);
+    if (it.kind !== 'flat' || it.price !== 1450) throw new Error('rewritten: ' + JSON.stringify(it));
+  });
+  await t('the printed estimate shows no $0.00 — old $0 lines included', async () => {
+    await pg.evaluate(i => { const e = Store.estimate(i);
+      // the way EST-2010 was built before Text existed
+      e.items.splice(1, 0, { desc:'Shut off and drain', kind:'labor', qty:1, price:0 },
+                           { desc:'Install bypass',     kind:'part',  qty:1, price:0 });
+      Store.save(); }, e2);
+    const doc = await pg.evaluate(i => estimateDocHtml(Store.estimate(i)), e2);
+    if (/\$0\.00/.test(doc)) throw new Error('a $0.00 is printed');
+    if (!/Shut off and drain/.test(doc) || !/\$1,450\.00/.test(doc)) throw new Error('lost a line or the price');
+  });
+  await t('her signing page shows the steps as words and only the flat rate as money', async () => {
+    const tok = await pg.evaluate(async i => (await Cloud.publishSignLinks(Store.estimate(i)))[0].token, e2);
+    const c = await b.newPage({ viewport:{width:390,height:844} });
+    c.on('pageerror', e => errs.push('CUSTOMER PAGEERROR: '+e.message));
+    await c.goto(pageUrl + '#t=' + tok); await c.waitForTimeout(1100);
+    const txt = await c.evaluate(() => document.querySelector('#root').textContent.replace(/\s+/g,' '));
+    if (/\$0\.00/.test(txt)) throw new Error('$0.00 on her page: ' + txt.slice(0,300));
+    for (const w of ['SOFTENER INSTALL','Shut off and drain','Install bypass','$1,450.00'])
+      if (!txt.includes(w)) throw new Error('missing ' + w);
+    await c.close();
+  });
+  await t('and the invoice made from it shows no $0.00 either', async () => {
+    const link = await pg.evaluate(async i => {
+      const e = Store.estimate(i);
+      Store.convertEstimate(e, { customerId: e.customerId, scheduledDate: todayStr(), window:'Anytime', priority:'Normal' });
+      const j = Store.data.jobs.find(x => x.estimateId === i);
+      j.status = 'complete'; j.laborHours = 0; Store.setPayment(j, { status:'invoiced' });
+      return invoiceLinkUrl(await Cloud.publishInvoiceLink(j));
+    }, e2);
+    const c = await b.newPage({ viewport:{width:390,height:844} });
+    c.on('pageerror', e => errs.push('INVOICE PAGEERROR: '+e.message));
+    await c.goto(link); await c.waitForTimeout(1200);
+    // innerText: what she sees, not the page's own script source
+    const txt = await c.evaluate(() => document.body.innerText.replace(/\s+/g,' '));
+    if (!/Shut off and drain/.test(txt)) throw new Error('invoice did not render: ' + txt.slice(0,200));
+    if (/\$0\.00/.test(txt.replace(/(Received|Balance|due|Paid)[^$]*\$0\.00/gi, ''))) throw new Error('$0.00 on the invoice: ' + txt.slice(txt.indexOf('SOFTENER'), txt.indexOf('SOFTENER') + 500));
+    await c.close();
+  });
+
   console.log('--- which mailbox ---');
   await t('left alone, Email still hands the message to the phone\'s mail app', async () => {
     const h = await pg.evaluate(() => { const a = document.createElement('a');
@@ -187,7 +262,7 @@ const errs=[];
     if (h.target) throw new Error('target set: '+h.target);
   });
   await t('with Gmail chosen, it opens a Gmail message from the business address', async () => {
-    await pg.evaluate(() => go('data')); await pg.waitForTimeout(400);
+    await pg.evaluate(() => { closeModal(); go('data'); }); await pg.waitForTimeout(400);
     await pg.selectOption('#set-mailvia', 'gmail');
     await pg.click('[data-action="save-settings"]'); await pg.waitForTimeout(300);
     const h = await pg.evaluate(() => { const a = document.createElement('a');
