@@ -324,6 +324,14 @@ main.content{padding:22px 24px 60px;flex:1}
 .btn.ghost:hover{background:#eef2f6;color:var(--text)}
 .btn.danger{color:var(--red);border-color:#f0d4d0}
 .btn.danger:hover{background:var(--red-soft)}
+.btn.danger-solid{background:var(--red);border-color:var(--red);color:#fff}
+.btn.danger-solid:hover{filter:brightness(.93)}
+.overlay.ask-overlay{z-index:200;align-items:center}
+.stale-note{margin:0 0 12px;padding:9px 14px;border-radius:7px;background:var(--amber-soft);
+  border:1px solid #f0d6bb;color:#7a4510;font-size:13px}
+body.stale .stat .value, body.stale .stat .foot, body.stale td.num,
+body.stale .money-lg, body.stale .today-sum .pill{opacity:.45}
+.modal.ask{max-width:440px}
 .btn.sm{padding:5px 9px;font-size:12.5px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 
@@ -1033,6 +1041,7 @@ tr[data-line-row] td{vertical-align:top;padding:6px}
       <button class="btn accent" id="btn-new-job">＋ New Job</button>
     </header>
     <div id="clockbar" aria-live="polite"></div>
+    <div id="stale-note" class="stale-note" hidden></div>
     <main class="content" id="view"></main>
   </div>
 
@@ -1378,6 +1387,67 @@ function refuseAmount(input){
   const raw = input ? String(input.value).trim() : "";
   toast(`Couldn't read "${raw}" as a number — not saved. Type it like 1625 or 1,625.50.`, "err");
 }
+/* "Are you sure?" asked inside the app, not with the browser's confirm().
+   The browser's pop-up sits outside the page, and the assistant that does
+   most of his data entry can't see it: its tool answers Cancel without
+   showing anything, so Delete looked broken — "no dialog, no error, the
+   records just stay" — when it was only ever answered No. This box asks the
+   same question in the same words, and he taps it the same way.
+
+   confirmed(msg, retry) is a drop-in for confirm(msg): the first time it
+   shows the box and returns false. On "yes" it runs retry() — the same tap
+   again — and that once, for that message, it returns true. So each call
+   site keeps the code after its question exactly as it was. */
+const Ask = { pass: null, open: false, onYes: null };
+function confirmed(msg, retry, opts){
+  if (Ask.pass === msg){ Ask.pass = null; return true; }
+  askBox(msg, () => { Ask.pass = msg; try { retry(); } finally { Ask.pass = null; } }, opts);
+  return false;
+}
+function askBox(msg, onYes, opts){
+  opts = opts || {};
+  let root = document.getElementById("ask-root");
+  if (!root){ root = document.createElement("div"); root.id = "ask-root"; document.body.appendChild(root); }
+  const parts = String(msg).split("\n\n");
+  root.innerHTML = `<div class="overlay ask-overlay" data-ask-overlay>
+    <div class="modal ask" role="alertdialog" aria-modal="true" aria-labelledby="ask-q">
+      <div class="modal-body">
+        <p id="ask-q" class="t-strong" style="margin:0;white-space:pre-line">${esc(parts[0])}</p>
+        ${parts.slice(1).map(x => `<p class="t-sub" style="margin:10px 0 0;white-space:pre-line">${esc(x)}</p>`).join("")}
+      </div>
+      <div class="modal-foot"><div class="spacer"></div>
+        <button class="btn" data-ask="no">Cancel</button>
+        <button class="btn ${opts.danger === false ? "primary" : "danger-solid"}" data-ask="yes">${esc(opts.yes || "Yes")}</button>
+      </div>
+    </div></div>`;
+  Ask.open = true; Ask.onYes = onYes;
+  // Cancel has the focus, so a stray Enter is the safe answer.
+  setTimeout(() => { const b = root.querySelector('[data-ask="no"]'); if (b) b.focus(); }, 20);
+}
+function closeAsk(){
+  const r = document.getElementById("ask-root");
+  if (r) r.innerHTML = "";
+  Ask.open = false; Ask.onYes = null;
+}
+/* Capture phase, so an answer never reaches the app's own click handler,
+   and Escape cancels the question without also closing the sheet under it. */
+document.addEventListener("click", e => {
+  const b = e.target.closest && e.target.closest("[data-ask]");
+  if (b){
+    e.stopPropagation(); e.preventDefault();
+    const yes = b.dataset.ask === "yes" ? Ask.onYes : null;
+    closeAsk();
+    if (yes) yes();
+    return;
+  }
+  if (Ask.open && e.target.closest && e.target.closest("[data-ask-overlay]") && !e.target.closest(".ask")){
+    e.stopPropagation(); closeAsk();
+  }
+}, true);
+document.addEventListener("keydown", e => {
+  if (Ask.open && e.key === "Escape"){ e.stopPropagation(); e.preventDefault(); closeAsk(); }
+}, true);
+
 /* Read a box: the number, or null when it was refused (and he's been told). */
 function amountFrom(input, emptyAs){
   const n = readAmount(input && input.value);
@@ -1600,7 +1670,21 @@ const Cloud = {
 
   onChange(fn){ this._listeners.push(fn); },
   emit(){ this._listeners.forEach(fn => { try { fn(); } catch(e){} }); },
-  set(state, detail){ this.state = state; this.detail = detail || ""; this.emit(); },
+  /* Has this page heard from the server since it opened? Until it has,
+     everything on screen is the copy saved on this phone, which can be a
+     day behind: the #1005 family showed $1,730 for two seconds before the
+     sync put it back to $500. freshAt is set on the first good sync. */
+  freshAt: 0,
+  set(state, detail){
+    this.state = state; this.detail = detail || "";
+    if (state === "synced"){
+      this.freshAt = Date.now();
+      try { localStorage.setItem("pcp.lastSynced", String(this.freshAt)); } catch(_){}
+    }
+    this.emit();
+  },
+  /* True while a signed-in device is showing only what it had saved. */
+  stale(){ return !!(this.configured() && this.cfg && this.cfg.refreshToken && !this.freshAt); },
 
   loadCfg(){
     try { this.cfg = JSON.parse(localStorage.getItem(CLOUD_KEY) || "null"); }
@@ -2612,6 +2696,25 @@ const Store = {
      estimate reads it unchanged. Nothing was written twice, which is why
      there is no second copy to drift out of step. */
   estOptions(e){ return (e && Array.isArray(e.options) && e.options.length) ? e.options : null; },
+  /* How many lines an estimate has. Once it has options its lines live in
+     them and its own list is empty, so counting e.items alone called an
+     18-line estimate "0 lines" and told him it had nothing on it to send.
+     Declined options are left out: they're not on offer. */
+  estLineCount(e){
+    const live = this.estLiveOptions(e);
+    return live.length ? live.reduce((n, o) => n + (o.items || []).length, 0) : ((e && e.items) || []).length;
+  },
+  /* Why it can't go out yet, in his words, or "" when it can. The same rule
+     the signing link already used: with options, every live option needs
+     work on it, or one would go out as a price of nothing. */
+  estNoWorkWhy(e){
+    const live = this.estLiveOptions(e);
+    if (!live.length) return ((e && e.items) || []).length ? "" : "there are no line items on it yet";
+    const empty = live.filter(o => !(o.items || []).length);
+    return empty.length
+      ? `${empty.map(o => this.estOptLabel(e, o)).join(" and ")} ${empty.length === 1 ? "has" : "have"} no line items yet`
+      : "";
+  },
   estOpt(e, id){ return (this.estOptions(e) || []).find(o => o.optId === id) || null; },
   estLiveOptions(e){ return (this.estOptions(e) || []).filter(o => !o.declinedAt); },
   estChosen(e){ return (e && e.chosen) ? this.estOpt(e, e.chosen) : null; },
@@ -4851,7 +4954,27 @@ document.addEventListener("focusout", () => {
   }, 80);
 });
 
+/* Say so when the screen is the phone's saved copy rather than the shop as
+   the server has it, and grey the money until it isn't. A total that is
+   wrong for two seconds and then corrects itself is still a total that
+   was wrong, and it costs every total after it. */
+function renderStale(){
+  const note = $("#stale-note");
+  const stale = Cloud.stale();
+  document.body.classList.toggle("stale", stale);
+  if (!note) return;
+  if (!stale){ note.hidden = true; note.textContent = ""; return; }
+  let last = 0;
+  try { last = Number(localStorage.getItem("pcp.lastSynced")) || 0; } catch(_){}
+  const when = last ? ` Last synced ${fmtStamp(last)}.` : "";
+  note.textContent = Cloud.state === "error" || Cloud.state === "signed-out"
+    ? `Not synced — showing what's saved on this phone, which may be out of date.${when}`
+    : `Showing what's saved on this phone — checking for changes…`;
+  note.hidden = false;
+}
+
 function renderSync(){
+  renderStale();
   const pill = $("#sync-pill"), txt = $("#sync-text");
   if (!pill) return;
   if (Cloud.state === "off"){ pill.hidden = true; return; }
@@ -5251,7 +5374,7 @@ function viewDashboard(){
       <div class="foot">${esc(money(billedWeek))} billed</div></div>
     <div class="stat"><div class="label">Open work</div><div class="value">${jobs.filter(isOpen).length}</div>
       <div class="foot">across ${Store.data.customers.length} customers</div></div>
-    <div class="stat"><div class="label">Estimates out</div><div class="value">${estSent.length}</div>
+    <div class="stat"><div class="label">Estimates out for decision</div><div class="value">${estSent.length}</div>
       <div class="foot">${esc(money(estValue))} awaiting a yes</div></div>
   </div>
 
@@ -6242,15 +6365,23 @@ function viewEstimates(){
   return `
   <div class="stat-row">
     ${(() => {
-      const waiting = (Cloud.signLinks || []).filter(l => !l.signed_at).length;
+      /* Estimates, not links. One estimate can have a link per option and
+         another for every re-send, so counting links read "20 awaiting
+         signature" beside "0 out". Expired links and estimates already
+         decided don't count: nobody can sign those. */
+      const now = Date.now();
+      const linked = new Set((Cloud.signLinks || [])
+        .filter(l => !l.signed_at && (!l.expires_at || new Date(l.expires_at).getTime() > now))
+        .map(l => l.estimate_id));
+      const waiting = all.filter(e => linked.has(e.id) && (e.status === "sent" || e.status === "draft")).length;
       return `<div class="stat ${sent.length?"alert":""}"><div class="label">Out for decision</div>
         <div class="value">${sent.length}</div>
         <div class="foot">${esc(money(outValue))} pending${waiting
-          ? ` · ${waiting} awaiting signature` : ""}</div></div>`;
+          ? ` · ${waiting} with a signing link out` : ""}</div></div>`;
     })()}
     <div class="stat"><div class="label">Drafts</div>
       <div class="value">${all.filter(e=>e.status==="draft").length}</div><div class="foot">not sent yet</div></div>
-    <div class="stat"><div class="label">Approved</div>
+    <div class="stat"><div class="label">Won, all time</div>
       <div class="value">${won.length}</div><div class="foot">${esc(money(wonValue))} won</div></div>
     <div class="stat"><div class="label">Win rate</div>
       <div class="value">${winRate==null?"—":winRate+"%"}</div>
@@ -6259,7 +6390,7 @@ function viewEstimates(){
 
   <div class="toolbar">
     ${tab("open","Open", Store.openEstimates().length)}
-    ${tab("approved","Approved", liveWon.length)}
+    ${tab("approved","Approved, not billed", liveWon.length)}
     ${tab("declined","Declined", all.filter(e=>e.status==="declined").length)}
     ${tab("all","All", all.length)}
     <div style="flex:1"></div>
@@ -6280,7 +6411,8 @@ function viewEstimates(){
             <div class="t-strong">${esc(c.name)}</div>
             <div class="t-sub">${esc([c.address,c.city].filter(Boolean).join(", "))}${e.customerId?"":" · not yet a customer"}</div>
           </td>
-          <td><div>${esc(e.type)}</div><div class="t-sub">${(e.items||[]).length} line${(e.items||[]).length===1?"":"s"}</div></td>
+          <td><div>${esc(e.type)}</div><div class="t-sub">${(() => { const n = Store.estLineCount(e), k = Store.estLiveOptions(e).length;
+            return `${n} line${n===1?"":"s"}${k ? ` · ${k} option${k===1?"":"s"}` : ""}`; })()}</div></td>
           <td class="t-sub">${esc(fmtStamp(e.createdAt).split(" · ")[0])}</td>
           <td>${estBadge(e.status)}${job?`<div class="t-sub" style="margin-top:3px">→ job #${job.no}</div>`:""}
             ${(() => {
@@ -6408,7 +6540,7 @@ function viewLeads(){
             <div class="cust">${esc(l.name)}</div>
             <div class="addr">${rec
               ? (d.how === "job" ? `→ job #${rec.no}` : `→ EST-${rec.no}`)
-              : "not a job"}</div>
+              : "not a job"}${l.address ? ` · ${esc(l.address)}` : ""}</div>
           </div>
           <div class="stop-when"><div class="n">${esc(fmtStamp(d.at).split(" · ")[0])}</div></div>
         </div>
@@ -8433,7 +8565,8 @@ function openConvert(id){
 
       <div class="opt-card on" style="cursor:default">
         <div class="oc-t">The job carries the quoted price</div>
-        <div class="oc-s">${(e.items||[]).length} line${(e.items||[]).length===1?"":"s"} copy across, and <strong>${esc(money(total))}</strong> is recorded as the agreed price. Anything the tech adds on site shows up as a difference against it.</div>
+        <div class="oc-s">${(() => { const n = (Store.estAsOption(e, Store.estChosen(e)).items || []).length;
+          return `${n} line${n===1?"":"s"}`; })()} copy across, and <strong>${esc(money(total))}</strong> is recorded as the agreed price. Anything the tech adds on site shows up as a difference against it.</div>
       </div>
     </div>
     <div class="modal-foot">
@@ -10025,10 +10158,10 @@ function removeType(i){
   const t = TypeEdit[i];
   if (!t || t.orig === "Other") return;
   const used = t.orig ? typeUseCount(t.orig) : 0;
-  if (used && !confirm(
+  if (used && !confirmed(
     `${used} job${used===1?"":"s"} or estimate${used===1?" is":"s are"} on "${t.orig}".\n\n` +
     `They keep that name — nothing is lost and nothing is retyped — but it stops being ` +
-    `offered for new work. Remove it?`)) return;
+    `offered for new work. Remove it?`, () => removeType(i), { yes: "Remove" })) return;
   TypeEdit.splice(i, 1);
   TypeEdit.open = null;
   renderTypeSetup();
@@ -10140,7 +10273,8 @@ function doGoLive(){
     if (!techName) $("#gl-tech").classList.add("invalid");
     return;
   }
-  if (!confirm("Delete the sample customers, jobs, estimates and signed waivers?\n\nThis cannot be undone. Your price book and waiver templates are kept.")) return;
+  if (!confirmed("Delete the sample customers, jobs, estimates and signed waivers?\n\nThis cannot be undone. Your price book and waiver templates are kept.",
+      () => doGoLive(), { yes: "Delete them" })) return;
 
   Store.goLive({
     company,
@@ -10841,6 +10975,7 @@ async function sendInvoiceLink(id){
         ${c.phone ? `<a class="btn primary" id="iv-sms" href="#">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
         ${c.email ? `<a class="btn" id="iv-mail" href="#">✉ Email ${esc(c.email)}</a>` : ""}
         <button class="btn" data-copy-invoice="${esc(token)}">📋 Copy the link</button>
+        <button class="btn" data-copy-box="#iv-note">📋 Copy the message</button>
       </div>
       ${(() => {
         if (settled) return "";
@@ -11068,6 +11203,8 @@ async function sendForSignature(id){
         <button class="btn" data-copy-link="${esc(token)}" data-sent-id="${e.id}"
           ${picks.length > 1 ? 'data-copy-note="1"' : ""}>📋 Copy the
           ${picks.length > 1 ? "message" : "link"}</button>
+        ${picks.length > 1 ? "" : `<button class="btn" data-copy-link="${esc(token)}" data-sent-id="${e.id}"
+          data-copy-note="1">📋 Copy the message</button>`}
       </div>`}</div>
       <p class="t-sub" style="margin:14px 0 0;max-width:62ch">
         <strong>The link is the key.</strong> Anyone holding it can see this one
@@ -11272,7 +11409,8 @@ function sendEstimate(id){
   const total = Store.estimateTotal(e);
   const valid = e.validDays || 30;
   const missing = [];
-  if (!(e.items || []).length) missing.push("there are no line items on it yet");
+  const noWork = Store.estNoWorkWhy(e);
+  if (noWork) missing.push(noWork);
   if (!c.phone && !c.email) missing.push("there's no phone number or email for them");
 
   const note =
@@ -11321,9 +11459,10 @@ ${st.company}`;
         ${c.email ? `<a class="btn primary" id="est-mail" href="#" data-est-sent="${e.id}:Emailed">✉ Email ${esc(c.email)}</a>`
                   : `<span class="t-sub">No email on file for them.</span>`}
         ${c.phone ? `<a class="btn" id="est-sms" href="#" data-est-sent="${e.id}:Texted">💬 Text ${esc(fmtPhone(c.phone))}</a>` : ""}
+        <button class="btn" data-copy-box="#est-note" data-est-sent="${e.id}:Copied">📋 Copy the message</button>
       </div>
       <p class="t-sub" style="margin:12px 0 0">
-        Either one marks it <strong>Sent</strong>, so it stops showing as a draft.
+        Any of these marks it <strong>Sent</strong>, so it stops showing as a draft.
       </p>
     </div>
     <div class="modal-foot">
@@ -11361,7 +11500,7 @@ function exportEstimatesCsv(){
     return [
       "EST-" + e.no, fmtStamp(e.createdAt).split(" · ")[0], EST_STATUS_LABEL[e.status]||e.status,
       e.type, c.name, fmtPhone(c.phone), [c.address,c.city].filter(Boolean).join(", "),
-      e.customerId ? "yes" : "no", (e.items||[]).length,
+      e.customerId ? "yes" : "no", Store.estLineCount(e),
       Store.estimateTotal(e).toFixed(2), job ? "#" + job.no : "",
       (e.description||"").replace(/\s+/g," ")
     ];
@@ -11477,13 +11616,14 @@ function importJson(file){
     try {
       const parsed = JSON.parse(reader.result);
       if (!parsed || !Array.isArray(parsed.jobs)) throw new Error("Not a dispatch backup");
-      if (!confirm(`Replace everything in this browser with the backup?\n\n${parsed.jobs.length} jobs · ${(parsed.customers||[]).length} customers`)) return;
-      Store.data = parsed;
-      Store.data.techs     = Store.data.techs     || [];
-      Store.data.customers = Store.data.customers || [];
-      Store.data.settings  = Store.data.settings  || { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"" };
-      Store.save(); render();
-      toast("Backup restored", "ok");
+      askBox(`Replace everything in this browser with the backup?\n\n${parsed.jobs.length} jobs · ${(parsed.customers||[]).length} customers`, () => {
+        Store.data = parsed;
+        Store.data.techs     = Store.data.techs     || [];
+        Store.data.customers = Store.data.customers || [];
+        Store.data.settings  = Store.data.settings  || { company:"Poseidon Plumbing & Gasfitting Ltd.", laborRate:145, phone:"" };
+        Store.save(); render();
+        toast("Backup restored", "ok");
+      }, { yes: "Replace" });
     } catch(e){
       toast("That file isn't a dispatch backup.", "err");
     }
@@ -11734,7 +11874,7 @@ document.addEventListener("click", e => {
   const phDel = hit("[data-ph-del]");
   if (phDel){
     const [k,id,pid] = phDel.dataset.phDel.split(":");
-    if (!confirm("Delete this photo? It goes from this device and from the cloud.")) return;
+    if (!confirmed("Delete this photo? It goes from this device and from the cloud.", () => phDel.click(), { yes: "Delete" })) return;
     const p = Store.removePhoto(k, id, pid);
     Photos.del(pid);
     if (p && p.up && Cloud.configured() && Cloud.cfg.refreshToken){
@@ -11790,7 +11930,7 @@ document.addEventListener("click", e => {
   const tDel = hit("[data-del-time]");
   if (tDel){
     const [k, r, e] = tDel.dataset.delTime.split(":");
-    if (!confirm("Remove this time entry?")) return;
+    if (!confirmed("Remove this time entry?", () => tDel.click(), { yes: "Remove" })) return;
     Store.removeEntry(k, r, e);
     render();
     k === "estimate" ? openEstimate(r) : openJob(r);
@@ -11931,7 +12071,7 @@ document.addEventListener("click", e => {
   const delJob = hit("[data-del-job]");
   if (delJob){
     const j = Store.job(delJob.dataset.delJob);
-    if (!confirm(`Delete job #${j.no} for ${custName(j.customerId)}?\n\nThis cannot be undone.`)) return;
+    if (!confirmed(`Delete job #${j.no} for ${custName(j.customerId)}?\n\nThis cannot be undone.`, () => delJob.click(), { yes: "Delete job" })) return;
     Store.deleteJob(j.id); closeModal(); render(); toast("Job deleted");
     return;
   }
@@ -12037,7 +12177,7 @@ document.addEventListener("click", e => {
     /* Rebuilding the sheet clears the pad, so if there is already a
        signature on it, say so rather than wiping her name silently. */
     if (SigPad && SigPad.dirty &&
-        !confirm("They've already signed. Changing the option clears that signature — sign again?")) return;
+        !confirmed("They've already signed. Changing the option clears that signature — sign again?", () => signOpt.click(), { yes: "Clear it and sign again" })) return;
     EstSignOpt = { eid, optId: oid };
     openEstimateSign(eid);
     return;
@@ -12051,6 +12191,20 @@ document.addEventListener("click", e => {
 
   /* The anchor's own href opens the mail app or Messages; this just records
      that it happened and moves the estimate off Draft. */
+  /* Copy the message box as it stands, edits and all. Plain text only. On
+     the estimate sheet the same button carries data-est-sent, and falls
+     through to record the send like Text and Email do there. */
+  const copyBox = hit("[data-copy-box]");
+  if (copyBox){
+    const box = $(copyBox.dataset.copyBox);
+    const text = box ? box.value : "";
+    if (!text.trim()){ toast("The message is empty", "warn"); return; }
+    const done = () => toast("Message copied — paste it wherever", "ok");
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).then(done, () => { box.select(); toast("Press Ctrl/Cmd+C to copy", "err"); });
+    else { box.select(); toast("Press Ctrl/Cmd+C to copy", "err"); }
+    if (!copyBox.dataset.estSent) return;
+  }
   const estSent = hit("[data-est-sent]");
   if (estSent){
     const [eid, how] = estSent.dataset.estSent.split(":");
@@ -12130,10 +12284,10 @@ document.addEventListener("click", e => {
     const n = (o.items || []).length;
     const name = Store.estOptLabel(e, o);
     /* It is his typing on the other side of this, so say what goes. */
-    if (!confirm(`Remove ${name}?` + (n
+    if (!confirmed(`Remove ${name}?` + (n
       ? `\n\nIts ${n} line${n === 1 ? "" : "s"} go with it` +
         ((Store.estOptions(e) || []).length > 1 ? "." : ", back onto the estimate.")
-      : ""))) return;
+      : ""), () => optDrop.click(), { yes: "Remove" })) return;
     const stop = Store.dropEstOption(e, oid);
     if (stop){ toast(stop, "warn"); return; }
     render(); openEstimate(eid);
@@ -12221,7 +12375,7 @@ document.addEventListener("click", e => {
   const delEst = hit("[data-del-estimate]");
   if (delEst){
     const e = Store.estimate(delEst.dataset.delEstimate);
-    if (!confirm(`Delete estimate EST-${e.no} for ${Store.estContact(e).name}?\n\nThis cannot be undone.`)) return;
+    if (!confirmed(`Delete estimate EST-${e.no} for ${Store.estContact(e).name}?\n\nThis cannot be undone.`, () => delEst.click(), { yes: "Delete estimate" })) return;
     Store.deleteEstimate(e.id); closeModal(); render(); toast("Estimate deleted");
     return;
   }
@@ -12245,7 +12399,7 @@ document.addEventListener("click", e => {
   const archT = hit("[data-archive-template]");
   if (archT){
     const t = Store.waiverTemplate(archT.dataset.archiveTemplate);
-    if (!confirm(`Delete the template "${t.title}"?\n\nWaivers already signed from it are kept.`)) return;
+    if (!confirmed(`Delete the template "${t.title}"?\n\nWaivers already signed from it are kept.`, () => archT.click(), { yes: "Delete" })) return;
     t.archived = true; Store.save(); closeModal(); render(); toast("Template deleted");
     return;
   }
@@ -12265,7 +12419,7 @@ document.addEventListener("click", e => {
   const delSigned = hit("[data-del-signed]");
   if (delSigned){
     const w = Store.signedWaiver(delSigned.dataset.delSigned);
-    if (!confirm(`Delete the signed record W-${w.no}?\n\nThis removes proof that ${w.signerName} signed. It cannot be undone.`)) return;
+    if (!confirmed(`Delete the signed record W-${w.no}?\n\nThis removes proof that ${w.signerName} signed. It cannot be undone.`, () => delSigned.click(), { yes: "Delete" })) return;
     Store.deleteSignedWaiver(w.id); closeModal(); render(); toast("Signed record deleted");
     return;
   }
@@ -12278,7 +12432,7 @@ document.addEventListener("click", e => {
   const delPrice = hit("[data-del-price]");
   if (delPrice){
     const i = Store.priceItem(delPrice.dataset.delPrice);
-    if (!confirm(`Remove "${i.desc}" from the price book?\n\nEstimates already using it keep their line.`)) return;
+    if (!confirmed(`Remove "${i.desc}" from the price book?\n\nEstimates already using it keep their line.`, () => delPrice.click(), { yes: "Remove" })) return;
     Store.deletePriceItem(i.id); render(); toast("Removed from price book");
     return;
   }
@@ -12297,7 +12451,7 @@ document.addEventListener("click", e => {
   if (tt){
     const t = Store.tech(tt.dataset.toggleTech);
     const open = Store.data.jobs.filter(j => j.techId === t.id && isOpen(j)).length;
-    if (t.active && open && !confirm(`${t.name} still has ${open} open job${open===1?"":"s"}.\n\nDeactivate anyway? Their jobs stay assigned but the column leaves the board.`)) return;
+    if (t.active && open && !confirmed(`${t.name} still has ${open} open job${open===1?"":"s"}.\n\nDeactivate anyway? Their jobs stay assigned but the column leaves the board.`, () => tt.click(), { yes: "Deactivate" })) return;
     t.active = !t.active; Store.save(); render();
     return;
   }
@@ -12468,12 +12622,12 @@ document.addEventListener("click", e => {
     }
     case "cloud-sync": Cloud.syncNow().then(render); break;
     case "cloud-signout":
-      if (confirm("Sign out on this device? The shop stays here, it just stops syncing.")){
+      if (confirmed("Sign out on this device? The shop stays here, it just stops syncing.", () => act.click(), { yes: "Sign out", danger: false })){
         Cloud.signOut(); render();
       }
       break;
     case "cloud-forget":
-      if (confirm("Disconnect from this project? Nothing on the server is deleted and this device keeps its copy.")){
+      if (confirmed("Disconnect from this project? Nothing on the server is deleted and this device keeps its copy.", () => act.click(), { yes: "Disconnect" })){
         Cloud.disconnect(); render();
       }
       break;
@@ -12482,7 +12636,7 @@ document.addEventListener("click", e => {
     case "pick-clear": {
       const n = Store.pickupList().reduce((s,g) => s + g.items.length, 0);
       if (!n) break;
-      if (!confirm(`Tick off all ${n} outstanding item${n===1?"":"s"} as picked up?`)) break;
+      if (!confirmed(`Tick off all ${n} outstanding item${n===1?"":"s"} as picked up?`, () => act.click(), { yes: "Tick them off", danger: false })) break;
       Store.pickupList().forEach(g =>
         g.items.forEach(m => Store.setMaterial(g.kind, g.rec.id, m.id, { got:true })));
       render();
@@ -12517,7 +12671,7 @@ document.addEventListener("click", e => {
       break;
     }
     case "reset":
-      if (confirm("Wipe all data in this browser and reload the sample day?")){
+      if (confirmed("Wipe all data in this browser and reload the sample day?", () => act.click(), { yes: "Wipe it" })){
         Store.reset(); App.date = todayStr(); render(); toast("Reset to sample data");
       }
       break;
@@ -12583,10 +12737,24 @@ function saveLineEdit(t){
    Gmail message instead, with authuser naming the business address so a
    browser signed in to more than one Google account picks that one. Either
    way he presses send himself, and the app still asks whether it went. */
+/* iPhone or iPad. iPadOS reports itself as a Mac, so a Mac with a touch
+   screen counts too. */
+function isIOS(){
+  const ua = navigator.userAgent || "";
+  return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+}
 function setMailLink(a, to, subject, body){
   if (!a) return;
   const st = Store.data.settings;
-  if (st.mailVia === "gmail"){
+  if (st.mailVia === "gmail" && isIOS()){
+    /* On an iPhone a mail.google.com link opens the Gmail app, and the app
+       drops to, subject and body — it landed on the inbox. The app's own
+       compose link keeps all three. It sends from whichever account the app
+       has selected; he can change "From" there if it isn't admin@. */
+    const enc = encodeURIComponent;
+    a.href = `googlegmail:///co?to=${enc(to || "")}&subject=${enc(subject || "")}&body=${enc(body || "")}`;
+    a.removeAttribute("target");
+  } else if (st.mailVia === "gmail"){
     const enc = encodeURIComponent;   // %20 for spaces, not "+"
     a.href = "https://mail.google.com/mail/?" + (st.email ? `authuser=${enc(st.email)}&` : "") +
       `view=cm&fs=1&to=${enc(to || "")}&su=${enc(subject || "")}&body=${enc(body || "")}`;

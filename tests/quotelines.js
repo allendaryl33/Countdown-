@@ -202,6 +202,22 @@ const errs=[];
     if (h.target !== '_blank') throw new Error('target '+h.target);
   });
 
+  /* On an iPhone the web link opened the Gmail app on the inbox, with the
+     message gone. There it uses the app's own compose link. */
+  await t('on an iPhone, Gmail opens a new message in the Gmail app, filled in', async () => {
+    const ip = await b.newPage({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' });
+    await ip.goto(APP); await ip.waitForTimeout(400);
+    const h = await ip.evaluate(() => { Store.data.settings.mailVia = 'gmail'; Store.data.settings.email = 'office@example.com';
+      const a = document.createElement('a'); setMailLink(a, 'pat@example.com', 'Booked for tomorrow', 'Hi Pat — see you at 8.');
+      return { href: a.getAttribute('href'), target: a.target }; });
+    if (!h.href.startsWith('googlegmail:///co?')) throw new Error(h.href);
+    const q = new URLSearchParams(h.href.split('?')[1]);
+    if (q.get('to') !== 'pat@example.com' || q.get('subject') !== 'Booked for tomorrow' || q.get('body') !== 'Hi Pat — see you at 8.')
+      throw new Error(h.href);
+    if (h.target) throw new Error('target '+h.target);
+    await ip.close();
+  });
+
   await b.close();
   try { fs.unlinkSync(PAGE); } catch(_){}
   const hard = errs.filter(e=>e.includes('CONSOLE')||e.includes('PAGEERROR'));

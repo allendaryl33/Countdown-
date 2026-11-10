@@ -96,9 +96,9 @@ const errs=[];
     const id = await pg.evaluate(() => {
       const j = Store.data.jobs[1]; j.type = "Backflow Test"; Store.save(); return j.id; });
     await openEditor();
-    pg.once('dialog', d => d.accept());
     const i = await pg.evaluate(() => TypeEdit.findIndex(t => t.orig === "Backflow Test"));
-    await pg.click(`[data-type-del="${i}"]`); await pg.waitForTimeout(300);
+    await pg.click(`[data-type-del="${i}"]`);
+    await pg.waitForTimeout(250); if (!await pg.$('[data-ask="yes"]')) throw new Error('it did not ask first'); await pg.click('[data-ask="yes"]'); await pg.waitForTimeout(300);
     await pg.click('[data-save-types]'); await pg.waitForTimeout(400);
     const r = await pg.evaluate(jid => ({
       listed: Store.jobTypes().includes("Backflow Test"),

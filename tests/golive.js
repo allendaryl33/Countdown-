@@ -25,8 +25,9 @@ const URL_='http://127.0.0.1:54321', KEY='sb_publishable_test', errs=[];
     await pg.fill('#gl-company', 'Poseidon Plumbing & Gasfitting Ltd.');
     await pg.fill('#gl-tech', 'Allen Daryl');
     await pg.fill('#gl-rate', '165');
-    pg.once('dialog', d => d.accept());          // it asks before deleting
     await pg.click('.modal [data-do-golive]');
+    // it asks before deleting
+    await pg.waitForTimeout(250); if (!await pg.$('[data-ask="yes"]')) throw new Error('it did not ask first'); await pg.click('[data-ask="yes"]');
     await pg.waitForTimeout(900);
     const st = await pg.evaluate(() => Store.data.settings);
     const lost = ['email','website','address','gst'].filter(k => !st[k]);
