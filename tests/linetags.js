@@ -60,7 +60,8 @@ const errs=[];
     await open();
     const o = await opts('#line-kind');
     const ids = o.map(x => x.split('=')[0]);
-    if (ids.join(',') !== 'labor,part,sub,flat')
+    // Text (no price) joined the list Nov 10, for section titles and steps.
+    if (ids.join(',') !== 'labor,part,sub,flat,text')
       throw new Error('the list is: ' + o.join(' | '));
     if (!/Material \/ Parts/.test(o.join(' '))) throw new Error('Part was not relabelled: ' + o.join(' | '));
     if (!/sub=Sub/.test(o.join(' '))) throw new Error('Sub is not there: ' + o.join(' | '));

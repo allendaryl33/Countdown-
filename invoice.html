@@ -150,7 +150,7 @@ function render(p){
       <table>
         <thead><tr><th>Description</th><th class="n">Qty</th><th class="n">Price</th><th class="n">Amount</th></tr></thead>
         <tbody>
-          ${lines.map(l => l.scope
+          ${lines.map(l => l.scope || !(l.qty * l.price)   /* no money, no "$0.00" */
             ? `<tr><td colspan="4">${esc(l.desc)}</td></tr>`
             : `<tr>
             <td>${esc(l.desc)}</td><td class="n">${esc(l.qty)}</td>

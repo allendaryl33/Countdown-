@@ -1122,7 +1122,10 @@ const LINE_KINDS = [
   { id:"labor", label:"Labor",            unit:"hr" },
   { id:"part",  label:"Material / Parts", unit:"ea" },
   { id:"sub",   label:"Sub",              unit:"job" },
-  { id:"flat",  label:"Flat rate",        unit:"job" }
+  { id:"flat",  label:"Flat rate",        unit:"job" },
+  /* Words only: a section title or a work step under it. No quantity, no
+     price, and nothing in the money columns anywhere the customer looks. */
+  { id:"text",  label:"Text (no price)",  unit:"" }
 ];
 const RETIRED_KINDS = [];
 const ALL_KINDS  = LINE_KINDS.concat(RETIRED_KINDS);
@@ -1939,8 +1942,15 @@ const Cloud = {
     const row = await this.fetchRow();
     if (!row){ await this.createRow(); return { created:true }; }
 
-    if (this.dirty && !force && row.rev !== this.baseRev)
-      return { conflict:true, remote:row };
+    /* Unsent edits on this device — including one made while this read was
+       on its way — are never covered by the server's copy. If the server
+       hasn't moved, they go up on the next push; if it has, he chooses.
+       Adopting here used to lay the server's older copy over an edit typed
+       a second earlier: a cost entered, then gone after the next sync. */
+    if (this.dirty && !force){
+      if (row.rev !== this.baseRev) return { conflict:true, remote:row };
+      return { held:true };
+    }
 
     Store.adopt(row.data);
     this.baseRev = row.rev;
@@ -1962,17 +1972,26 @@ const Cloud = {
       if (row) this.baseRev = row.rev;
     }
 
+    const sent = this.editSeq;      // what this push carries, edits up to here
     const ok = await this.pushGuarded();
     if (!ok){
       const row = await this.fetchRow();
       return { conflict:true, remote:row };
     }
+    /* Only what was in the request is sent. An edit made while it was on the
+       wire is still owed — clearing the flag here is how the next sync used
+       to pull the server's copy over it. */
+    if (this.editSeq !== sent){ this.noteUnsent(true); return { pushed:true, more:true, rev: this.baseRev }; }
     this.noteUnsent(false);
     return { pushed:true, rev: this.baseRev };
   },
 
   /* Called from Store.save(). Batches a burst of edits into one write. */
+  /* Every local edit bumps this, so a sync can tell whether anything changed
+     while it was waiting on the network. */
+  editSeq: 0,
   markDirty(){
+    this.editSeq++;
     if (!this.configured() || !this.cfg.refreshToken) return;
     this.noteUnsent(true);
     clearTimeout(this.pushTimer);
@@ -1984,7 +2003,23 @@ const Cloud = {
     if (this.state === "synced") this.set("syncing", "saving…");
   },
 
-  async syncNow(opts){
+  /* One sync at a time. Two in flight push against the same revision, and
+     the second fails the guard and asks him to choose between this phone
+     and itself. A call that arrives mid-sync runs once the first is done. */
+  syncing: false, syncAgain: false, _run: null,
+  syncNow(opts){
+    // Whoever waits on a sync that's already running waits for the follow-up too.
+    if (this.syncing){ this.syncAgain = true; return this._run; }
+    this.syncing = true;
+    this._run = (async () => {
+      try {
+        do { this.syncAgain = false; await this.syncOnce(opts); opts = { quiet:true }; }
+        while (this.syncAgain);
+      } finally { this.syncing = false; }
+    })();
+    return this._run;
+  },
+  async syncOnce(opts){
     const quiet = opts && opts.quiet;
     if (!this.configured()) return;
     if (!this.cfg.refreshToken){ this.set("signed-out"); return; }
@@ -1993,6 +2028,8 @@ const Cloud = {
     this.set("syncing", quiet ? "saving…" : "syncing…");
     try {
       const r = this.dirty ? await this.push() : await this.pull();
+      // Edits arrived while this one was out: send them before saying Synced.
+      if (r.more || r.held){ this.syncAgain = true; this.set("syncing", "saving…"); return; }
       if (r.conflict){
         this.set("conflict", "changed on another device");
         if (!this.conflictOpen){
@@ -8308,11 +8345,13 @@ function openEstimate(id){
                 </select></td>
             <td>${it.kind === "flat"
               ? `<span class="t-sub" title="A flat-rate line is one amount — no quantity">flat</span>`
+              : it.kind === "text" ? `<span class="t-sub" title="Words only — no quantity or price">text</span>`
               : `<input class="input li-edit num" type="text" inputmode="decimal"
                   data-line-edit="${e.id}:${i}:qty" value="${esc(it.qty)}">`}</td>
-            <td><input class="input li-edit num" type="text" inputmode="decimal"
-                  data-line-edit="${e.id}:${i}:price" value="${esc(Number(it.price) || 0)}"></td>
-            <td class="num t-strong" data-line-total="${i}">${esc(money((Number(it.qty)||0)*(Number(it.price)||0)))}</td>
+            <td>${it.kind === "text" ? `<span class="t-sub">no price</span>`
+              : `<input class="input li-edit num" type="text" inputmode="decimal"
+                  data-line-edit="${e.id}:${i}:price" value="${esc(Number(it.price) || 0)}">`}</td>
+            <td class="num t-strong" data-line-total="${i}">${it.kind === "text" ? "" : esc(money((Number(it.qty)||0)*(Number(it.price)||0)))}</td>
             <td class="li-act">
               <button class="btn sm ghost${it.bold ? " on" : ""}" data-line-bold="${e.id}:${i}"
                       title="${it.bold ? "Bold — tap for plain" : "Make this line bold"}" aria-pressed="${!!it.bold}"
@@ -8343,7 +8382,7 @@ function openEstimate(id){
                   <select class="input" id="line-kind">${kindOptions("")}</select></div>
                 <div class="field" style="margin-bottom:0" id="line-qty-f"><label>Qty</label>
                   <input class="input" id="line-qty" type="text" inputmode="decimal" value="1"></div>
-                <div class="field" style="margin-bottom:0"><label id="line-price-l">Unit price</label>
+                <div class="field" style="margin-bottom:0" id="line-price-f"><label id="line-price-l">Unit price</label>
                   <input class="input" id="line-price" type="text" inputmode="decimal" placeholder="0.00"></div>
                 <button class="btn primary" data-add-line="${e.id}">Add line</button>
               </div>
@@ -9548,7 +9587,8 @@ function openTimeEdit(kind, recId, entryId){
 
 /* The common ones first, then whatever he has typed before, so his own words
    come back without retyping. Tapping one only fills the box. */
-const TIME_LABELS = ["Work time", "Driving", "Wholesaler run", "Dump run", "Quoting"];
+/* Subcontractor: his sub's hours, tracked as uniformly as the Sub line tag. */
+const TIME_LABELS = ["Work time", "Driving", "Wholesaler run", "Dump run", "Quoting", "Subcontractor"];
 function timeLabelPicks(){
   const seen = new Set(TIME_LABELS.map(l => l.toLowerCase()));
   const mine = [];
@@ -10645,7 +10685,7 @@ async function invoiceDocHtml(j){
         <th>Description</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th>
       </tr></thead>
       <tbody>
-        ${lines.map(l => l.scope
+        ${lines.map(l => l.scope || !lineAmount(l)
           ? `<tr><td colspan="4">${esc(l.desc)}</td></tr>`
           : `<tr>
           <td>${esc(l.desc)}</td>
@@ -10726,11 +10766,13 @@ function estDocMoneyTable(v){
       <tbody>
         ${(v.items||[]).map(i => `<tr>
           <td>${lineDescHtml(i)}</td>
-          ${i.kind === "flat"
+          ${!lineAmount(i)
+            ? `<td></td><td></td><td></td>`
+            : `${i.kind === "flat"
             ? `<td></td><td></td>`
             : `<td style="text-align:right">${esc(i.qty)}${esc(KIND_UNIT[i.kind]==="hr"?" hr":"")}</td>
           <td style="text-align:right">${esc(money(i.price))}</td>`}
-          <td style="text-align:right">${esc(money((Number(i.qty)||0)*(Number(i.price)||0)))}</td>
+          <td style="text-align:right">${esc(money(lineAmount(i)))}</td>`}
         </tr>`).join("")}
         ${Store.taxRate() ? `<tr>
           <td colspan="3" style="text-align:right">Subtotal</td>
@@ -11358,9 +11400,9 @@ function openEstimateSign(id){
         <table class="inv-meta" style="width:100%;border-collapse:collapse">
           ${items.map(i => `<tr>
             <td style="padding:7px 12px;border-bottom:1px solid var(--line)"${Store.estIsFlat(v) ? ' colspan="2"' : ''}>
-              ${Store.estIsFlat(v) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${lineDescHtml(i)}</td>
+              ${Store.estIsFlat(v) || !lineAmount(i) ? "" : (i.qty > 1 ? esc(i.qty) + " &times; " : "")}${lineDescHtml(i)}</td>
             ${Store.estIsFlat(v) ? "" : `<td class="num" style="padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap">
-              ${esc(money(i.qty * i.price))}</td>`}</tr>`).join("")}
+              ${lineAmount(i) ? esc(money(lineAmount(i))) : ""}</td>`}</tr>`).join("")}
         </table>
         ${Store.taxRate() ? `
         <div class="money-row"><span class="mr-label">Subtotal</span>
@@ -11462,7 +11504,7 @@ Thanks for getting in touch. Here's the estimate for the ${Store.workPhrase(e.ty
 
 ${(e.items || []).map(i => Store.estIsFlat(e)
   ? `  ${i.desc}`
-  : `  ${i.qty > 1 ? i.qty + " x " : ""}${i.desc} — ${money(i.qty * i.price)}`).join("\n")}
+  : lineAmount(i) ? `  ${i.qty > 1 ? i.qty + " x " : ""}${i.desc} — ${money(lineAmount(i))}` : `  ${i.desc}`).join("\n")}
 
 ${st.gst ? `Subtotal: ${money(total)}
 ${Store.taxLabel()}: ${money(Store.estimateTax(e))}
@@ -12353,7 +12395,8 @@ document.addEventListener("click", e => {
       price: amountFrom($("#line-price"), 0)
     };
     if (item.qty === null || item.price === null) return;
-    item.qty = item.kind === "flat" ? 1 : (item.qty || 1);
+    item.qty = item.kind === "flat" || item.kind === "text" ? 1 : (item.qty || 1);
+    if (item.kind === "text") item.price = 0;
     bk.items = bk.items || [];
     bk.items.push(item);
     Store.addEstLog(e, `Line added: ${desc}` +
@@ -12742,7 +12785,20 @@ function saveLineEdit(t){
     Store.save();
     return openEstimate(eid);
   }
-  if (field === "kind" && was === "flat" && t.value !== "flat"){
+  /* Made Text: words only. A line with money on it is refused rather than
+     zeroed — dropping $350 off a quote as a side effect of a tag change is
+     exactly the kind of quiet rewrite this app doesn't do. */
+  if (field === "kind" && t.value === "text" && was !== "text"){
+    if (lineWas){
+      t.value = was;
+      toast(`This line comes to ${money(lineWas)}. Set its price to 0 first, then tag it Text.`, "warn");
+      return;
+    }
+    it.kind = "text"; it.qty = 1; it.price = 0;
+    Store.save();
+    return openEstimate(eid);
+  }
+  if (field === "kind" && (was === "flat" || was === "text") && t.value !== was){
     it.kind = t.value.trim();
     Store.save();
     return openEstimate(eid);
@@ -12808,6 +12864,12 @@ function setMailLink(a, to, subject, body){
   }
 }
 
+/* What a line comes to. Zero means nothing is printed in its money columns
+   on anything the customer sees: a section title or a work step under a
+   flat-rate line read "$0.00" eighteen times on one estimate, and he held
+   it back rather than send it like that. */
+function lineAmount(i){ return cents((Number(i && i.qty) || 0) * (Number(i && i.price) || 0)); }
+
 /* A line's words for a printed sheet: bold when he's marked it as a heading
    or subtotal, otherwise plain. Only a line he marked carries the flag, so
    nothing already sent changes shape. */
@@ -12842,11 +12904,14 @@ function kindSplitHtml(lines){
 /* A flat-rate line is one amount: the add-line form drops its quantity box
    and calls the price what it is. */
 function lineFormKind(){
-  const flat = ($("#line-kind") || {}).value === "flat";
-  const f = $("#line-qty-f"), l = $("#line-price-l"), q = $("#line-qty");
-  if (f) f.style.display = flat ? "none" : "";
+  const k = ($("#line-kind") || {}).value;
+  const flat = k === "flat", text = k === "text";
+  const f = $("#line-qty-f"), pf = $("#line-price-f"), l = $("#line-price-l"), q = $("#line-qty"), p = $("#line-price");
+  if (f) f.style.display = flat || text ? "none" : "";
+  if (pf) pf.style.display = text ? "none" : "";
   if (l) l.textContent = flat ? "Amount" : "Unit price";
-  if (flat && q) q.value = "1";
+  if ((flat || text) && q) q.value = "1";
+  if (text && p) p.value = "";
 }
 
 /* The estimate's total and every option's price, redrawn in place. The

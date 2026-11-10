@@ -44,7 +44,7 @@ const APP=`file://${REPO_DIR}/index.html`, errs=[];
     await openAdd('job', jid);
     if (!await pg.$('.modal #te-label')) throw new Error('no label box');
     const picks = await pg.$$eval('.modal [data-te-pick]', bs => bs.map(b => b.textContent.trim()));
-    for (const w of ['Work time','Driving','Wholesaler run','Dump run'])
+    for (const w of ['Work time','Driving','Wholesaler run','Dump run','Quoting','Subcontractor'])
       if (!picks.includes(w)) throw new Error('missing pick '+w+': '+picks);
     console.log('       picks: ' + picks.join(', '));
   });
