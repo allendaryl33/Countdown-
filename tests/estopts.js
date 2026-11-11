@@ -189,19 +189,16 @@ const errs=[];
     if (got < 2) throw new Error('only ' + got + ' link(s) went up');
   });
 
-  await t('the message carries both options, both prices and both links', async () => {
+  /* Nov 10: a link per option in the text both opened the same page — the
+     one showing every option and its price — so she chose twice. Now the
+     message carries one link to that page, and the page does the rest. */
+  await t('the message carries one link, to the page that shows both options', async () => {
     const note = await pg.inputValue('#lk-note');
     const urls = note.match(/https?:\/\/\S+/g) || [];
-    if (urls.length !== 2) throw new Error(urls.length + ' link(s) in it: ' + note);
-    /* GST is on for this shop, so what she is quoted is the gross — the
-       same figure the signing page will show her. A message quoting 545
-       beside a page saying 572.25 is the kind of small mismatch that gets
-       argued about on a doorstep. */
-    if (!/572\.25/.test(note)) throw new Error('Option 1 price missing or pre-tax: ' + note);
-    if (!/9,870/.test(note)) throw new Error('Option 2 price missing or pre-tax: ' + note);
-    if (!/Replace it all/.test(note)) throw new Error('his own wording did not travel: ' + note);
+    if (urls.length !== 1) throw new Error(urls.length + ' link(s) in it: ' + note);
+    if (!/two ways/i.test(note)) throw new Error('it does not say there is a choice: ' + note);
     if (!/clos/i.test(note)) throw new Error('nothing tells her approving one closes the other: ' + note);
-    if (urls[0] === urls[1]) throw new Error('the same link twice');
+    if (!links.some(tk => urls[0].includes(tk))) throw new Error('the link is not one of the published options: ' + urls[0]);
   });
 
   await t("Copy hands over the whole message, not the first link on its own", async () => {

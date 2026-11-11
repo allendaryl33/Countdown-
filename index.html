@@ -11239,15 +11239,18 @@ async function sendForSignature(id){
   const gst = Store.data.settings.gst;
   const priceOf = o => money(gst ? Store.estimateGross(Store.estAsOption(e, o))
                                  : Store.estimateTotal(Store.estAsOption(e, o)));
-  /* Every option in the message with its own price and its own link, so it
-     reads the same whether she opens the one link or just scrolls the text.
-     The links differ; which one she signs is which one she is buying. */
-  const note = picks.length > 1
-    ? `Hi ${first} — two ways to do the ${Store.workPhrase(e.type, e.service)}. ` +
-      `Have a look and approve whichever suits${gst ? ` (prices incl. ${Store.taxLabel()})` : ""}:` +
-      picks.map(pk => `\n\n${Store.estOptLabel(e, pk.opt)} — ${priceOf(pk.opt)}\n` +
-        signLinkUrl(pk.token)).join("") +
-      `\n\nApproving one closes the other off, so there's no doubling up.`
+  /* One link for any number of options. Every option's link opens the same
+     page — "Two ways to do it", each option with its price and a card to tap
+     — so a link per option in the text was one door with two labels, and she
+     picked her option twice (Nov 10, EST-2010). The page does the
+     presenting; the message just opens the door. Which option she signs is
+     still which token she signs, chosen on that page. */
+  const n = picks.length;
+  const howMany = ({ 2:"two", 3:"three", 4:"four" })[n] || String(n);
+  const note = n > 1
+    ? `Hi ${first} — ${howMany} ways to do the ${Store.workPhrase(e.type, e.service)}. ` +
+      `Have a look and approve whichever suits: ${url}` +
+      `\n\nApproving one closes the ${n === 2 ? "other" : "others"} off, so there's no doubling up.`
     : `Hi ${first} — here's the estimate for the ${Store.workPhrase(e.type, e.service)}, ` +
       `${money(gst ? Store.estimateGross(e) : Store.estimateTotal(e))}` +
       `${gst ? ` (incl. ${Store.taxLabel()})` : ""}. ` +
