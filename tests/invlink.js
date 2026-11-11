@@ -194,6 +194,61 @@ const errs=[];
     console.log('       ' + link.slice(0, 72) + '…');
   });
 
+  /* Stripe opens with the balance owing already in the box (whole cents,
+     Stripe's prefilled_amount), ahead of the token, as Daryl specified. */
+  const cardLink = async tok => (await fetch(URL_+'/rest/v1/rpc/invoice_for_viewing', {
+      method:'POST', headers:{'apikey':KEY,'Content-Type':'application/json'},
+      body: JSON.stringify({ p_token: tok }) }).then(r=>r.json())).pay.stripe;
+  await t('the card link opens Stripe with the balance owing filled in, in cents', async () => {
+    const tok = await pg.evaluate(() => window.__tok);
+    const owing = await pg.evaluate(id => Store.balance(Store.job(id)), jid);
+    const link = await cardLink(tok);
+    const want = '?prefilled_amount=' + Math.round(owing * 100) + '&client_reference_id=' + tok;
+    if (!link.endsWith(want)) throw new Error(link + ' — wanted it to end ' + want);
+    console.log('       owing ' + owing.toFixed(2) + ' → ' + link.split('?')[1].slice(0, 40) + '…');
+  });
+  await t('after a part payment it fills in what is left, not the total', async () => {
+    const r = await pg.evaluate(async id => {
+      const j = Store.job(id);
+      Store.setPayment(j, { status:'invoiced', amountPaid: 100 });
+      const tok = await Cloud.publishInvoiceLink(j);
+      const left = Store.balance(j);
+      Store.setPayment(j, { status:'invoiced', amountPaid: 0 });   // put it back for the tests after
+      return { tok, left, total: Store.invoiceTotal(j) };
+    }, jid);
+    const link = await cardLink(r.tok);
+    const m = link.match(/prefilled_amount=(\d+)/);
+    if (!m) throw new Error('no amount: ' + link);
+    if (Number(m[1]) !== Math.round(r.left * 100)) throw new Error(m[1] + ' cents, but ' + r.left + ' is owing');
+    if (Number(m[1]) === Math.round(r.total * 100)) throw new Error('it filled in the total, not the balance');
+  });
+  await t('a job with its own Stripe link gets the amount filled in too', async () => {
+    const r = await pg.evaluate(async id => {
+      const j = Store.job(id);
+      j.payment.url = 'https://buy.stripe.com/test_job_own';
+      const tok = await Cloud.publishInvoiceLink(j);
+      const owing = Store.balance(j);
+      j.payment.url = ''; Store.save();
+      return { tok, owing };
+    }, jid);
+    const link = await cardLink(r.tok);
+    const want = 'https://buy.stripe.com/test_job_own?prefilled_amount=' + Math.round(r.owing * 100) + '&client_reference_id=' + r.tok;
+    if (link !== want) throw new Error(link);
+  });
+  await t('an invoice with nothing owing sends no amount — Stripe only takes a positive one', async () => {
+    const r = await pg.evaluate(async id => {
+      const j = Store.job(id);
+      const was = j.payment.amountPaid;
+      Store.setPayment(j, { status:'invoiced', amountPaid: Store.invoiceTotal(j) });
+      const tok = await Cloud.publishInvoiceLink(j);
+      Store.setPayment(j, { status:'invoiced', amountPaid: was || 0 });
+      return tok;
+    }, jid);
+    const link = await cardLink(r);
+    if (/prefilled_amount/.test(link)) throw new Error(link);
+    if (!link.endsWith('?client_reference_id=' + r)) throw new Error(link);
+  });
+
   await t('a Stripe payment marks the job paid without him touching it', async () => {
     const tok = await pg.evaluate(() => window.__tok);
     const total = await pg.evaluate(id => Store.invoiceTotal(Store.job(id)), jid);

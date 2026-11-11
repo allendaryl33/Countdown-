@@ -2127,7 +2127,19 @@ const Cloud = {
         stripe: (() => {
           const base = (job.payment && job.payment.url) || st.payStripeUrl || "";
           if (!base) return "";
-          return base + (base.includes("?") ? "&" : "?") + "client_reference_id=" + token;
+          /* The balance owing, in whole cents, so Stripe opens with the right
+             figure in the box — on a "customers choose what to pay" link she
+             can still lower it to pay part. Balance, not total: a part payment
+             already in comes off. Stripe ignores this on a fixed-price link and
+             wants a positive whole number, so nothing is sent when nothing is
+             owed. It's the balance when the invoice is sent; a later link
+             carries the later balance. */
+          // Whole cents from a balance already rounded to the cent; toFixed
+          // stops 336.16 * 100 = 33615.999… from coming out a cent short.
+          const owing = Math.round(Number((Store.balance(job) * 100).toFixed(6)));
+          return base + (base.includes("?") ? "&" : "?") +
+            (owing > 0 ? "prefilled_amount=" + owing + "&" : "") +
+            "client_reference_id=" + token;
         })(),
         etransfer: st.payEtransfer || "",
         cash: !!st.payCash
@@ -2956,10 +2968,10 @@ const Store = {
      stays pre-tax — it is what he earns — and this is what they'll be asked
      for. Three places quote an estimate and they all have to agree. */
   estimateTax(e){
-    return Math.round(this.estimateTotal(e) * this.taxRate() * 100) / 100;
+    return cents(this.estimateTotal(e) * this.taxRate());
   },
   estimateGross(e){
-    return Math.round((this.estimateTotal(e) + this.estimateTax(e)) * 100) / 100;
+    return cents(this.estimateTotal(e) + this.estimateTax(e));
   },
   taxLabel(){
     const r = this.taxRate();
@@ -3510,7 +3522,7 @@ const Store = {
     const left = this.invoiceTotal(job) - (Number(job.payment && job.payment.amountPaid) || 0);
     // To the cent: floating point left $236.16000000000003 sitting in the
     // amount box when he went to take the rest of a part payment.
-    return Math.max(0, Math.round(left * 100) / 100);
+    return Math.max(0, cents(left));
   },
   payState(job){
     const pay = job.payment || blankPayment();
@@ -3641,11 +3653,15 @@ const Store = {
     return `job #${job.no} — ${this.workLabel(job.type, job.service)}`;
   },
 
-  taxOn(job){ return Math.round(this.billedTotal(job) * this.taxRate() * 100) / 100; },
+  /* GST to the cent, half a cent up, the way a till does it. The shortcut
+     Math.round(x * 100) / 100 rounds some half cents down: 5% of $20.70 is
+     $1.035, and it said $1.03 — a cent short on 408 subtotals between $0.01
+     and $5,000. cents() is the one rounding money uses. */
+  taxOn(job){ return cents(this.billedTotal(job) * this.taxRate()); },
 
   /* What he earns is jobTotal and stays pre-tax, because GST is not revenue
      and Time & Money would lie if it counted. What the customer owes is this. */
-  invoiceTotal(job){ return Math.round((this.billedTotal(job) + this.taxOn(job)) * 100) / 100; },
+  invoiceTotal(job){ return cents(this.billedTotal(job) + this.taxOn(job)); },
 
   /* Terms are not always a number of days. For a one-man shop collecting on
      the spot, "due in 15 days" is an invitation to pay in 15 days, which is
@@ -3810,7 +3826,7 @@ const Store = {
     if (!e.approval) return 0;
     // Against the option she actually signed, not the cheapest one going.
     const v = this.estAsOption(e, this.estChosen(e));
-    return Math.round((this.estimateTotal(v) - e.approval.total) * 100) / 100;
+    return cents(this.estimateTotal(v) - e.approval.total);
   },
 
   /* ---- Leads from the website.
@@ -11888,7 +11904,7 @@ document.addEventListener("click", e => {
     if (came === null) return;
     const had   = Number((j.payment || {}).amountPaid) || 0;
     const total = Store.invoiceTotal(j);
-    const now   = Math.round((had + came) * 100) / 100;
+    const now   = cents(had + came);
     // Within half a cent of the total is paid. Anything less is still out,
     // with the part payment recorded against it.
     Store.setPayment(j, {
@@ -11996,7 +12012,7 @@ document.addEventListener("click", e => {
   if (mUse){
     const j = Store.job(mUse.dataset.matUsecost);
     if (!j) return;
-    j.materialCost = Math.round(Store.materialsCost(j) * 100) / 100;
+    j.materialCost = cents(Store.materialsCost(j));
     Store.save(); openJob(j.id);
     return toast("Parts cost set to " + money(j.materialCost), "ok");
   }
