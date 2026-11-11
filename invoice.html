@@ -48,6 +48,8 @@ tr.total td{border-bottom:0;border-top:2px solid var(--navy);font-weight:700;fon
 .pay{display:block;background:var(--navy);color:#fff;text-decoration:none;text-align:center;
   padding:17px;border-radius:10px;font-weight:700;font-size:17px;margin-bottom:12px}
 .way{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line)}
+.easiest{margin:0 0 4px;font-size:15px;line-height:1.45}
+.way + .pay{margin-top:14px}
 .way:last-child{border-bottom:0}
 .way .ico{font-size:19px;line-height:1.3}
 .way b{display:block}
@@ -170,11 +172,15 @@ function render(p){
     ${owing > 0.005 ? `
       <div class="card">
         <h2>Pay it</h2>
-        ${pay.stripe ? `<a class="pay" href="${esc(pay.stripe)}" target="_blank"
-             rel="noopener noreferrer">Pay ${esc(money(owing))} by card →</a>` : ""}
-        ${pay.etransfer ? `<div class="way"><span class="ico">🏦</span>
+        ${/* e-Transfer first and named as the easy way, in his words; card
+             stays a full button right under it, never hidden or charged extra. */ ""}
+        ${pay.etransfer ? `<p class="easiest">Easiest way to pay is e-transfer to
+          <b>${esc(pay.etransfer)}</b>${pay.stripe ? " — card works too, whatever's easier for you." : "."}</p>
+          <div class="way"><span class="ico">🏦</span>
           <span><b>Interac e-Transfer</b>
             <span class="sub">${esc(pay.etransfer)}</span></span></div>` : ""}
+        ${pay.stripe ? `<a class="pay" href="${esc(pay.stripe)}" target="_blank"
+             rel="noopener noreferrer">Pay ${esc(money(owing))} by card →</a>` : ""}
         ${pay.cash ? `<div class="way"><span class="ico">💵</span>
           <span><b>Cash</b><span class="sub">On completion, to the plumber</span></span></div>` : ""}
       </div>` : `<div class="paid">✓ Paid in full — thank you</div>`}

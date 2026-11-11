@@ -11047,8 +11047,11 @@ async function sendInvoiceLink(id){
       `full. Everything's on here including the photos. Need a copy for your records? ` +
       `There's a Save a copy button at the bottom.\n\n${url}`
     : `Hi ${first} — invoice for the ${work}, ${money(owed)}. Everything's on here ` +
-      `including the photos, and you can pay from the same page. Need a copy for your ` +
-      `records? There's a Save a copy button at the bottom.\n\n${url}`;
+      `including the photos, and you can pay from the same page.` +
+      /* His words, and the same line the invoice page carries. */
+      (Store.data.settings.payEtransfer ? ` Easiest way to pay is e-transfer to ${Store.data.settings.payEtransfer}` +
+        (Store.data.settings.payStripeUrl || (j.payment && j.payment.url) ? ` — card works too, whatever's easier for you.` : `.`) : "") +
+      ` Need a copy for your records? There's a Save a copy button at the bottom.\n\n${url}`;
 
   const fresh = !j.payment || j.payment.status === "unbilled";
   Store.markInvoiced(j);
