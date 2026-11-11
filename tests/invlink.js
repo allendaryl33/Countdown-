@@ -122,6 +122,25 @@ const errs=[];
       throw new Error('no reference for the webhook: ' + href);
   });
 
+  /* Nov 11: e-Transfer costs him nothing, card costs a fee. In his words,
+     on the invoice and in the message — card still a full button. */
+  await t('it says e-transfer is the easiest way, and card works too', async () => {
+    const tx = await cust.evaluate(() => document.querySelector('#root').innerText.replace(/\s+/g,' '));
+    const line = "Easiest way to pay is e-transfer to admin@poseidonplumbing.ca — card works too, whatever's easier for you.";
+    if (!tx.includes(line)) throw new Error('line missing: ' + tx.slice(tx.indexOf('Pay it'), tx.indexOf('Pay it') + 300));
+    const order = await cust.evaluate(() => {
+      const card = document.querySelector('.pay'), way = [...document.querySelectorAll('.way')].find(w => /e-Transfer/.test(w.textContent));
+      return way.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING ? 'etransfer-first' : 'card-first';
+    });
+    if (order !== 'etransfer-first') throw new Error(order);
+    await cust.screenshot({ path: (process.env.SP || __dirname) + '/inv-easiest.png', fullPage: true });
+  });
+  await t('the text message says the same, word for word', async () => {
+    const note = await pg.evaluate(() => (document.querySelector('#iv-note') || {}).value || '');
+    if (!note.includes("Easiest way to pay is e-transfer to admin@poseidonplumbing.ca — card works too, whatever's easier for you."))
+      throw new Error(note);
+  });
+
   await t('the signature and labelled photos come through', async () => {
     const r = await cust.evaluate(() => ({
       sigs: document.querySelectorAll('.sig img').length,
