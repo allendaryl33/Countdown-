@@ -94,7 +94,7 @@ const errs = [];
   console.log('--- both at once ---');
   await t('two devices editing at once is caught, not silently merged', async () => {
     await A.evaluate(() => { Store.data.customers[2].name = 'A offline edit'; Store.saveLocal(); Cloud.dirty = true; });
-    await fetchJson('/__poison');                        // B writes behind A's back
+    await fetchJson('/__poison?set=customers.2.name&to=B%20edit');   // B writes the same field behind A's back
     const r = await A.evaluate(() => Cloud.push().then(x => x.conflict ? 'conflict' : 'pushed'));
     if (r !== 'conflict') throw new Error('got '+r+' — A clobbered B');
     console.log('       the stale write was refused by the rev guard');
@@ -110,6 +110,7 @@ const errs = [];
     if (!m) throw new Error('no conflict modal');
     if (!/This device/.test(m) || !/other device/i.test(m)) throw new Error('modal: '+m.slice(0,120));
     if (!/Nothing has been overwritten/.test(m)) throw new Error('no reassurance');
+    if (!/A offline edit/.test(m) || !/B edit/.test(m)) throw new Error('both sides of the clash are not shown: '+m.slice(0,300));
     const st = await A.evaluate(() => Cloud.state);
     if (st !== 'conflict') throw new Error('state '+st);
     console.log('       "' + m.slice(0,88).trim() + '…"');

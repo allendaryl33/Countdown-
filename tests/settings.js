@@ -45,11 +45,17 @@ const URL_='http://127.0.0.1:54321', KEY='sb_publishable_test', errs=[];
     });
   }
 
-  // the last case deliberately causes a real conflict, which opens the
-  // dialog by design. Clear it and start the next section from a clean sync.
-  await t('that conflict did open the dialog, as it should', async () => {
-    const seen = await pg.evaluate(() => !!document.querySelector('.modal'));
-    if (!seen) throw new Error('no conflict dialog after a competing write');
+  /* The last case has another device write while this one has a change of
+     its own, to a different field. That used to open the "which copy?"
+     dialog; since Nov 14 the two merge and both changes are kept. Then
+     start the next section from a clean sync. */
+  await t('that competing write merged in without asking, keeping both changes', async () => {
+    await pg.waitForTimeout(3200);
+    const r = await pg.evaluate(() => ({ modal: !!document.querySelector('#modal-root .modal'),
+      theirs: Store.data.__from, mine: Store.data.jobs[0].priority, state: Cloud.state }));
+    if (r.modal) throw new Error('it asked, when the two changes did not touch');
+    if (r.theirs !== 'other device') throw new Error('the other device\'s change was dropped');
+    if (r.mine !== 'High') throw new Error('this device\'s change was dropped');
     await pg.evaluate(() => { closeModal(); Cloud._conflictRemote = null; });
     await fetch(URL_+'/__reset');
     await pg.evaluate(() => {

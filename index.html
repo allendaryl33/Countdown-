@@ -327,6 +327,9 @@ main.content{padding:22px 24px 60px;flex:1}
 .btn.danger-solid{background:var(--red);border-color:var(--red);color:#fff}
 .btn.danger-solid:hover{filter:brightness(.93)}
 .overlay.ask-overlay{z-index:200;align-items:center}
+table.clash{width:100%;border-collapse:collapse;font-size:13px}
+table.clash th{text-align:left;font-size:11px;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line)}
+table.clash td{padding:8px 10px;border-bottom:1px solid #eef2f6;vertical-align:top;word-break:break-word}
 .stale-note{margin:0 0 12px;padding:9px 14px;border-radius:7px;background:var(--amber-soft);
   border:1px solid #f0d6bb;color:#7a4510;font-size:13px}
 body.stale .stat .value, body.stale .stat .foot, body.stale td.num,
@@ -456,6 +459,10 @@ textarea.input{resize:vertical;min-height:76px}
 @media(max-width:640px){.row2,.row3{grid-template-columns:1fr}}
 .err{color:var(--red);font-size:12px;margin-top:4px}
 .input.invalid{border-color:var(--red)}
+/* A hint must never pass for a saved value. On Nov 13 the e-Transfer box
+   showed "admin@poseidonplumbing.ca" in grey, it looked saved, it was empty,
+   and an invoice went out with no e-Transfer address on it. */
+.input::placeholder{color:#a3afbb;font-style:italic;opacity:1}
 
 /* ---------- Modal ---------- */
 .overlay{
@@ -1153,7 +1160,10 @@ const PAY_STATUSES = [
   { id:"paid",     label:"Paid" }
 ];
 const PAY_LABEL = Object.fromEntries(PAY_STATUSES.map(p => [p.id, p.label]));
-const PAY_METHODS = ["", "Card", "ACH / bank transfer", "Check", "Cash", "Other"];
+/* Interac e-Transfer is how most of his customers pay; with no entry for it
+   Deanna's $2,000 went down as "ACH / bank transfer". Existing records keep
+   whatever they say — nothing is renamed. */
+const PAY_METHODS = ["", "Interac e-Transfer", "Card", "ACH / bank transfer", "Check", "Cash", "Other"];
 
 /* Travel zones. The label is what you call the area; the ETA is the phrase
    that lands in the customer's text. Both are editable under Data & Setup. */
@@ -1654,6 +1664,135 @@ const Photos = {
    loses a conflict is always written to a file before anything is replaced.
    ============================================================ */
 const CLOUD_KEY = "pcp.cloud.v1";
+const BASE_KEY  = "pcp.base.v1";      // the last copy this device and the server agreed on
+
+/* ============================================================
+   Merging two devices' copies of the shop
+   ============================================================
+   Two devices that both saved used to be asked "which copy is right?", and
+   the answer threw the other copy away whole. On Nov 13 that dropped a sent
+   invoice back to "not sent" and emptied the e-Transfer address saved on the
+   phone, to keep a payment recorded in the browser — three different fields,
+   none of which needed to fight.
+
+   So the copy both devices last agreed on (the base) is kept, and the two
+   are merged field by field against it: whoever changed a field wins it;
+   records added on either side are kept; activity logs keep both sides'
+   entries; counters take the higher. Only a field BOTH changed, to different
+   things, is a real question — and then he's shown exactly which field and
+   what each side says, and the rest is merged regardless.               */
+const Merge = {
+  ABSENT: { absent: true },
+  UNKNOWN: { unknown: true },        // no base copy: every difference is a question
+  stable(v){
+    if (v === undefined) return "u";
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(x => this.stable(x)).join(",") + "]";
+    return "{" + Object.keys(v).filter(k => v[k] !== undefined).sort()
+      .map(k => JSON.stringify(k) + ":" + this.stable(v[k])).join(",") + "}";
+  },
+  same(a, b){
+    if (a === this.UNKNOWN || b === this.UNKNOWN) return false;
+    if (a === this.ABSENT || b === this.ABSENT) return a === b;
+    return this.stable(a) === this.stable(b);
+  },
+  isObj(v){ return v && typeof v === "object" && !Array.isArray(v) && v !== this.ABSENT && v !== this.UNKNOWN; },
+  idOf(x){ return this.isObj(x) ? (x.id != null ? "id:" + x.id : x.optId != null ? "opt:" + x.optId : null) : null; },
+  idArray(...arrs){
+    const items = [].concat(...arrs.filter(Array.isArray));
+    return items.length > 0 && items.every(x => this.idOf(x));
+  },
+  /* How a path reads to him: "Job #1004 · payment · status". */
+  label(item, coll){
+    if (!this.isObj(item)) return "";
+    if (coll === "jobs") return "Job #" + item.no;
+    if (coll === "estimates") return "EST-" + item.no;
+    if (coll === "customers" || coll === "techs") return item.name || "a " + coll.slice(0, -1);
+    return item.desc || item.title || item.name || item.label || item.text || "an item";
+  },
+  FIELD: { payEtransfer:"e-Transfer address", payStripeUrl:"card payment link", payCash:"cash",
+    amountPaid:"amount paid", invoicedAt:"invoiced", paidAt:"paid on", status:"status",
+    settings:"Settings", company:"company name", phone:"phone", email:"email", address:"address",
+    scheduledDate:"date", window:"time window", techId:"technician", flatPrice:"flat price",
+    description:"description", items:"lines", parts:"parts", payment:"payment", name:"name",
+    laborHours:"labour hours", materialCost:"parts cost", label:"label" },
+
+  run(b, m, t, path, out){
+    if (this.same(m, t)) return m;
+    if (b !== this.UNKNOWN){
+      if (this.same(m, b)) return t;
+      if (this.same(t, b)) return m;
+    }
+    const key = path[path.length - 1];
+    // counters only climb: two devices each made a job, both numbers stand
+    if (typeof key === "string" && /^counter/.test(key) && typeof m === "number" && typeof t === "number")
+      return Math.max(m, t);
+    const B = b;
+    if (this.isObj(m) && this.isObj(t) && (this.isObj(b) || b === this.ABSENT || b === this.UNKNOWN)){
+      const res = {};
+      const keys = Object.keys(m).concat(Object.keys(t).filter(k => !(k in m)));
+      for (const k of keys){
+        const bk = this.isObj(B) ? (k in B ? B[k] : this.ABSENT) : (B === this.UNKNOWN ? this.UNKNOWN : this.ABSENT);
+        const r = this.run(bk, k in m ? m[k] : this.ABSENT, k in t ? t[k] : this.ABSENT, path.concat([k]), out);
+        if (r !== this.ABSENT) res[k] = r;
+      }
+      return res;
+    }
+    if (Array.isArray(m) && Array.isArray(t)){
+      const bA = Array.isArray(B) ? B : [];
+      if (this.idArray(bA, m, t)){
+        const map = arr => new Map(arr.map(x => [this.idOf(x), x]));
+        const bm = map(bA), mm = map(m), tm = map(t);
+        const ids = m.map(x => this.idOf(x)).concat(t.map(x => this.idOf(x)).filter(id => !mm.has(id)));
+        const res = [];
+        for (const id of ids){
+          const bi = bm.has(id) ? bm.get(id) : (B === this.UNKNOWN ? this.UNKNOWN : this.ABSENT);
+          const mi = mm.has(id) ? mm.get(id) : this.ABSENT, ti = tm.has(id) ? tm.get(id) : this.ABSENT;
+          const seg = { label: this.label(mi !== this.ABSENT ? mi : ti !== this.ABSENT ? ti : bi, key) };
+          const r = this.run(bi, mi, ti, path.concat([seg]), out);
+          if (r !== this.ABSENT) res.push(r);
+        }
+        return res;
+      }
+      // a log: both ends grew from the same start — keep both sides' additions
+      const startsWith = (a, pre) => pre.length <= a.length && pre.every((x, i) => this.same(x, a[i]));
+      if (Array.isArray(B) && startsWith(m, B) && startsWith(t, B)){
+        const extra = t.slice(B.length).filter(x => !m.slice(B.length).some(y => this.same(x, y)));
+        return m.concat(extra);
+      }
+    }
+    // Both changed the same thing to different values: his call.
+    out.push({ path, mine: m, theirs: t });
+    return { __conflict: out.length - 1 };
+  },
+  /* Put each answer in place. pick(i) gives "mine" or "theirs". */
+  fill(v, conflicts, pick){
+    if (this.isObj(v) && "__conflict" in v){
+      const c = conflicts[v.__conflict];
+      return pick(v.__conflict) === "theirs" ? c.theirs : c.mine;
+    }
+    if (Array.isArray(v)) return v.map(x => this.fill(x, conflicts, pick)).filter(x => x !== this.ABSENT);
+    if (this.isObj(v)){
+      const o = {};
+      for (const k of Object.keys(v)){ const r = this.fill(v[k], conflicts, pick); if (r !== this.ABSENT) o[k] = r; }
+      return o;
+    }
+    return v;
+  },
+  merge(base, mine, theirs){
+    const conflicts = [];
+    const merged = this.run(base == null ? this.UNKNOWN : base, mine, theirs, [], conflicts);
+    return { merged, conflicts };
+  },
+  /* One line per question, in his words. */
+  describe(c){
+    const parts = c.path.map(seg => typeof seg === "object" ? seg.label : (this.FIELD[seg] || seg))
+      .filter(x => x !== "jobs" && x !== "estimates" && x !== "customers" && x !== "techs");
+    const show = v => v === this.ABSENT ? "removed" : v == null || v === "" ? "empty"
+      : typeof v === "object" ? "changed" : (String(v).length > 48 ? String(v).slice(0, 46) + "…" : String(v));
+    return { where: parts.join(" · ") || "the shop", mine: show(c.mine), theirs: show(c.theirs) };
+  }
+};
 
 const Cloud = {
   cfg: null,         // { url, key, email, deviceId, refreshToken }
@@ -1698,7 +1837,19 @@ const Cloud = {
     // next open pulled the server's older copy over the top of that edit.
     this.dirty = !!(this.cfg && this.cfg.unsent);
     if (this.cfg && this.cfg.baseRev) this.baseRev = this.cfg.baseRev;
+    try { this.baseJSON = localStorage.getItem(BASE_KEY) || ""; } catch(e){ this.baseJSON = ""; }
     this.state = this.cfg ? "signed-out" : "off";
+  },
+
+  /* The copy this device and the server last agreed on — what a merge
+     measures both sides' changes against. Kept on the phone so it survives
+     a restart; if the phone won't hold it, it's kept for this session and a
+     clash without it falls back to asking about every difference. */
+  baseJSON: "",
+  setBase(json){
+    this.baseJSON = json || "";
+    try { if (json) localStorage.setItem(BASE_KEY, json); else localStorage.removeItem(BASE_KEY); }
+    catch(e){ try { localStorage.removeItem(BASE_KEY); } catch(_){} }
   },
 
   /* Both halves of "what this device owes the server" are written down. */
@@ -1786,13 +1937,13 @@ const Cloud = {
 
   signOut(){
     this.token = null; this.tokenExp = 0; this.uid = null; this.baseRev = 0; this.dirty = false;
-    this.conflictOpen = false;
+    this.conflictOpen = false; this.setBase("");
     if (this.cfg){ delete this.cfg.refreshToken; this.saveCfg(); }
     this.set("signed-out");
   },
 
   disconnect(){
-    this.cfg = null; this.token = null; this.uid = null; this.baseRev = 0;
+    this.cfg = null; this.token = null; this.uid = null; this.baseRev = 0; this.setBase("");
     try { localStorage.removeItem(CLOUD_KEY); } catch(e){}
     this.set("off");
   },
@@ -1805,11 +1956,13 @@ const Cloud = {
 
   /* First write for a brand-new account. */
   async createRow(){
-    const row = { owner: this.uid, data: Store.data, rev: 1, device: this.cfg.deviceId };
+    const sent = JSON.stringify(Store.data);
+    const row = { owner: this.uid, data: JSON.parse(sent), rev: 1, device: this.cfg.deviceId };
     const r = await this.call("/rest/v1/shops", {
       method:"POST", headers:{ "Prefer":"return=representation" }, body: row
     });
     this.baseRev = (r && r[0] && r[0].rev) || 1;
+    this.setBase(sent);
     return this.baseRev;
   },
 
@@ -1817,15 +1970,51 @@ const Cloud = {
      we last pulled. An empty result means somebody did. */
   async pushGuarded(){
     const next = this.baseRev + 1;
+    // Exactly what goes up is what the server will hold — the next base.
+    const sent = JSON.stringify(Store.data);
     const r = await this.call(
       `/rest/v1/shops?owner=eq.${encodeURIComponent(this.uid)}&rev=eq.${this.baseRev}`, {
         method:"PATCH", headers:{ "Prefer":"return=representation" },
-        body:{ data: Store.data, rev: next, device: this.cfg.deviceId,
+        body:{ data: JSON.parse(sent), rev: next, device: this.cfg.deviceId,
                updated_at: new Date().toISOString() }
       });
     if (!r || !r.length) return false;      // somebody else got there first
     this.baseRev = r[0].rev;
+    this.setBase(sent);
     return true;
+  },
+
+  /* Another device saved first. Merge, and only ask about what truly clashes. */
+  onConflict(remote){
+    const theirs = remote && remote.data;
+    let base = null;
+    try { base = this.baseJSON ? JSON.parse(this.baseJSON) : null; } catch(e){ base = null; }
+    const m = theirs ? Merge.merge(base, Store.data, theirs) : null;
+    if (m && !m.conflicts.length){
+      this.applyMerged(m.merged, remote);
+      toast("Another device saved too — both sets of changes are kept", "ok");
+      this.syncAgain = true; this.set("syncing", "saving…");
+      return;
+    }
+    this.set("conflict", "changed on another device");
+    if (!this.conflictOpen){
+      this.conflictOpen = true;
+      this.conflictCount = (this.conflictCount || 0) + 1;
+      this._conflictMerge = m;
+      onCloudConflict(remote, m);
+    }
+  },
+  /* The merged copy becomes this device's, built on the server's revision
+     and owed to it: the next push carries both sides up. */
+  applyMerged(data, remote){
+    Store.data = data;
+    Store.backfill();
+    Store.saveLocal();
+    this.baseRev = remote.rev;
+    this.setBase(JSON.stringify(remote.data));
+    this.editSeq++;
+    this.noteUnsent(true);
+    if (typeof renderQuiet === "function") renderQuiet();
   },
 
   /* --- photo storage ---
@@ -1953,6 +2142,7 @@ const Cloud = {
     }
 
     Store.adopt(row.data);
+    this.setBase(JSON.stringify(row.data));
     this.baseRev = row.rev;
     this.noteUnsent(false);
     return { pulled:true, rev: row.rev };
@@ -2030,15 +2220,7 @@ const Cloud = {
       const r = this.dirty ? await this.push() : await this.pull();
       // Edits arrived while this one was out: send them before saying Synced.
       if (r.more || r.held){ this.syncAgain = true; this.set("syncing", "saving…"); return; }
-      if (r.conflict){
-        this.set("conflict", "changed on another device");
-        if (!this.conflictOpen){
-          this.conflictOpen = true;
-          this.conflictCount = (this.conflictCount || 0) + 1;
-          onCloudConflict(r.remote);
-        }
-        return;
-      }
+      if (r.conflict){ this.onConflict(r.remote); return; }
       this.set("synced", "just now");
       // photographs go up behind the record, never in front of it
       this.flushPhotos().then(n => { if (n) this.markDirty(); });
@@ -5082,50 +5264,64 @@ function renderSync(){
 
 /* Two devices changed the same shop. Never pick for him, and never throw
    either copy away — the losing side goes to a file before anything moves. */
-function onCloudConflict(remote){
-  const mine = Store.data, theirs = remote && remote.data;
-  const count = d => d ? `${(d.jobs||[]).length} jobs · ${(d.customers||[]).length} customers` : "—";
+function onCloudConflict(remote, m){
+  const when = remote && remote.updated_at ? " · saved " + esc(fmtStamp(Date.parse(remote.updated_at))) : "";
+  const dev = remote && remote.device ? " (" + esc(remote.device) + ")" : "";
+  const rows = m ? m.conflicts.map(c => Merge.describe(c)) : [];
+  const shown = rows.slice(0, 12);
+  const blind = m && !Cloud.baseJSON;
   openModal(`
     <div class="modal-head"><h2>This shop changed somewhere else</h2></div>
     <div class="modal-body">
-      <p style="margin-top:0">Another device saved changes while this one had its own.
-        Nothing has been overwritten. Pick which one is right — whichever you don't
-        keep gets downloaded first, so you can always get it back.</p>
-      <div class="opt-card" style="cursor:default">
-        <div class="oc-t">📱 This device</div>
-        <div class="oc-s">${esc(count(mine))}</div>
-      </div>
-      <div class="opt-card" style="cursor:default">
-        <div class="oc-t">☁️ The other device${remote && remote.device ? " · " + esc(remote.device) : ""}</div>
-        <div class="oc-s">${esc(count(theirs))}${remote && remote.updated_at
-          ? " · saved " + esc(fmtStamp(Date.parse(remote.updated_at))) : ""}</div>
-      </div>
-
-      ${count(mine) === count(theirs) ? `<p class="t-sub" style="margin:14px 0 0;max-width:62ch">
-        Both copies hold the same amount of work, so this is almost certainly the
-        same shop saved twice rather than two different days' work. Either button
-        is safe.</p>` : ""}
-
+      <p style="margin-top:0">Another device${dev} saved changes while this one had its own${when}.
+        Nothing has been overwritten.${m ? ` Everything only one of them changed is already
+        kept from both. ${rows.length === 1 ? "One thing was" : rows.length + " things were"} changed
+        on both, differently — pick which is right for ${rows.length === 1 ? "it" : "these"}:` : ""}</p>
+      ${blind ? `<p class="t-sub" style="margin:0 0 10px;max-width:62ch">This device doesn't have the
+        copy the two last agreed on, so it can't tell which side changed what — every difference
+        is listed. After this it will.</p>` : ""}
+      ${m ? `<div class="card" style="margin:0"><table class="clash">
+        <thead><tr><th>What</th><th>This device</th><th>The other device</th></tr></thead>
+        <tbody>${shown.map(r => `<tr><td>${esc(r.where)}</td><td>${esc(r.mine)}</td><td>${esc(r.theirs)}</td></tr>`).join("")}
+        ${rows.length > shown.length ? `<tr><td colspan="3" class="t-sub">…and ${rows.length - shown.length} more</td></tr>` : ""}
+        </tbody></table></div>` : `
+      <p class="t-sub">The other device's copy couldn't be read, so this can only keep one whole copy.</p>`}
+      <p class="t-sub" style="margin:12px 0 0;max-width:62ch">Whichever side you don't pick for these
+        is downloaded first as a file, so it can always be got back.</p>
       ${Cloud.conflictCount > 1 ? `<div class="legal-note" style="margin:14px 0 0">
         <strong>This keeps happening.</strong> Something else is signed in and saving
         at the same time — usually the app left open in another tab, or the old
         icon on your home screen, which iOS keeps separate from Safari. Close the
         other one and this stops.</div>` : `<p class="t-sub" style="margin:14px 0 0;max-width:62ch">
         If you have the app open somewhere else — another tab, or the icon on your
-        home screen — close it, or the two will keep overwriting each other.</p>`}
+        home screen — close it, or the two will keep clashing.</p>`}
     </div>
     <div class="modal-foot">
       <div class="spacer"></div>
-      <button class="btn" data-conflict="theirs">Take the other one</button>
-      <button class="btn primary" data-conflict="mine">Keep this device</button>
+      <button class="btn" data-conflict="theirs">${m ? "Use the other device's" : "Take the other one"}</button>
+      <button class="btn primary" data-conflict="mine">${m ? "Use this device's" : "Keep this device"}</button>
     </div>`, { wide:true });
   Cloud._conflictRemote = remote;
 }
 
 async function resolveConflict(which){
   const remote = Cloud._conflictRemote;
+  const m = Cloud._conflictMerge;
   const stamp = todayStr();
   try {
+    if (m && remote && remote.data){
+      // the side not picked, whole, as a file — the same safety as before
+      if (which === "mine") download(`poseidon-other-device-${stamp}.json`, JSON.stringify(remote.data, null, 2));
+      else download(`poseidon-this-device-${stamp}.json`, JSON.stringify(Store.data, null, 2));
+      closeModal();
+      const data = Merge.fill(m.merged, m.conflicts, () => which);
+      Cloud._conflictRemote = null; Cloud._conflictMerge = null; Cloud.conflictOpen = false;
+      Cloud.set("syncing", "saving both…");
+      Cloud.applyMerged(data, remote);
+      await Cloud.syncNow();
+      toast(`Kept ${which === "mine" ? "this device's" : "the other device's"} for ${m.conflicts.length === 1 ? "that" : "those"}, and everything else from both`, "ok");
+      return;
+    }
     if (which === "mine"){
       if (remote) download(`poseidon-other-device-${stamp}.json`,
         JSON.stringify(remote.data, null, 2));
@@ -5147,7 +5343,7 @@ async function resolveConflict(which){
   } catch(err){
     Cloud.set("error", err.message || "couldn't resolve");
   }
-  Cloud._conflictRemote = null;
+  Cloud._conflictRemote = null; Cloud._conflictMerge = null;
   Cloud.conflictOpen = false;
   // anything he changed while the question was on screen was held back; send it
   if (Cloud.dirty) Cloud.markDirty();
@@ -6707,9 +6903,14 @@ function viewInvoices(){
     let amount, when, flag = "", acts, tone;
     if (tab === "tosend"){
       tone   = "inv-tosend";
-      amount = Store.invoiceTotal(j);
+      amount = bal;
       when   = j.scheduledDate ? "finished " + fmtDate(j.scheduledDate) : "finished";
-      acts   = `<button class="btn primary" data-invoice="${j.id}">Make the invoice →</button>`;
+      if (got > 0.005) flag = `<div class="stop-flag">${esc(`Part paid — ${money(got)} of ${money(Store.invoiceTotal(j))} in`)}</div>`;
+      /* Money can come in before the invoice goes out (a deposit, an
+         e-Transfer on the day); Part payment used to be offered only once
+         an invoice was sent. */
+      acts   = `<button class="btn primary" data-invoice="${j.id}">Make the invoice →</button>
+                <button class="btn" data-inv-pay="${j.id}">Part payment…</button>`;
     } else if (tab === "paid"){
       tone   = "inv-paid";
       amount = got;
@@ -7223,7 +7424,7 @@ function viewData(){
           <div class="row2">
             <div class="field"><label>Business email</label>
               <input class="input" id="set-email" type="email" value="${esc(d.settings.email)}"
-                     placeholder="admin@yourdomain.ca">
+                     placeholder="e.g. admin@yourdomain.ca">
               <div class="field" style="margin:8px 0 0"><label>Email buttons open</label>
                 <select class="input" id="set-mailvia">
                   <option value="device"${d.settings.mailVia === "gmail" ? "" : " selected"}>This phone's mail app</option>
@@ -7233,7 +7434,7 @@ function viewData(){
                   You still press send there.</div></div></div>
             <div class="field"><label>Website</label>
               <input class="input" id="set-website" value="${esc(d.settings.website)}"
-                     placeholder="yourdomain.ca"></div>
+                     placeholder="e.g. yourdomain.ca"></div>
           </div>
           <div class="field"><label>Business address <span class="t-sub">(optional)</span></label>
             <input class="input" id="set-address" value="${esc(d.settings.address)}"
@@ -7255,10 +7456,10 @@ function viewData(){
               <div class="hint">What the invoice prints where a due date would go.</div></div>
             <div class="field"><label>Note on invoices</label>
               <input class="input" id="set-invnote" value="${esc(d.settings.invoiceNote)}"
-                     placeholder="Thanks very much for the work."></div>
+                     placeholder="e.g. Thanks very much for the work."></div>
           </div>
           <div class="field" style="max-width:260px"><label>GST registration number</label>
-            <input class="input" id="set-gst" value="${esc(d.settings.gst)}" placeholder="123456789 RT0001">
+            <input class="input" id="set-gst" value="${esc(d.settings.gst)}" placeholder="e.g. 123456789 RT0001">
             <div class="hint">Required on invoices once you're registered, so customers can
               claim the tax back. Leave blank until then.</div></div>
           <div class="field" style="max-width:220px"><label>Default labor rate ($/hr)</label>
@@ -7281,19 +7482,21 @@ function viewData(){
         <div class="card-body">
           <p class="t-sub" style="margin-top:0;max-width:62ch">
             What appears on the invoice your customer opens. Leave anything blank
-            and it isn't offered.
+            and it isn't offered. An invoice already sent keeps the options it went
+            out with — to give a customer new ones, open their invoice and send it
+            again; the fresh link has today's.
           </p>
           <div class="field" style="max-width:460px">
             <label>Card payment link</label>
             <input class="input" id="set-pay-stripe" value="${esc(d.settings.payStripeUrl || "")}"
-                   placeholder="https://buy.stripe.com/...">
+                   placeholder="Not set — paste your Stripe link (https://buy.stripe.com/…)">
             <div class="hint">Your Stripe payment link. A job with its own link on it
               uses that one instead.</div>
           </div>
           <div class="field" style="max-width:460px">
             <label>Interac e-Transfer to</label>
             <input class="input" id="set-pay-etransfer" value="${esc(d.settings.payEtransfer || "")}"
-                   placeholder="admin@poseidonplumbing.ca">
+                   placeholder="Not set — type the address customers e-Transfer to">
             <div class="hint">Printed exactly as you type it, so they can copy it. Use an
               address you already give out &mdash; a second one is a second thing to mistype.</div>
           </div>
@@ -7318,7 +7521,7 @@ function viewData(){
           <div class="field" style="max-width:420px">
             <label>Signing page address</label>
             <input class="input" id="set-signbase" value="${esc(d.settings.signBase || "")}"
-                   placeholder="https://poseidonplumbing.ca/sign">
+                   placeholder="e.g. https://poseidonplumbing.ca/sign">
             <div class="hint">The page is <code>sign.html</code> from this repo, hosted on
               your own domain. Links already sent keep working at the old address.</div>
           </div>
@@ -9215,9 +9418,14 @@ async function previewInvoice(id){
     </div>
     <div class="modal-foot">
       ${missing.length ? "" : `
-        <button class="btn primary" data-send-invoice="${j.id}">✉ Send it to them</button>
+        <button class="btn primary" data-send-invoice="${j.id}">✉ ${j.payment && j.payment.status !== "unbilled" ? "Send it again" : "Send it to them"}</button>
         <button class="btn" data-inv-print="${j.id}">Save as PDF / Print</button>
-        <span class="t-sub">A link they can pay from, or a file for a bookkeeper</span>`}
+        <button class="btn" data-inv-pay="${j.id}">Part payment…</button>
+        <span class="t-sub">${j.payment && j.payment.status !== "unbilled"
+          /* A sent invoice is a snapshot — what they were sent never changes
+             under them. A fresh send is how new payment options reach them. */
+          ? "Already sent. Sending again makes a fresh link with today's payment options; the one they have keeps what it went out with."
+          : "A link they can pay from, or a file for a bookkeeper"}</span>`}
       <div class="spacer"></div>
       <button class="btn" data-close>Close</button>
     </div>`, { wide:true, noFocus:true });
@@ -11910,8 +12118,11 @@ document.addEventListener("click", e => {
     const now   = cents(had + came);
     // Within half a cent of the total is paid. Anything less is still out,
     // with the part payment recorded against it.
+    /* Money in before the invoice went out doesn't make it sent: a part
+       payment on a "To send" invoice leaves it there, with the payment on it. */
+    const unsent = !j.payment || j.payment.status === "unbilled";
     Store.setPayment(j, {
-      status: now >= total - 0.005 ? "paid" : "invoiced",
+      status: now >= total - 0.005 ? "paid" : unsent ? "unbilled" : "invoiced",
       amountPaid: now,
       method: $("#ipay-method").value
     });
@@ -11925,9 +12136,11 @@ document.addEventListener("click", e => {
   if (ipayClear){
     const j = Store.job(ipayClear.dataset.ipayClear);
     if (!j) return;
-    Store.setPayment(j, { status:"invoiced", amountPaid: 0 });
+    // Back to where it was: waiting on payment if it was ever sent, To send if not.
+    const sent = !!(j.payment && j.payment.invoicedAt);
+    Store.setPayment(j, { status: sent ? "invoiced" : "unbilled", amountPaid: 0 });
     closeModal(); render();
-    toast("Put back to waiting on payment", "ok");
+    toast(sent ? "Put back to waiting on payment" : "Payment cleared — still to send", "ok");
     return;
   }
 

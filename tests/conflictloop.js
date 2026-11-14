@@ -18,8 +18,11 @@ const errs=[];
     /changed somewhere else/i.test(document.querySelector('#modal-root') ?
       document.querySelector('#modal-root').textContent : ''));
   // the other device saves, and so does this one — a real conflict
+  /* Both change the same field to different things — the one kind of
+     collision a merge can't settle on its own (since Nov 14, changes to
+     different fields just merge). */
   const collide = () => pg.evaluate(async () => {
-    await fetch(Cloud.base() + '/__poison').catch(()=>{});
+    await fetch(Cloud.base() + '/__poison?set=settings.notes&to=' + encodeURIComponent('edited there ' + Date.now())).catch(()=>{});
     Store.data.settings.notes = "edited here " + Date.now();
     Cloud.dirty = true;
     await Cloud.syncNow();
@@ -95,11 +98,13 @@ const errs=[];
     await pg.click('[data-conflict="mine"]'); await pg.waitForTimeout(1200);
   });
 
-  await t('when both copies hold the same work it says either button is safe', async () => {
+  /* Was: "both copies hold the same work, either button is safe" — a guess
+     from job counts, because it couldn't see what differed. It can now. */
+  await t('the question names the field that clashed and what each side says', async () => {
     await collide(); await pg.waitForTimeout(700);
     const tx = await pg.evaluate(() => document.querySelector('#modal-root').textContent.replace(/\s+/g,' '));
-    if (!/same amount of work|Either button is safe/i.test(tx))
-      throw new Error('no reassurance when the counts match :: ' + tx.slice(0,220));
+    if (!/Settings · notes/.test(tx)) throw new Error('does not say which field :: ' + tx.slice(0,300));
+    if (!/edited here/.test(tx) || !/edited there/.test(tx)) throw new Error('does not show both values :: ' + tx.slice(0,300));
     await pg.click('[data-conflict="mine"]'); await pg.waitForTimeout(1200);
   });
 
