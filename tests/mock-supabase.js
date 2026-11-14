@@ -131,9 +131,21 @@ const server = http.createServer((req, res) => {
   if (u.pathname === '/__poison'){ // simulate another device writing
     const o = 'user-1';
     if (shops[o]){ history.push(shops[o]);
+      const data = JSON.parse(JSON.stringify(shops[o].data));
+      data.__from = 'other device';
+      /* ?set=settings.notes&to=... — the other device changed that exact
+         field too, so a merge has a real clash to ask about. Dotted path;
+         numbers index arrays. */
+      const path = u.query && u.query.set;
+      if (path){
+        const keys = path.split('.');
+        let at = data;
+        keys.slice(0, -1).forEach(k => { at = at[/^\d+$/.test(k) ? Number(k) : k]; });
+        const last = keys[keys.length - 1];
+        at[/^\d+$/.test(last) ? Number(last) : last] = u.query.to;
+      }
       shops[o] = Object.assign({}, shops[o], { rev: shops[o].rev + 1,
-        device:'OtherPhone-zzz', updated_at:new Date().toISOString(),
-        data: Object.assign({}, shops[o].data, { __from:'other device' }) }); }
+        device:'OtherPhone-zzz', updated_at:new Date().toISOString(), data }); }
     return json(res, 200, shops[o] || null);
   }
 
