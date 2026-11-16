@@ -3730,6 +3730,7 @@ const Store = {
   },
   setPayment(job, fields){
     const prev = job.payment ? job.payment.status : "unbilled";
+    const before = Number(job.payment && job.payment.amountPaid) || 0;
     job.payment = Object.assign(blankPayment(), job.payment, fields);
     if (job.payment.status === "invoiced" && !job.payment.invoicedAt) job.payment.invoicedAt = Date.now();
     if (job.payment.status === "paid"){
@@ -3739,6 +3740,19 @@ const Store = {
       if (!(Number(job.payment.amountPaid) > 0)) job.payment.amountPaid = this.invoiceTotal(job);
     }
     if (job.payment.status === "unbilled"){ job.payment.invoicedAt = null; job.payment.paidAt = null; }
+    /* Every change to what's been received is written down as its own dated
+       line — the bookkeeper needs each payment, not a running total. Every
+       route money takes in (Money received, Part payment, the job's payment
+       section, Stripe) comes through here. A correction downward is a line
+       too, so the lines always add up to what's received. Payments from
+       before this existed have no lines; the export says so. */
+    const delta = cents((Number(job.payment.amountPaid) || 0) - before);
+    if (delta){
+      job.payment.history = (job.payment.history || []).concat([{
+        id: uid("pay"), at: Date.now(), amount: delta,
+        method: job.payment.method || "", ref: job.payment.ref || ""
+      }]);
+    }
     if (prev !== job.payment.status){
       this.addLog(job, `Payment: ${PAY_LABEL[prev]} → ${PAY_LABEL[job.payment.status]}`);
     }
@@ -7573,6 +7587,27 @@ function viewData(){
             <button class="btn" data-action="export-est-csv">⬇ Export estimates as CSV</button>
           </div>
           <input type="file" id="import-file" accept="application/json,.json" style="display:none">
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-head"><h3>For your bookkeeper</h3></div>
+        <div class="card-body">
+          <p class="t-sub" style="margin-top:0;max-width:62ch">
+            Spreadsheet files (CSV) he can open in Excel or bring into QuickBooks:
+            your invoices with GST split out, every payment with its date and how
+            it came in, and the receipts entered against jobs. Leave the dates
+            empty for everything so far.</p>
+          <div class="row2" style="max-width:420px">
+            <div class="field"><label>From</label><input class="input" type="date" id="bk-from"></div>
+            <div class="field"><label>To</label><input class="input" type="date" id="bk-to"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" data-books="all">⬇ All three</button>
+            <button class="btn" data-books="invoices">Invoices</button>
+            <button class="btn" data-books="payments">Payments</button>
+            <button class="btn" data-books="receipts">Receipts</button>
+          </div>
         </div>
       </div>
 
@@ -11924,6 +11959,115 @@ function exportCsv(){
   toast("Jobs exported", "ok");
 }
 
+/* ---------- For the bookkeeper ----------
+   Three plain CSV files for a chosen period — what he needs to do the books
+   without asking: invoices with GST split out, each payment with its date
+   and method, and the receipts entered against jobs. CSV because Excel and
+   QuickBooks both read it. Dates are YYYY-MM-DD and money is plain numbers
+   to the cent, so they import without cleanup. Everything already in the
+   app is included, not just what's entered from now on. */
+const Books = {
+  ymd(ts){ return ts ? ymd(new Date(ts)) : ""; },
+  inRange(d, from, to){ return !d ? !(from || to) : (!from || d >= from) && (!to || d <= to); },
+  num(n){ return cents(n).toFixed(2); },
+  csv(head, rows){
+    // A cell starting = + @ is a formula to Excel; a leading ' keeps it text.
+    const cell = v => {
+      let x = v == null ? "" : String(v);
+      if (/^[=+@]/.test(x)) x = "'" + x;
+      return `"${x.replace(/"/g, '""')}"`;
+    };
+    return "\ufeff" + [head, ...rows].map(r => r.map(cell).join(",")).join("\r\n");
+  },
+  invoiced(){
+    return Store.data.jobs.filter(j => !Store.isBilledWithAnother(j) &&
+      (j.invoiceNo || (j.payment && j.payment.status !== "unbilled") || Number((j.payment || {}).amountPaid) > 0));
+  },
+  invoiceDate(j){ return j.invoicedOn || this.ymd(j.payment && j.payment.invoicedAt) || ""; },
+  invoices(from, to){
+    const head = ["Invoice","Invoice date","Job","Customer","Company","Work","Subtotal","GST","Total",
+                  "Received","Balance owing","Status","Last payment method","Payment reference",
+                  "Parts cost (entered on the job)","Other jobs on this invoice"];
+    const rows = this.invoiced().filter(j => this.inRange(this.invoiceDate(j) || j.scheduledDate, from, to)).map(j => {
+      const c = Store.customer(j.customerId) || {};
+      const p = j.payment || {};
+      return [j.invoiceNo ? "INV-" + j.invoiceNo : "(not numbered yet)", this.invoiceDate(j),
+        "#" + j.no, c.name || "", c.company || "", Store.workLabel(j.type, j.service),
+        this.num(Store.billedTotal(j)), this.num(Store.taxOn(j)), this.num(Store.invoiceTotal(j)),
+        this.num(Number(p.amountPaid) || 0), this.num(Store.balance(j)), PAY_LABEL[p.status] || p.status || "",
+        p.method || "", p.ref || "", j.materialCost ? this.num(j.materialCost) : "",
+        Store.billChildren(j).map(k => "#" + k.no).join(" ")];
+    });
+    return { csv: this.csv(head, rows), n: rows.length };
+  },
+  payments(from, to){
+    const head = ["Date","Amount","Method","Reference","Invoice","Job","Customer","Note"];
+    const rows = []; let undated = 0;
+    Store.data.jobs.forEach(j => {
+      const p = j.payment || {};
+      const c = Store.customer(j.customerId) || {};
+      const inv = j.invoiceNo ? "INV-" + j.invoiceNo : "";
+      const hist = p.history || [];
+      hist.forEach(h => {
+        const d = this.ymd(h.at);
+        if (this.inRange(d, from, to))
+          rows.push([d, this.num(h.amount), h.method || "", h.ref || "", inv, "#" + j.no, c.name || "",
+                     h.amount < 0 ? "Correction" : ""]);
+      });
+      // received before payments were written down one by one
+      const earlier = cents((Number(p.amountPaid) || 0) - hist.reduce((s, h) => s + (Number(h.amount) || 0), 0));
+      if (earlier){
+        const d = !hist.length && p.status === "paid" ? this.ymd(p.paidAt) : "";
+        if (this.inRange(d, from, to))
+          rows.push([d, this.num(earlier), p.method || "", p.ref || "", inv, "#" + j.no, c.name || "",
+                     d ? "Recorded before payments were dated — date is when it was marked paid"
+                       : "Recorded before payments were dated — date not recorded"]);
+        else if (!d) undated++;
+      }
+    });
+    rows.sort((a, b) => (a[0] || "9999").localeCompare(b[0] || "9999"));
+    return { csv: this.csv(head, rows), n: rows.length, undated };
+  },
+  receipts(from, to){
+    const head = ["Date","Job","Customer","Item","Qty","Unit cost","Line total","Picked up","GST line?"];
+    const rows = [];
+    const add = (label, cust, m) => {
+      if (m.cost == null || m.cost === "") return;
+      const d = this.ymd(m.gotAt || m.addedAt);
+      if (!this.inRange(d, from, to)) return;
+      const qty = Number(m.qty) || 1;
+      rows.push([d, label, cust, m.text || "", qty, String(m.cost), this.num((Number(m.cost) || 0) * qty),
+                 m.got ? "yes" : "no", /\b(GST|HST|PST|tax)\b/i.test(m.text || "") ? "yes" : ""]);
+    };
+    Store.data.jobs.forEach(j => {
+      const c = Store.customer(j.customerId) || {};
+      (j.materials || []).forEach(m => add("#" + j.no, c.name || "", m));
+    });
+    // an estimate's list moves to its job when it's approved; one that never
+    // became a job keeps its own
+    Store.data.estimates.filter(e => !e.jobId).forEach(e => {
+      const c = Store.estContact(e) || {};
+      (e.materials || []).forEach(m => add("EST-" + e.no, c.name || "", m));
+    });
+    rows.sort((a, b) => (a[0] || "9999").localeCompare(b[0] || "9999"));
+    return { csv: this.csv(head, rows), n: rows.length };
+  },
+  run(which){
+    const from = ($("#bk-from") || {}).value || "", to = ($("#bk-to") || {}).value || "";
+    if (from && to && from > to){ toast("The From date is after the To date", "err"); return; }
+    const span = from || to ? `${from || "start"}-to-${to || todayStr()}` : `all-to-${todayStr()}`;
+    const kinds = which === "all" ? ["invoices", "payments", "receipts"] : [which];
+    const said = [];
+    kinds.forEach((k, i) => {
+      const r = this[k](from, to);
+      setTimeout(() => download(`poseidon-${k}-${span}.csv`, r.csv, "text/csv"), i * 400);
+      said.push(`${r.n} ${k === "invoices" ? "invoice" : k === "payments" ? "payment" : "receipt line"}${r.n === 1 ? "" : "s"}`);
+      if (r.undated) said.push(`${r.undated} earlier payment${r.undated === 1 ? "" : "s"} with no date left out — pick no dates to include ${r.undated === 1 ? "it" : "them"}`);
+    });
+    toast(said.join(" · "), "ok");
+  }
+};
+
 function importJson(file){
   const reader = new FileReader();
   reader.onload = () => {
@@ -12232,6 +12376,9 @@ document.addEventListener("click", e => {
     Store.save(); openJob(j.id);
     return toast("Parts cost set to " + money(j.materialCost), "ok");
   }
+
+  const books = hit("[data-books]");
+  if (books) return Books.run(books.dataset.books);
 
   const conf = hit("[data-conflict]");
   if (conf) return resolveConflict(conf.dataset.conflict);
