@@ -138,6 +138,60 @@ const APP=`file://${REPO_DIR}/index.html`, errs=[];
     if (r2.length !== 1) throw new Error('receipts from Nov 10 leaked into Nov 11–30');
   });
 
+  /* Nov 17: two payments recorded before dates existed (invented here) would
+     drop out of a November export and leave it short. He knows the dates. */
+  console.log('--- dating an old payment ---');
+  await t('an undated payment shows on the job as "date not recorded", with Set date', async () => {
+    await pg.evaluate(id => { closeModal(); openJob(id); }, ids.legacy); await pg.waitForTimeout(400);
+    const tx = await pg.$eval('.modal', e => e.innerText.replace(/\s+/g, ' '));
+    if (!/date not recorded/.test(tx)) throw new Error('not shown: ' + tx.slice(0, 300));
+    if (!await pg.$('.modal [data-payline-edit="undated"]')) throw new Error('no Set date');
+  });
+  await t('setting its date writes it down — totals unchanged — and it joins a dated export', async () => {
+    const before = await pg.evaluate(id => { const j = Store.job(id); return [j.payment.amountPaid, Store.balance(j), Store.invoiceTotal(j)]; }, ids.legacy);
+    await pg.click('.modal [data-payline-edit="undated"]');
+    await pg.fill('#pl-date-undated', '2026-11-13');
+    await pg.selectOption('#pl-method-undated', 'Interac e-Transfer');
+    await pg.click('.modal [data-payline-save$=":undated"]'); await pg.waitForTimeout(400);
+    const after = await pg.evaluate(id => { const j = Store.job(id); return [j.payment.amountPaid, Store.balance(j), Store.invoiceTotal(j)]; }, ids.legacy);
+    if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('totals moved: ' + before + ' → ' + after);
+    const tx = await pg.$eval('.modal', e => e.innerText.replace(/\s+/g, ' '));
+    if (/date not recorded/.test(tx)) throw new Error('still undated on the job');
+    await pg.evaluate(() => closeModal());
+    const p = await grab('payments', '2026-11-01', '2026-11-30');
+    const r = p.rows, legacyNo = await pg.evaluate(id => String(Store.job(id).no), ids.legacy);
+    const row = r.find(x => x[col(r,'PO')] === legacyNo);
+    if (!row) throw new Error('still left out of November');
+    if (row[col(r,'Date')] !== '2026-11-13' || row[col(r,'Amount')] !== '40.00' || row[col(r,'Method')] !== 'Interac e-Transfer') throw new Error(row.join(' | '));
+    if (!/Date added later/.test(row[col(r,'Note')])) throw new Error('not marked: ' + row[col(r,'Note')]);
+  });
+  await t('a dated payment can be corrected too, and says it was edited', async () => {
+    const lid = await pg.evaluate(id => Store.job(id).payment.history[0].id, ids.a);
+    await pg.evaluate(id => openJob(id), ids.a); await pg.waitForTimeout(400);
+    await pg.click(`.modal [data-payline-edit="${lid}"]`);
+    await pg.fill(`#pl-date-${lid}`, '2026-11-14');
+    await pg.click(`.modal [data-payline-save$=":${lid}"]`); await pg.waitForTimeout(400);
+    const h = await pg.evaluate(([id, l]) => Store.job(id).payment.history.find(x => x.id === l), [ids.a, lid]);
+    if (new Date(h.at).getDate() !== 14 || h.amount !== 100) throw new Error(JSON.stringify(h));
+    await pg.evaluate(() => closeModal());
+    const r = (await grab('payments', '2026-11-14', '2026-11-14')).rows;
+    const row = r.find(x => x[col(r,'Amount')] === '100.00');
+    if (!row || !/^Edited \d{4}-/.test(row[col(r,'Note')])) throw new Error('no edited note: ' + JSON.stringify(row));
+  });
+  await t('an undated amount with later payments after it does not borrow their method', async () => {
+    const m = await pg.evaluate(() => {
+      const j = Store.data.jobs.find(x => x.status !== 'complete');
+      j.payment = Object.assign(blankPayment(), { status:'invoiced', amountPaid: 2000, method:'ACH / bank transfer' });
+      Store.setPayment(j, { status:'invoiced', amountPaid: 2100, method:'Card' });
+      return Store.paymentLines(j).find(l => l.undated).method;
+    });
+    if (m !== '') throw new Error('the old $2,000 claims "' + m + '" — that was the later payment\'s method');
+  });
+  await t('a date in the future is refused', async () => {
+    const why = await pg.evaluate(id => Store.editPayment(Store.job(id), Store.job(id).payment.history[0].id, { date: '2099-01-01' }), ids.a);
+    if (!/hasn't happened/.test(why)) throw new Error(why);
+  });
+
   await b.close();
   const hard = errs.filter(e=>e.includes('CONSOLE')||e.includes('PAGEERROR'));
   console.log('\n=== js errors: '+hard.length+' | failures: '+(errs.length-hard.length)+' ===');
