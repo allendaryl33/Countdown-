@@ -192,6 +192,71 @@ const APP=`file://${REPO_DIR}/index.html`, errs=[];
     if (!/hasn't happened/.test(why)) throw new Error(why);
   });
 
+  /* Nov 17: receipts live in a Ziploc bag; the bookkeeper and CRA need the
+     photos. Muse labels each one Receipt on its job, with the day it's from;
+     the Receipts file points at it and the zip carries it, named to match. */
+  console.log('--- receipt photos ---');
+  const zlib = require('zlib');
+  const readZip = buf => {                      // just enough to check what's inside
+    const out = []; let i = 0;
+    while (buf.readUInt32LE(i) === 0x04034b50){
+      const crc = buf.readUInt32LE(i + 14), size = buf.readUInt32LE(i + 18), nlen = buf.readUInt16LE(i + 26), xlen = buf.readUInt16LE(i + 28);
+      const name = buf.slice(i + 30, i + 30 + nlen).toString('utf8');
+      const data = buf.slice(i + 30 + nlen + xlen, i + 30 + nlen + xlen + size);
+      out.push({ name, crc, data }); i += 30 + nlen + xlen + size;
+    }
+    if (buf.readUInt32LE(buf.length - 22) !== 0x06054b50) throw new Error('no end record — not a zip a computer will open');
+    return out;
+  };
+  let pid;
+  await t('a photo can be labelled Receipt, with what it is and the day it was bought', async () => {
+    pid = await pg.evaluate(async id => {
+      const j = Store.job(id);
+      const bytes = new Uint8Array(4096).map((_, i) => (i * 7 + 3) & 255);   // stand-in for a JPEG
+      const p = Store.addPhoto('job', id, {});
+      await Photos.put(p.id, new Blob([bytes], { type:'image/jpeg' }));
+      return p.id;
+    }, ids.a);
+    await pg.evaluate(id => openPhoto(id), pid); await pg.waitForTimeout(400);
+    await pg.click('.modal [data-ph-tag$=":receipt"]'); await pg.waitForTimeout(400);
+    if (!await pg.$('#ph-rc-what') || !await pg.$('#ph-rc-date')) throw new Error('no receipt fields');
+    await pg.fill('#ph-rc-what', 'Romaglass invoice 24');
+    await pg.fill('#ph-rc-date', '2026-11-10');                // back-filled: bought earlier than photographed
+    await pg.click('.modal [data-ph-receipt]'); await pg.waitForTimeout(300);
+    const ph = await pg.evaluate(([id, p]) => Store.job(id).photos.find(x => x.id === p), [ids.a, pid]);
+    if (ph.tag !== 'receipt' || ph.caption !== 'Romaglass invoice 24' || ph.receiptDate !== '2026-11-10') throw new Error(JSON.stringify(ph));
+  });
+  await t('the Receipts file points that day\'s lines at the photo, and says "none" where there isn\'t one', async () => {
+    await pg.evaluate(id => { Store.job(id).materials.push({ id:'r9', text:'Silicone', qty:1, cost:9.99, got:true,
+      gotAt: Date.parse('2026-11-12T12:00:00'), addedAt:9, from:'job' }); Store.save(); }, ids.a);
+    const r = (await grab('receipts')).rows, aNo = String(ids.aNo);
+    const want = '2026-11-10_PO' + aNo + '_romaglass-invoice-24.jpg';
+    const day = r.filter(x => x[col(r,'PO / estimate')] === aNo && x[col(r,'Date')] === '2026-11-10');
+    if (!day.length || !day.every(x => x[col(r,'Receipt photo')] === want)) throw new Error(JSON.stringify(day.map(x => x[col(r,'Receipt photo')])));
+    const other = r.find(x => x[col(r,'Item')] === 'Silicone');
+    if (other[col(r,'Receipt photo')] !== 'none') throw new Error('Nov 12 line: ' + other[col(r,'Receipt photo')]);
+  });
+  await t('the zip holds the photo, named to match, exactly as it was', async () => {
+    await pg.evaluate(() => go('data')); await pg.waitForTimeout(250);
+    await pg.fill('#bk-from', ''); await pg.fill('#bk-to', '');
+    const [dl] = await Promise.all([pg.waitForEvent('download'), pg.click('[data-books="photos"]')]);
+    if (!/^poseidon-receipt-photos-all-to-\d{4}-\d\d-\d\d\.zip$/.test(dl.suggestedFilename())) throw new Error(dl.suggestedFilename());
+    const files = readZip(fs.readFileSync(await dl.path()));
+    const f = files.find(x => x.name === '2026-11-10_PO' + ids.aNo + '_romaglass-invoice-24.jpg');
+    if (!f) throw new Error('names: ' + files.map(x => x.name).join(', '));
+    const want = Buffer.from(Array.from({ length: 4096 }, (_, i) => (i * 7 + 3) & 255));
+    if (!f.data.equals(want)) throw new Error('the photo inside is not the one that went in');
+    if (zlib.crc32 && zlib.crc32(f.data) !== f.crc) throw new Error('checksum wrong — the zip would report it damaged');
+  });
+  await t('a receipt photo the app can\'t fetch is named in MISSING.txt, not skipped', async () => {
+    await pg.evaluate(id => { const p = Store.addPhoto('job', id, { tag:'receipt', caption:'Lost one', receiptDate:'2026-11-11' }); p.up = false; Store.save(); }, ids.a);
+    await pg.evaluate(() => go('data')); await pg.waitForTimeout(250);
+    const [dl] = await Promise.all([pg.waitForEvent('download'), pg.click('[data-books="photos"]')]);
+    const files = readZip(fs.readFileSync(await dl.path()));
+    const miss = files.find(x => x.name === 'MISSING.txt');
+    if (!miss || !/2026-11-11_PO[\w-]+_lost-one\.jpg/.test(miss.data.toString())) throw new Error('names: ' + files.map(x => x.name).join(', '));
+  });
+
   await b.close();
   const hard = errs.filter(e=>e.includes('CONSOLE')||e.includes('PAGEERROR'));
   console.log('\n=== js errors: '+hard.length+' | failures: '+(errs.length-hard.length)+' ===');

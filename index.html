@@ -769,6 +769,7 @@ tr[data-line-row] td{vertical-align:top;padding:6px}
 .ph-label{padding:13px 16px;border-top:1px solid var(--line);background:var(--sunk);flex:0 0 auto}
 .ph-quick{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
 .ph-custom{display:flex;gap:8px}
+.ph-receipt{margin-bottom:6px}
 .ph-custom .input{flex:1;min-width:0}
 .ph-custom .btn{flex:0 0 auto}
 @media (max-width:480px){
@@ -7694,7 +7695,11 @@ function viewData(){
             <button class="btn" data-books="invoices">Invoices</button>
             <button class="btn" data-books="payments">Payments</button>
             <button class="btn" data-books="receipts">Receipts</button>
+            <button class="btn" data-books="photos">⬇ Receipt photos (zip)</button>
           </div>
+          <p class="t-sub" style="margin:10px 0 0;max-width:62ch">Receipt photos are the ones
+            labelled <strong>Receipt</strong> on a job. Each is matched to that job's Materials
+            lines from the same day; a line with none says "none", so the gaps show.</p>
         </div>
       </div>
 
@@ -9768,9 +9773,20 @@ async function openPhoto(pid){
     <div class="ph-label">
       <div class="ph-quick">
         ${kind === "job" ? `${tagBtn("before","Before")}${tagBtn("after","After")}` : ""}
+        ${tagBtn("receipt","Receipt")}
         ${tagBtn("","No label")}
       </div>
-      <div class="ph-custom">
+      ${photo.tag === "receipt" ? `<div class="ph-receipt">
+        <div class="row2" style="margin-bottom:8px">
+          <div class="field" style="margin:0"><label>What it is</label>
+            <input class="input" id="ph-rc-what" maxlength="60" value="${esc(photo.caption || "")}" placeholder="e.g. Romaglass invoice 24"></div>
+          <div class="field" style="margin:0"><label>Receipt date</label>
+            <input class="input" id="ph-rc-date" type="date" value="${esc(photo.receiptDate || ymd(new Date(photo.takenAt || Date.now())))}"></div>
+        </div>
+        <button class="btn primary" data-ph-receipt="${kind}:${rec.id}:${pid}">Save receipt</button>
+        <span class="t-sub">The date is when it was bought — it matches this photo to that day's lines in Materials.</span>
+      </div>` : ""}
+      <div class="ph-custom"${photo.tag === "receipt" ? ' style="display:none"' : ""}>
         <input class="input" id="ph-tag-text" maxlength="28" placeholder="or write your own — toilet, main stack, meter…"
                value="${esc(photo.tag === "before" || photo.tag === "after" ? "" : (photo.tag || ""))}"
                data-ph-tagbox="${kind}:${rec.id}:${pid}">
@@ -12144,31 +12160,85 @@ const Books = {
     rows.sort((a, b) => (a[0] || "9999").localeCompare(b[0] || "9999"));
     return { csv: this.csv(head, rows), n: rows.length, undated };
   },
+  /* Receipt photos: those labelled Receipt, each with the day it's from.
+     Named so they match the spreadsheet — 2026-11-16_PO1004_romaglass-invoice-24.jpg
+     — and numbered -2, -3 when two would share a name. */
+  receiptPhotos(){
+    const out = [], used = new Set();
+    const slug = t => String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "receipt";
+    const each = (kind, rec, ref) => (rec.photos || []).filter(p => p.tag === "receipt")
+      .slice().sort((a, b) => (a.takenAt || 0) - (b.takenAt || 0)).forEach(p => {
+        const date = p.receiptDate || this.ymd(p.takenAt);
+        let name = `${date}_${ref}_${slug(p.caption)}`, n = 1;
+        while (used.has(name + (n > 1 ? "-" + n : ""))) n++;
+        name += n > 1 ? "-" + n : ""; used.add(name);
+        out.push({ kind, rec, photo: p, date, file: name + ".jpg" });
+      });
+    Store.data.jobs.forEach(j => each("job", j, "PO" + String(j.no)));
+    Store.data.estimates.forEach(e => each("estimate", e, "EST" + e.no));
+    return out;
+  },
   receipts(from, to){
-    const head = ["Date","PO / estimate","Customer","Item","Qty","Unit cost","Line total","Picked up","GST line?"];
+    const head = ["Date","PO / estimate","Customer","Item","Qty","Unit cost","Line total","Picked up","GST line?","Receipt photo"];
     const rows = [];
-    const add = (label, cust, m) => {
+    const photos = this.receiptPhotos();
+    // same job, same day — a receipt usually covers several lines, and they all point at it
+    const photoFor = (rec, d) => photos.filter(x => x.rec === rec && x.date === d).map(x => x.file).join("; ") || "none";
+    const add = (label, cust, m, rec) => {
       if (m.cost == null || m.cost === "") return;
       const d = this.ymd(m.gotAt || m.addedAt);
       if (!this.inRange(d, from, to)) return;
       const qty = Number(m.qty) || 1;
       rows.push([d, label, cust, m.text || "", qty, String(m.cost), this.num((Number(m.cost) || 0) * qty),
-                 m.got ? "yes" : "no", /\b(GST|HST|PST|tax)\b/i.test(m.text || "") ? "yes" : ""]);
+                 m.got ? "yes" : "no", /\b(GST|HST|PST|tax)\b/i.test(m.text || "") ? "yes" : "", photoFor(rec, d)]);
     };
     Store.data.jobs.forEach(j => {
       const c = Store.customer(j.customerId) || {};
-      (j.materials || []).forEach(m => add(String(j.no), c.name || "", m));
+      (j.materials || []).forEach(m => add(String(j.no), c.name || "", m, j));
     });
     // an estimate's list moves to its job when it's approved; one that never
     // became a job keeps its own
     Store.data.estimates.filter(e => !e.jobId).forEach(e => {
       const c = Store.estContact(e) || {};
-      (e.materials || []).forEach(m => add("EST-" + e.no, c.name || "", m));
+      (e.materials || []).forEach(m => add("EST-" + e.no, c.name || "", m, e));
     });
     rows.sort((a, b) => (a[0] || "9999").localeCompare(b[0] || "9999"));
     return { csv: this.csv(head, rows), n: rows.length };
   },
+  /* The receipt photos in a period, in one zip, named to match the
+     Receipts file. Stored, not compressed — JPEGs don't shrink, and it
+     keeps this small enough to write without a library. A photo that
+     can't be had (on another phone and never uploaded, say) is named in
+     MISSING.txt inside the zip, not quietly skipped. */
+  async zipReceipts(){
+    const from = ($("#bk-from") || {}).value || "", to = ($("#bk-to") || {}).value || "";
+    if (from && to && from > to){ toast("The From date is after the To date", "err"); return; }
+    const list = this.receiptPhotos().filter(x => this.inRange(x.date, from, to));
+    if (!list.length){ toast("No photos labelled Receipt in that period", "warn"); return; }
+    toast(`Gathering ${list.length} receipt photo${list.length === 1 ? "" : "s"}…`, "ok");
+    const files = [], missing = [];
+    for (const x of list){
+      let blob = null;
+      try { blob = await Photos.get(x.photo.id); } catch(_){}
+      if (!blob && x.photo.up && Cloud.configured() && Cloud.cfg.refreshToken){
+        try { const u = await Cloud.signPhoto(x.photo.path); const r = await fetch(u); if (r.ok) blob = await r.blob(); } catch(_){}
+      }
+      if (blob) files.push({ name: x.file, data: new Uint8Array(await blob.arrayBuffer()) });
+      else missing.push(x.file);
+    }
+    if (missing.length) files.push({ name: "MISSING.txt", data: new TextEncoder().encode(
+      "These receipt photos are listed in the app but couldn't be fetched — usually a photo taken on another phone that hasn't uploaded yet:\r\n\r\n" + missing.join("\r\n") + "\r\n") });
+    const span = from || to ? `${from || "start"}-to-${to || todayStr()}` : `all-to-${todayStr()}`;
+    const blob = new Blob([zipStore(files)], { type: "application/zip" });
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = `poseidon-receipt-photos-${span}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast(missing.length ? `${files.length - 1} photos zipped · ${missing.length} couldn't be fetched — see MISSING.txt`
+                         : `${files.length} receipt photo${files.length === 1 ? "" : "s"} zipped`, missing.length ? "warn" : "ok");
+  },
   run(which){
+    if (which === "photos") return this.zipReceipts();
     const from = ($("#bk-from") || {}).value || "", to = ($("#bk-to") || {}).value || "";
     if (from && to && from > to){ toast("The From date is after the To date", "err"); return; }
     const span = from || to ? `${from || "start"}-to-${to || todayStr()}` : `all-to-${todayStr()}`;
@@ -12183,6 +12253,33 @@ const Books = {
     toast(said.join(" · "), "ok");
   }
 };
+
+/* A plain zip (stored, no compression): local headers, the central
+   directory, the end record. Enough for Windows, Mac and phones to open,
+   without pulling in a library. */
+const CRC_TABLE = (() => { const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; }
+  return t; })();
+function crc32(u8){ let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files){
+  const enc = new TextEncoder(), parts = [], central = [];
+  let offset = 0;
+  const le = (n, b) => { const a = new Uint8Array(b); for (let i = 0; i < b; i++) a[i] = (n >>> (8 * i)) & 0xFF; return a; };
+  const cat = arrs => { const len = arrs.reduce((s, a) => s + a.length, 0), o = new Uint8Array(len); let p = 0; arrs.forEach(a => { o.set(a, p); p += a.length; }); return o; };
+  files.forEach(f => {
+    const name = enc.encode(f.name), crc = crc32(f.data), size = f.data.length;
+    const local = cat([le(0x04034b50,4), le(20,2), le(0x0800,2), le(0,2), le(0,2), le(0x21,2),
+                       le(crc,4), le(size,4), le(size,4), le(name.length,2), le(0,2), name]);
+    parts.push(local, f.data);
+    central.push(cat([le(0x02014b50,4), le(20,2), le(20,2), le(0x0800,2), le(0,2), le(0,2), le(0x21,2),
+                      le(crc,4), le(size,4), le(size,4), le(name.length,2), le(0,2), le(0,2), le(0,2), le(0,2),
+                      le(0,4), le(offset,4), name]));
+    offset += local.length + size;
+  });
+  const cd = cat(central);
+  const end = cat([le(0x06054b50,4), le(0,2), le(0,2), le(files.length,2), le(files.length,2), le(cd.length,4), le(offset,4), le(0,2)]);
+  return cat(parts.concat([cd, end]));
+}
 
 function importJson(file){
   const reader = new FileReader();
@@ -12434,9 +12531,29 @@ document.addEventListener("click", e => {
   const phTag = hit("[data-ph-tag]");
   if (phTag){
     const [k,id,pid,tag] = phTag.dataset.phTag.split(":");
+    /* A receipt needs what it is and the day it was bought, so the photo
+       stays open for those. The date starts on the day the photo was
+       taken; a receipt back-filled later gets its real date typed in. */
+    if (tag === "receipt"){
+      const f = Store.findPhoto(pid);
+      Store.setPhoto(k, id, pid, { tag: "receipt",
+        receiptDate: (f && f.photo.receiptDate) || ymd(new Date((f && f.photo.takenAt) || Date.now())) });
+      return openPhoto(pid);
+    }
     Store.setPhoto(k, id, pid, { tag: tag || "" });
     closeModal();
     refreshPhotos(k, id);
+    return;
+  }
+
+  const phRc = hit("[data-ph-receipt]");
+  if (phRc){
+    const [k,id,pid] = phRc.dataset.phReceipt.split(":");
+    const d = ($("#ph-rc-date") || {}).value || "";
+    if (!parseYmd(d)){ toast("Pick the day the receipt is from", "err"); return; }
+    Store.setPhoto(k, id, pid, { tag: "receipt", caption: (($("#ph-rc-what") || {}).value || "").trim(), receiptDate: d });
+    closeModal(); refreshPhotos(k, id);
+    toast("Receipt saved", "ok");
     return;
   }
 
