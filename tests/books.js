@@ -248,6 +248,39 @@ const APP=`file://${REPO_DIR}/index.html`, errs=[];
     if (!f.data.equals(want)) throw new Error('the photo inside is not the one that went in');
     if (zlib.crc32 && zlib.crc32(f.data) !== f.crc) throw new Error('checksum wrong — the zip would report it damaged');
   });
+  /* Back-fill: Muse types a receipt's lines today for something bought on
+     Nov 5. Same-day matching can't see that — ticking the lines on the
+     photo can. */
+  await t('lines ticked on a back-filled receipt take its date and point at it', async () => {
+    const pid2 = await pg.evaluate(async id => {
+      const j = Store.job(id);
+      ['Wax ring', 'Closet bolts'].forEach((t, i) => j.materials.push({ id:'bf' + i, text:t, qty:1, cost:5 + i, got:true,
+        gotAt: Date.now(), addedAt: Date.now(), from:'job' }));
+      Store.save();
+      const p = Store.addPhoto('job', id, {});
+      await Photos.put(p.id, new Blob([new Uint8Array([1,2,3])], { type:'image/jpeg' }));
+      return p.id;
+    }, ids.a);
+    await pg.evaluate(id => { closeModal(); openPhoto(id); }, pid2); await pg.waitForTimeout(400);
+    await pg.click('.modal [data-ph-tag$=":receipt"]'); await pg.waitForTimeout(400);
+    await pg.fill('#ph-rc-what', 'Plumbing supply 5521');
+    await pg.fill('#ph-rc-date', '2026-11-05');
+    await pg.check('[data-rc-line="bf0"]'); await pg.check('[data-rc-line="bf1"]');
+    await pg.click('.modal [data-ph-receipt]'); await pg.waitForTimeout(300);
+    const r = (await grab('receipts')).rows;
+    const lines = r.filter(x => ['Wax ring','Closet bolts'].includes(x[col(r,'Item')]));
+    if (lines.length !== 2) throw new Error(JSON.stringify(lines));
+    for (const x of lines){
+      if (x[col(r,'Date')] !== '2026-11-05') throw new Error('dated ' + x[col(r,'Date')] + ', not the receipt\'s day');
+      if (x[col(r,'Receipt photo')] !== '2026-11-05_PO' + ids.aNo + '_plumbing-supply-5521.jpg') throw new Error(x[col(r,'Receipt photo')]);
+    }
+    // and unticking one puts it back the way it was
+    await pg.evaluate(id => { closeModal(); openPhoto(id); }, pid2); await pg.waitForTimeout(400);
+    await pg.uncheck('[data-rc-line="bf1"]');
+    await pg.click('.modal [data-ph-receipt]'); await pg.waitForTimeout(300);
+    const m = await pg.evaluate(id => Store.job(id).materials.find(x => x.id === 'bf1'), ids.a);
+    if (m.receiptPhoto || m.boughtOn) throw new Error('unticking left it linked: ' + JSON.stringify(m));
+  });
   await t('a receipt photo the app can\'t fetch is named in MISSING.txt, not skipped', async () => {
     await pg.evaluate(id => { const p = Store.addPhoto('job', id, { tag:'receipt', caption:'Lost one', receiptDate:'2026-11-11' }); p.up = false; Store.save(); }, ids.a);
     await pg.evaluate(() => go('data')); await pg.waitForTimeout(250);

@@ -770,6 +770,9 @@ tr[data-line-row] td{vertical-align:top;padding:6px}
 .ph-quick{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}
 .ph-custom{display:flex;gap:8px}
 .ph-receipt{margin-bottom:6px}
+.rc-lines{max-height:170px;overflow:auto;margin:0 0 8px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff}
+.rc-line{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:13px}
+.rc-line input{margin-top:3px}
 .ph-custom .input{flex:1;min-width:0}
 .ph-custom .btn{flex:0 0 auto}
 @media (max-width:480px){
@@ -9783,6 +9786,12 @@ async function openPhoto(pid){
           <div class="field" style="margin:0"><label>Receipt date</label>
             <input class="input" id="ph-rc-date" type="date" value="${esc(photo.receiptDate || ymd(new Date(photo.takenAt || Date.now())))}"></div>
         </div>
+        ${(rec.materials || []).length ? `<div class="rc-lines">
+          <label class="t-strong" style="display:block;margin:0 0 4px;font-size:12.5px">Lines on this receipt</label>
+          ${(rec.materials || []).map(m => `<label class="rc-line"><input type="checkbox" data-rc-line="${esc(m.id)}"${m.receiptPhoto === pid ? " checked" : ""}>
+            <span>${m.qty > 1 ? esc(m.qty) + "× " : ""}${esc(m.text)}${m.cost != null && m.cost !== "" ? ` <span class="t-sub">· ${esc(money(cents((Number(m.cost)||0) * (Number(m.qty)||1))))}</span>` : ""}</span></label>`).join("")}
+          <div class="t-sub" style="margin:4px 0 8px">Ticked lines take this receipt's date and point at this photo. Lines left unticked match by same day.</div>
+        </div>` : ""}
         <button class="btn primary" data-ph-receipt="${kind}:${rec.id}:${pid}">Save receipt</button>
         <span class="t-sub">The date is when it was bought — it matches this photo to that day's lines in Materials.</span>
       </div>` : ""}
@@ -12183,14 +12192,20 @@ const Books = {
     const rows = [];
     const photos = this.receiptPhotos();
     // same job, same day — a receipt usually covers several lines, and they all point at it
-    const photoFor = (rec, d) => photos.filter(x => x.rec === rec && x.date === d).map(x => x.file).join("; ") || "none";
+    /* A line ticked on a receipt points at that photo; any other line
+       matches the receipt photos from the same job and day. */
+    const photoFor = (rec, d, m) => {
+      const linked = m.receiptPhoto && photos.find(x => x.photo.id === m.receiptPhoto);
+      if (linked) return linked.file;
+      return photos.filter(x => x.rec === rec && x.date === d).map(x => x.file).join("; ") || "none";
+    };
     const add = (label, cust, m, rec) => {
       if (m.cost == null || m.cost === "") return;
-      const d = this.ymd(m.gotAt || m.addedAt);
+      const d = m.boughtOn || this.ymd(m.gotAt || m.addedAt);
       if (!this.inRange(d, from, to)) return;
       const qty = Number(m.qty) || 1;
       rows.push([d, label, cust, m.text || "", qty, String(m.cost), this.num((Number(m.cost) || 0) * qty),
-                 m.got ? "yes" : "no", /\b(GST|HST|PST|tax)\b/i.test(m.text || "") ? "yes" : "", photoFor(rec, d)]);
+                 m.got ? "yes" : "no", /\b(GST|HST|PST|tax)\b/i.test(m.text || "") ? "yes" : "", photoFor(rec, d, m)]);
     };
     Store.data.jobs.forEach(j => {
       const c = Store.customer(j.customerId) || {};
@@ -12552,6 +12567,17 @@ document.addEventListener("click", e => {
     const d = ($("#ph-rc-date") || {}).value || "";
     if (!parseYmd(d)){ toast("Pick the day the receipt is from", "err"); return; }
     Store.setPhoto(k, id, pid, { tag: "receipt", caption: (($("#ph-rc-what") || {}).value || "").trim(), receiptDate: d });
+    /* Lines ticked as on this receipt: they point at it and carry its date
+       as the day they were bought, which is what makes a receipt back-filled
+       days later line up. Unticking undoes both. */
+    const rec = Store.recordOf(k, id);
+    document.querySelectorAll("[data-rc-line]").forEach(cb => {
+      const m = ((rec && rec.materials) || []).find(x => x.id === cb.dataset.rcLine);
+      if (!m) return;
+      if (cb.checked){ m.receiptPhoto = pid; m.boughtOn = d; }
+      else if (m.receiptPhoto === pid){ delete m.receiptPhoto; delete m.boughtOn; }
+    });
+    Store.save();
     closeModal(); refreshPhotos(k, id);
     toast("Receipt saved", "ok");
     return;
