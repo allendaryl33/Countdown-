@@ -107,7 +107,7 @@ const errs=[];
     });
     await pg.waitForTimeout(350);
     const s = await sheet();
-    if (!/job #/.test(s)) throw new Error('a job no longer says it is a job: ' + s.slice(0,160));
+    if (!/PO /.test(s)) throw new Error('a job no longer says it is a job (PO …): ' + s.slice(0,160));
     const body = await msgBody();
     if (!/Heading your way/.test(body)) throw new Error('the job message broke: ' + body);
     const tabs = await pg.evaluate(() =>

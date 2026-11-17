@@ -1702,10 +1702,10 @@ const Merge = {
     const items = [].concat(...arrs.filter(Array.isArray));
     return items.length > 0 && items.every(x => this.idOf(x));
   },
-  /* How a path reads to him: "Job #1004 · payment · status". */
+  /* How a path reads to him: "PO 1004 · payment · status". */
   label(item, coll){
     if (!this.isObj(item)) return "";
-    if (coll === "jobs") return "Job #" + item.no;
+    if (coll === "jobs") return "PO " + item.no;
     if (coll === "estimates") return "EST-" + item.no;
     if (coll === "customers" || coll === "techs") return item.name || "a " + coll.slice(0, -1);
     return item.desc || item.title || item.name || item.label || item.text || "an item";
@@ -2918,9 +2918,27 @@ const Store = {
     this.save();
   },
 
+  /* A PO number: the day it was opened and that day's count — 261117-01,
+     261117-02, then 261118-01. Year, month, day, so it can't be read two
+     ways and sorts by date; the date is when the PO is made, and never moves
+     when the work is rescheduled. Return visits add B, C… to it.
+     Jobs numbered before this (#1004, #1005B…) keep their numbers: they're
+     already on memos, receipts and customers' invoices.
+     The day's count lives in counterPo as YYMMDDNN, so a merge between two
+     devices (which takes the higher counter) can't hand one out twice; any
+     PO already on a job today is counted too. */
   nextJobNo(){
-    this.data.counter = (this.data.counter || 1000) + 1;
-    return this.data.counter;
+    const d = new Date(), p2 = n => String(n).padStart(2, "0");
+    const day = String(d.getFullYear()).slice(2) + p2(d.getMonth() + 1) + p2(d.getDate());
+    const cur = Number(this.data.counterPo) || 0;
+    let n = String(Math.floor(cur / 100)) === day ? cur % 100 : 0;
+    this.data.jobs.forEach(j => {
+      const m = String(j.no || "").match(/^(\d{6})-(\d{2})/);
+      if (m && m[1] === day) n = Math.max(n, Number(m[2]));
+    });
+    n += 1;
+    this.data.counterPo = Number(day) * 100 + n;
+    return `${day}-${p2(n)}`;
   },
 
   nextEstNo(){
@@ -3258,11 +3276,11 @@ const Store = {
       } else {
         const why = this.canBillTogether(job, parent);
         if (why){
-          this.addLog(job, `Not billed with job #${parent.no}: ${why}`);
-          this.addEstLog(e, `Could not go on job #${parent.no}'s invoice — ${why}`);
+          this.addLog(job, `Not billed with PO ${parent.no}: ${why}`);
+          this.addEstLog(e, `Could not go on PO ${parent.no}'s invoice — ${why}`);
         } else {
           job.billWith = parent.id;
-          this.addLog(job, `Change of scope — billed with job #${parent.no}`);
+          this.addLog(job, `Change of scope — billed with PO ${parent.no}`);
           this.addLog(parent, `Billing with it: ${this.jobLabel(job)}`);
         }
       }
@@ -3277,7 +3295,7 @@ const Store = {
       e.status = "approved";
       e.decidedAt = Date.now();
     }
-    this.addEstLog(e, `Job #${job.no} created — waiting to be scheduled`);
+    this.addEstLog(e, `PO ${job.no} created — waiting to be scheduled`);
     this.save();
     return job;
   },
@@ -3434,7 +3452,7 @@ const Store = {
     this.data.jobs
       .filter(j => isOpen(j))
       .sort((a,b) => (a.scheduledDate || "9999").localeCompare(b.scheduledDate || "9999"))
-      .forEach(j => add("job", j, `#${j.no} · ${custName(j.customerId)}`,
+      .forEach(j => add("job", j, `PO ${j.no} · ${custName(j.customerId)}`,
                         j.type, j.scheduledDate));
     this.data.estimates
       .filter(e => e.status !== "declined" && !e.jobId)
@@ -3649,7 +3667,7 @@ const Store = {
     if (!rec) return null;
     const isJob = Object.prototype.hasOwnProperty.call(rec, "scheduledDate");
     return isJob
-      ? { kind:"job", id: rec.id, label: "job #" + rec.no, contact: this.customer(rec.customerId),
+      ? { kind:"job", id: rec.id, label: "PO " + rec.no, contact: this.customer(rec.customerId),
           date: rec.scheduledDate, window: rec.window, techId: rec.techId,
           type: rec.type, service: rec.service, payment: rec.payment || {} }
       : { kind:"estimate", id: rec.id, label: "EST-" + rec.no, contact: this.estContact(rec),
@@ -3833,7 +3851,7 @@ const Store = {
     if (why) return why;
     child.billWith = parent.id;
     this.addLog(parent, `Billing with it: ${this.jobLabel(child)}`);
-    this.addLog(child,  `Billed with job #${parent.no}`);
+    this.addLog(child,  `Billed with PO ${parent.no}`);
     this.save();
     return null;
   },
@@ -3846,7 +3864,7 @@ const Store = {
     this.save();
   },
   jobLabel(job){
-    return `job #${job.no} — ${this.workLabel(job.type, job.service)}`;
+    return `PO ${job.no} — ${this.workLabel(job.type, job.service)}`;
   },
 
   /* GST to the cent, half a cent up, the way a till does it. The shortcut
@@ -4190,7 +4208,7 @@ const Store = {
       laborHours: 0, laborRate: job.laborRate || this.data.settings.laborRate,
       parts: [], payment: blankPayment(), timeEntries: [],
       materials: [], photos: [], flatPrice: null, billWith: null,
-      log: [{ ts: Date.now(), text: `Return visit on job #${parent.no}` }]
+      log: [{ ts: Date.now(), text: `Return visit on PO ${parent.no}` }]
     };
     this.data.jobs.push(j);
     /* One invoice, unless he splits it. Refused rather than forced if the
@@ -4200,7 +4218,7 @@ const Store = {
       this.addLog(j, `Billing on its own: ${why}`);
     } else {
       j.billWith = parent.id;
-      this.addLog(parent, `Another visit: job #${j.no}`);
+      this.addLog(parent, `Another visit: PO ${j.no}`);
     }
     this.save();
     return j;
@@ -4687,7 +4705,7 @@ function seedData(){
         { desc:"Sewer camera inspection", qty:1, price:295, kind:"flat" },
         { desc:"Locate & mark line",      qty:1, price:85,  kind:"flat" }
       ],
-      log:[{ts:Date.now()-4*86400000,text:"Estimate created"},{ts:Date.now()-4*86400000,text:"Status: Draft → Sent"},{ts:Date.now()-86400000,text:"Approved and converted to job #" + (scoped?scoped.no:"—")}] },
+      log:[{ts:Date.now()-4*86400000,text:"Estimate created"},{ts:Date.now()-4*86400000,text:"Status: Draft → Sent"},{ts:Date.now()-86400000,text:"Approved and converted to PO " + (scoped?scoped.no:"—")}] },
 
     { id:uid("est"), no:++en, customerId:"cus_5", lead:null,
       type:"Remodel Rough-in", status:"declined",
@@ -5191,7 +5209,7 @@ function renderClockBar(){
 
   const name = r.kind === "estimate"
     ? `EST-${r.rec.no} · ${Store.estContact(r.rec).name}`
-    : `#${r.rec.no} · ${custName(r.rec.customerId)}`;
+    : `PO ${r.rec.no} · ${custName(r.rec.customerId)}`;
   const stale = (Date.now() - r.entry.startedAt) > 8 * 3600000;
 
   bar.className = "on" + (stale ? " stale" : "");
@@ -5464,7 +5482,7 @@ function jobRows(list, opts){
   }
   return list.map(j => `
     <tr class="clickable" data-job="${j.id}">
-      <td class="t-sub" style="font-variant-numeric:tabular-nums">#${j.no}</td>
+      <td class="t-sub" style="font-variant-numeric:tabular-nums">PO ${j.no}</td>
       <td>
         <div class="t-strong">${esc(custName(j.customerId))}</div>
         <div class="t-sub">${esc(custAddr(j.customerId))}</div>
@@ -5600,7 +5618,7 @@ function stopCard(j){
     <div class="stop-main" data-job="${j.id}">
       <div class="stop-when">
         <div class="w">${esc(fieldWindow(j.window))}</div>
-        <div class="n">#${j.no}</div>
+        <div class="n">PO ${j.no}</div>
       </div>
       <div class="stop-body">
         <div class="cust">${esc(custName(j.customerId))}</div>
@@ -6151,7 +6169,7 @@ function miniCard(j, opts){
   return `
   <div class="minicard pri-${esc(j.priority)} st-${esc(j.status)}" draggable="true" data-job="${j.id}">
     <div class="mc-top">
-      ${opts.showWindow === false ? `<span class="mc-win">#${j.no}</span>`
+      ${opts.showWindow === false ? `<span class="mc-win">PO ${j.no}</span>`
         : `<span class="mc-win">${esc(opts.compact ? shortWindow(j.window) : j.window)}</span>`}
       ${opts.showTech === false ? "" :
         (tech ? `<span class="mc-dot" style="background:${esc(tech.color)}" title="${esc(tech.name)}"></span>`
@@ -6209,7 +6227,7 @@ function jobCardHtml(j){
   <div class="jobcard pri-${esc(j.priority)} st-${esc(j.status)}" draggable="true" data-job="${j.id}">
     <div class="jc-top">
       <span class="jc-win">${esc(j.window)}</span>
-      <span class="jc-id">#${j.no}</span>
+      <span class="jc-id">PO ${j.no}</span>
     </div>
     <div class="jc-cust">${esc(custName(j.customerId))}</div>
     <div class="jc-meta">${esc(custAddr(j.customerId))}</div>
@@ -6327,15 +6345,15 @@ function askBillTogether(childId, parentId, cell){
       <button class="x" data-close>&times;</button></div>
     <div class="modal-body">
       <p class="t-sub" style="margin-top:0;max-width:64ch">Job
-        <strong>#${esc(child.no)}</strong> would stay its own job, with its own
+        <strong>PO ${esc(child.no)}</strong> would stay its own job, with its own
         day and its own photos, but it stops raising an invoice of its own.
-        What it comes to goes on job <strong>#${esc(parent.no)}</strong> instead,
+        What it comes to goes on job <strong>PO ${esc(parent.no)}</strong> instead,
         so she gets one bill.</p>
       <div class="card" style="margin:12px 0">
-        <div class="money-row"><span class="mr-label">#${esc(parent.no)} ·
+        <div class="money-row"><span class="mr-label">PO ${esc(parent.no)} ·
           ${esc(Store.workLabel(parent.type, parent.service))}</span>
           <span class="mr-val">${esc(money(Store.jobTotal(parent)))}</span></div>
-        <div class="money-row"><span class="mr-label">#${esc(child.no)} ·
+        <div class="money-row"><span class="mr-label">PO ${esc(child.no)} ·
           ${esc(Store.workLabel(child.type, child.service))}</span>
           <span class="mr-val">${esc(money(Store.jobTotal(child)))}</span></div>
         <div class="money-row" style="border-bottom:0"><span class="mr-label">One bill
@@ -6343,7 +6361,7 @@ function askBillTogether(childId, parentId, cell){
             Store.jobTotal(parent) + Store.jobTotal(child)))}</strong></span></div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn primary" data-merge-ask="bill">Bill it with #${esc(parent.no)}</button>
+        <button class="btn primary" data-merge-ask="bill">Bill it with PO ${esc(parent.no)}</button>
         ${where ? `<button class="btn" data-merge-ask="move">Just move it to ${esc(where)}</button>` : ""}
         <button class="btn" data-merge-ask="no">Leave it alone</button>
       </div>
@@ -6361,7 +6379,7 @@ function billApartNow(arg){
   Store.billSeparately(job);
   render();
   if (Store.job(backTo)) openJob(backTo);
-  toast(`#${job.no} will be invoiced on its own`, "ok");
+  toast(`PO ${job.no} will be invoiced on its own`, "ok");
 }
 
 function finishBillTogether(what){
@@ -6377,7 +6395,7 @@ function finishBillTogether(what){
   const why = child && parent ? Store.billTogether(child, parent) : "That job is gone.";
   render();
   if (why) return toast(why, "warn");
-  toast(`#${child.no} now bills with #${parent.no}`, "ok");
+  toast(`PO ${child.no} now bills with PO ${parent.no}`, "ok");
 }
 
 /* Booking the trip to go and look. The cell says which day, which slot and
@@ -6430,7 +6448,7 @@ function moveJobToCell(job, cell){
   if (techChanged) bits.push(newTech ? Store.tech(newTech).name : "Unassigned");
   if (winChanged)  bits.push(newWin);
   if (dateChanged) bits.push(fmtDate(newDate));
-  toast(`#${job.no} → ${bits.join(" · ")}`, "ok");
+  toast(`PO ${job.no} → ${bits.join(" · ")}`, "ok");
   return true;
 }
 
@@ -6719,7 +6737,7 @@ function viewEstimates(){
           <td><div>${esc(e.type)}</div><div class="t-sub">${(() => { const n = Store.estLineCount(e), k = Store.estLiveOptions(e).length;
             return `${n} line${n===1?"":"s"}${k ? ` · ${k} option${k===1?"":"s"}` : ""}`; })()}</div></td>
           <td class="t-sub">${esc(fmtStamp(e.createdAt).split(" · ")[0])}</td>
-          <td>${estBadge(e.status)}${job?`<div class="t-sub" style="margin-top:3px">→ job #${job.no}</div>`:""}
+          <td>${estBadge(e.status)}${job?`<div class="t-sub" style="margin-top:3px">→ PO ${job.no}</div>`:""}
             ${(() => {
               if (e.status !== "sent") return "";
               const lk = (Cloud.signLinks || [])
@@ -6844,7 +6862,7 @@ function viewLeads(){
           <div class="stop-body">
             <div class="cust">${esc(l.name)}</div>
             <div class="addr">${rec
-              ? (d.how === "job" ? `→ job #${rec.no}` : `→ EST-${rec.no}`)
+              ? (d.how === "job" ? `→ PO ${rec.no}` : `→ EST-${rec.no}`)
               : "not a job"}${l.address ? ` · ${esc(l.address)}` : ""}</div>
           </div>
           <div class="stop-when"><div class="n">${esc(fmtStamp(d.at).split(" · ")[0])}</div></div>
@@ -6903,7 +6921,7 @@ function viewInvoices(){
   const btn = (id, label, n) =>
     `<button class="btn sm ${tab===id?"primary":""}" data-inv-tab="${id}">${esc(label)}${n!=null?` (${n})`:""}</button>`;
 
-  const ref = j => (j.payment && j.payment.ref) || (j.invoiceNo ? "INV-" + j.invoiceNo : "#" + j.no);
+  const ref = j => (j.payment && j.payment.ref) || (j.invoiceNo ? "INV-" + j.invoiceNo : "PO " + j.no);
 
   /* One row per invoice. Amount on the left where the eye lands, who and
      what in the middle, and the action he'd actually reach for. */
@@ -6956,11 +6974,11 @@ function viewInvoices(){
       <div class="stop-main" data-job="${j.id}">
         <div class="stop-when">
           <div class="w">${esc(money(amount))}</div>
-          <div class="n">${esc(tab === "tosend" ? "#" + j.no : ref(j))}</div>
+          <div class="n">${esc(tab === "tosend" ? "PO " + j.no : ref(j))}</div>
         </div>
         <div class="stop-body">
           <div class="cust">${esc(custName(j.customerId))}</div>
-          <div class="addr">${esc(j.type)}${tab === "tosend" ? "" : " · job #" + j.no}</div>
+          <div class="addr">${esc(j.type)}${tab === "tosend" ? "" : " · PO " + j.no}</div>
           <div class="what t-sub">${esc(when)}</div>
         </div>
       </div>
@@ -6994,7 +7012,7 @@ function viewInvoices(){
         below.</div>
       <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
         ${unbilled.slice(0,6).map(j => `<button class="btn sm" data-job="${j.id}">
-          #${esc(j.no)} \u00b7 ${esc(custName(j.customerId))} \u00b7
+          PO ${esc(j.no)} \u00b7 ${esc(custName(j.customerId))} \u00b7
           ${esc((Math.round(hoursOf(Store.totalMs(j))*4)/4).toFixed(2).replace(/\.?0+$/,""))}h
         </button>`).join("")}
         ${unbilled.length > 6 ? `<span class="t-sub">and ${unbilled.length-6} more</span>` : ""}
@@ -7052,7 +7070,7 @@ function openInvPayment(id){
 
   openModal(`
     <div class="modal-head">
-      <div><div class="t-sub">${esc(custName(j.customerId))} · job #${esc(j.no)}</div>
+      <div><div class="t-sub">${esc(custName(j.customerId))} · PO ${esc(j.no)}</div>
         <h2>${esc(pay.ref || (j.invoiceNo ? "INV-" + j.invoiceNo : "Not invoiced yet"))}</h2></div>
       <div class="spacer"></div><button class="x" data-close>&times;</button>
     </div>
@@ -7158,7 +7176,7 @@ function viewSignedWaivers(){
           <td class="t-sub" style="font-variant-numeric:tabular-nums">W-${w.no}</td>
           <td><div class="t-strong">${esc(w.title)}</div><div class="t-sub">${esc(w.category)}</div></td>
           <td><div>${esc(w.signerName)}</div><div class="t-sub">${esc(w.signerRole||"")}</div></td>
-          <td class="t-sub">${job?`#${job.no} · ${esc(job.type)}`:"—"}</td>
+          <td class="t-sub">${job?`PO ${job.no} · ${esc(job.type)}`:"—"}</td>
           <td class="t-sub">${esc(fmtStamp(w.signedAt))}</td>
           <td class="num"><button class="btn sm" data-print-waiver="${w.id}">🖨</button></td>
         </tr>`;
@@ -7806,7 +7824,8 @@ function viewSearch(){
   const custIds = new Set(customers.map(c => c.id));
   const jobs = Store.data.jobs.filter(j =>
     custIds.has(j.customerId) ||
-    String(j.no).includes(q.replace("#","")) ||
+    // "2611" finds November 2026's POs, "261117" that day; "PO" and "#" are ignored
+    (q.replace(/^(po|#)\s*/, "") && String(j.no).toLowerCase().includes(q.replace(/^(po|#)\s*/, ""))) ||
     (j.type||"").toLowerCase().includes(q) ||
     (j.description||"").toLowerCase().includes(q)
   ).sort((a,b) => (b.scheduledDate||"").localeCompare(a.scheduledDate||""));
@@ -7916,7 +7935,7 @@ function openJob(id){
   openModal(`
     <div class="modal-head">
       <div>
-        <div class="t-sub">Job #${j.no} · opened ${esc(fmtStamp(j.createdAt))}</div>
+        <div class="t-sub">PO ${j.no} · opened ${esc(fmtStamp(j.createdAt))}</div>
         <h2>${esc(j.type)} — ${esc(c ? c.name : "(deleted customer)")}</h2>
       </div>
       <div class="spacer"></div>
@@ -7984,7 +8003,7 @@ function openJob(id){
         if (!par && !kids.length) return "";
         if (par) return `
           <div class="dl"><dt>Billing</dt><dd>
-            <div>Goes on <span class="linkish" data-job="${par.id}">job #${esc(par.no)}</span>'s
+            <div>Goes on <span class="linkish" data-job="${par.id}">PO ${esc(par.no)}</span>'s
               invoice — this one raises none of its own.</div>
             <div class="t-sub" style="margin-top:3px">Its own total, ${esc(money(Store.jobTotal(j)))},
               is added there.</div>
@@ -7994,7 +8013,7 @@ function openJob(id){
           <div class="dl"><dt>Billing</dt><dd>
             <div>One invoice, covering this job and ${kids.length} change${kids.length===1?"":"s"} of scope.</div>
             ${kids.map(k => `<div style="margin-top:6px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
-              <span class="linkish" data-job="${k.id}">#${esc(k.no)}</span>
+              <span class="linkish" data-job="${k.id}">PO ${esc(k.no)}</span>
               <span>${esc(Store.workLabel(k.type, k.service))}</span>
               <span class="t-sub">${esc(money(Store.jobTotal(k)))}</span>
               <button class="btn sm ghost" data-bill-apart="${k.id}:${j.id}">bill separately</button>
@@ -8188,7 +8207,7 @@ function openJobForm(id){
 
   openModal(`
     <div class="modal-head">
-      <h2>${j ? "Edit job #" + j.no : "New service call"}</h2>
+      <h2>${j ? "Edit PO " + j.no : "New service call"}</h2>
       <div class="spacer"></div><button class="x" data-close>×</button>
     </div>
     <div class="modal-body">
@@ -8334,7 +8353,7 @@ function saveJobFromForm(id){
     else if (j.scheduledDate) { j.status = "scheduled"; Store.addLog(j, "Scheduled, awaiting a technician"); }
     Store.save();
     closeModal(); render();
-    toast(`Job #${j.no} created`, "ok");
+    toast(`PO ${j.no} created`, "ok");
   }
 }
 
@@ -8500,7 +8519,7 @@ function openEstimate(id){
       })() : ""}
 
       ${job ? `<div class="opt-card on" style="cursor:default;margin-bottom:16px">
-        <div class="oc-t">✅ Converted to job #${job.no}</div>
+        <div class="oc-t">✅ Converted to PO ${job.no}</div>
         <div class="oc-s">${esc(STATUS_LABEL[job.status])} · <span class="linkish" data-job="${job.id}">open the job →</span></div>
       </div>` : ""}
 
@@ -8738,10 +8757,10 @@ function openEstimateForm(id, scopeJobId){
       <div class="err" id="e-who" style="display:none">Say who this quote is for.</div>
       <input type="hidden" id="e-scopeof" value="${esc(scopeJob ? scopeJob.id : "")}">
       ${scopeJob ? `<div class="card" style="margin-bottom:14px;background:var(--blue-soft,#eef5fb)">
-        <div class="t-strong">A change of scope on job #${esc(scopeJob.no)}</div>
+        <div class="t-strong">A change of scope on PO ${esc(scopeJob.no)}</div>
         <div class="t-sub" style="margin-top:3px">Quote only the extra work. When she
           approves it, it becomes its own job on the board — its own day, its own
-          photos — but it goes onto job #${esc(scopeJob.no)}'s invoice, so she gets
+          photos — but it goes onto PO ${esc(scopeJob.no)}'s invoice, so she gets
           one bill. If that invoice has already gone out by then it stays separate,
           and the job log will say so.</div></div>` : ""}
 
@@ -8950,7 +8969,7 @@ function doConvert(id){
   });
 
   closeModal(); render(); openJob(job.id);
-  toast(`EST-${e.no} approved → job #${job.no}`, "ok");
+  toast(`EST-${e.no} approved → PO ${job.no}`, "ok");
 }
 
 /* ---------- Waivers: pick, sign, view, build ---------- */
@@ -8970,7 +8989,7 @@ function openWaiverPicker(jobId){
 
   openModal(`
     <div class="modal-head">
-      <div>${job?`<div class="t-sub">Job #${job.no} · ${esc(custName(job.customerId))}</div>`:""}
+      <div>${job?`<div class="t-sub">PO ${job.no} · ${esc(custName(job.customerId))}</div>`:""}
         <h2>Which waiver?</h2></div>
       <div class="spacer"></div><button class="x" data-close>×</button>
     </div>
@@ -8999,7 +9018,7 @@ function openWaiverSign(tplId, jobId){
 
   openModal(`
     <div class="modal-head">
-      <div><div class="t-sub">${esc(tpl.category)}${job?` · job #${job.no}`:""}</div>
+      <div><div class="t-sub">${esc(tpl.category)}${job?` · PO ${job.no}`:""}</div>
         <h2>${esc(tpl.title)}</h2></div>
       <div class="spacer"></div><button class="x" data-close>×</button>
     </div>
@@ -9223,7 +9242,7 @@ function openSignedWaiver(id){
             <dd><span class="linkish" data-customer="${w.customerId}">${esc(custName(w.customerId))}</span></dd></div>`:""}
         </div>
         <div>
-          <div class="dl"><dt>Job</dt><dd>${job?`<span class="linkish" data-job="${job.id}">#${job.no} · ${esc(job.type)}</span>`:"—"}</dd></div>
+          <div class="dl"><dt>Job</dt><dd>${job?`<span class="linkish" data-job="${job.id}">PO ${job.no} · ${esc(job.type)}</span>`:"—"}</dd></div>
           <div class="dl"><dt>Service address</dt><dd>${esc(w.contextSnapshot.service_address)||"—"}</dd></div>
         </div>
       </div>
@@ -9428,17 +9447,17 @@ async function previewInvoice(id){
               leave the rest and invoice it later.</div>
             <label class="cal-row">
               <input type="checkbox" checked disabled>
-              <span><strong>#${esc(j.no)}</strong> \u00b7 ${esc(Store.workLabel(j.type, j.service))}
+              <span><strong>PO ${esc(j.no)}</strong> \u00b7 ${esc(Store.workLabel(j.type, j.service))}
                 \u00b7 ${esc(money(Store.jobTotal(j)))}</span>
             </label>
             ${onIt.map(k => `<label class="cal-row">
               <input type="checkbox" checked data-inv-join="${esc(k.id)}:${esc(j.id)}">
-              <span><strong>#${esc(k.no)}</strong> \u00b7 ${esc(Store.workLabel(k.type, k.service))}
+              <span><strong>PO ${esc(k.no)}</strong> \u00b7 ${esc(Store.workLabel(k.type, k.service))}
                 \u00b7 ${esc(money(Store.jobTotal(k)))}</span>
             </label>`).join("")}
             ${couldBe.map(k => `<label class="cal-row">
               <input type="checkbox" data-inv-join="${esc(k.id)}:${esc(j.id)}">
-              <span><strong>#${esc(k.no)}</strong> \u00b7 ${esc(Store.workLabel(k.type, k.service))}
+              <span><strong>PO ${esc(k.no)}</strong> \u00b7 ${esc(Store.workLabel(k.type, k.service))}
                 \u00b7 ${esc(money(Store.jobTotal(k)))}
                 ${k.scheduledDate ? `<span class="t-sub">\u00b7 ${esc(fmtDate(k.scheduledDate))}</span>` : ""}</span>
             </label>`).join("")}
@@ -9639,7 +9658,7 @@ async function openPhoto(pid){
 
   openModal(`
     <div class="modal-head">
-      <h2>${esc(kind === "job" ? `#${rec.no}` : `EST-${rec.no}`)} · photo</h2>
+      <h2>${esc(kind === "job" ? `PO ${rec.no}` : `EST-${rec.no}`)} · photo</h2>
       <div class="spacer"></div><button class="x" data-close>×</button>
     </div>
     <div class="modal-body" style="padding:0;background:#0b1620">
@@ -10846,7 +10865,7 @@ function ticketHtml(j){
         ${letterhead(s)}
       </div>
       <div style="text-align:right">
-        <div style="font-size:22px;font-weight:700">Job #${j.no}</div>
+        <div style="font-size:22px;font-weight:700">PO ${j.no}</div>
         <div>${esc(j.priority)} priority</div>
       </div>
     </div>
@@ -11737,7 +11756,7 @@ function saveEstimateSignature(id){
   EstSignOpt = { eid: null, optId: null };
   const job = e.jobId ? Store.job(e.jobId) : null;
   closeModal(); render(); openEstimate(e.id);
-  toast(job ? `Approved — job #${job.no} is on the board, waiting for a day`
+  toast(job ? `Approved — PO ${job.no} is on the board, waiting for a day`
             : `EST-${e.no} approved by ${name}`, "ok");
 }
 
@@ -11850,7 +11869,7 @@ function exportEstimatesCsv(){
       "EST-" + e.no, fmtStamp(e.createdAt).split(" · ")[0], EST_STATUS_LABEL[e.status]||e.status,
       e.type, c.name, fmtPhone(c.phone), [c.address,c.city].filter(Boolean).join(", "),
       e.customerId ? "yes" : "no", Store.estLineCount(e),
-      Store.estimateTotal(e).toFixed(2), job ? "#" + job.no : "",
+      Store.estimateTotal(e).toFixed(2), job ? "PO " + job.no : "",
       (e.description||"").replace(/\s+/g," ")
     ];
   });
@@ -11875,7 +11894,7 @@ function waiverDocHtml(w){
       <tr><td style="width:130px"><strong>Customer</strong></td>
           <td>${esc(w.contextSnapshot.customer_name || w.signerName)}</td></tr>
       <tr><td><strong>Service address</strong></td><td>${esc(w.contextSnapshot.service_address)}</td></tr>
-      ${job?`<tr><td><strong>Job</strong></td><td>#${job.no} — ${esc(job.type)}</td></tr>`:""}
+      ${job?`<tr><td><strong>Job</strong></td><td>PO ${job.no} — ${esc(job.type)}</td></tr>`:""}
       <tr><td><strong>Date signed</strong></td><td>${esc(fmtStamp(w.signedAt))}</td></tr>
     </table>
     ${w.body.map(pp => `<p>${esc(pp)}</p>`).join("")}
@@ -11908,7 +11927,7 @@ function exportWaiversCsv(){
     const job = w.jobId ? Store.job(w.jobId) : null;
     return ["W-"+w.no, w.title, w.category, w.signerName, w.signerRole||"",
             w.contextSnapshot.customer_name||"", w.contextSnapshot.service_address||"",
-            job?"#"+job.no:"", new Date(w.signedAt).toISOString(), (w.fillIns||"").replace(/\s+/g," ")];
+            job?"PO " + job.no:"", new Date(w.signedAt).toISOString(), (w.fillIns||"").replace(/\s+/g," ")];
   });
   const q = v => `"${String(v).replace(/"/g,'""')}"`;
   download(`pcp-waivers-${todayStr()}.csv`, [head, ...rows].map(r => r.map(q).join(",")).join("\r\n"), "text/csv");
@@ -11985,23 +12004,23 @@ const Books = {
   },
   invoiceDate(j){ return j.invoicedOn || this.ymd(j.payment && j.payment.invoicedAt) || ""; },
   invoices(from, to){
-    const head = ["Invoice","Invoice date","Job","Customer","Company","Work","Subtotal","GST","Total",
+    const head = ["Invoice","Invoice date","PO","Customer","Company","Work","Subtotal","GST","Total",
                   "Received","Balance owing","Status","Last payment method","Payment reference",
-                  "Parts cost (entered on the job)","Other jobs on this invoice"];
+                  "Parts cost (entered on the job)","Other POs on this invoice"];
     const rows = this.invoiced().filter(j => this.inRange(this.invoiceDate(j) || j.scheduledDate, from, to)).map(j => {
       const c = Store.customer(j.customerId) || {};
       const p = j.payment || {};
       return [j.invoiceNo ? "INV-" + j.invoiceNo : "(not numbered yet)", this.invoiceDate(j),
-        "#" + j.no, c.name || "", c.company || "", Store.workLabel(j.type, j.service),
+        String(j.no), c.name || "", c.company || "", Store.workLabel(j.type, j.service),
         this.num(Store.billedTotal(j)), this.num(Store.taxOn(j)), this.num(Store.invoiceTotal(j)),
         this.num(Number(p.amountPaid) || 0), this.num(Store.balance(j)), PAY_LABEL[p.status] || p.status || "",
         p.method || "", p.ref || "", j.materialCost ? this.num(j.materialCost) : "",
-        Store.billChildren(j).map(k => "#" + k.no).join(" ")];
+        Store.billChildren(j).map(k => String(k.no)).join(" ")];
     });
     return { csv: this.csv(head, rows), n: rows.length };
   },
   payments(from, to){
-    const head = ["Date","Amount","Method","Reference","Invoice","Job","Customer","Note"];
+    const head = ["Date","Amount","Method","Reference","Invoice","PO","Customer","Note"];
     const rows = []; let undated = 0;
     Store.data.jobs.forEach(j => {
       const p = j.payment || {};
@@ -12011,7 +12030,7 @@ const Books = {
       hist.forEach(h => {
         const d = this.ymd(h.at);
         if (this.inRange(d, from, to))
-          rows.push([d, this.num(h.amount), h.method || "", h.ref || "", inv, "#" + j.no, c.name || "",
+          rows.push([d, this.num(h.amount), h.method || "", h.ref || "", inv, String(j.no), c.name || "",
                      h.amount < 0 ? "Correction" : ""]);
       });
       // received before payments were written down one by one
@@ -12019,7 +12038,7 @@ const Books = {
       if (earlier){
         const d = !hist.length && p.status === "paid" ? this.ymd(p.paidAt) : "";
         if (this.inRange(d, from, to))
-          rows.push([d, this.num(earlier), p.method || "", p.ref || "", inv, "#" + j.no, c.name || "",
+          rows.push([d, this.num(earlier), p.method || "", p.ref || "", inv, String(j.no), c.name || "",
                      d ? "Recorded before payments were dated — date is when it was marked paid"
                        : "Recorded before payments were dated — date not recorded"]);
         else if (!d) undated++;
@@ -12029,7 +12048,7 @@ const Books = {
     return { csv: this.csv(head, rows), n: rows.length, undated };
   },
   receipts(from, to){
-    const head = ["Date","Job","Customer","Item","Qty","Unit cost","Line total","Picked up","GST line?"];
+    const head = ["Date","PO / estimate","Customer","Item","Qty","Unit cost","Line total","Picked up","GST line?"];
     const rows = [];
     const add = (label, cust, m) => {
       if (m.cost == null || m.cost === "") return;
@@ -12041,7 +12060,7 @@ const Books = {
     };
     Store.data.jobs.forEach(j => {
       const c = Store.customer(j.customerId) || {};
-      (j.materials || []).forEach(m => add("#" + j.no, c.name || "", m));
+      (j.materials || []).forEach(m => add(String(j.no), c.name || "", m));
     });
     // an estimate's list moves to its job when it's approved; one that never
     // became a job keeps its own
@@ -12136,7 +12155,7 @@ document.addEventListener("click", e => {
     const inField = App.view === "today";
     render();
     if (!inField) openJob(j.id);          // on the field list, stay on the list
-    toast(`#${j.no} → ${STATUS_LABEL[n]}`, "ok");
+    toast(`PO ${j.no} → ${STATUS_LABEL[n]}`, "ok");
     return;
   }
   const editJob = hit("[data-edit-job]");
@@ -12177,7 +12196,7 @@ document.addEventListener("click", e => {
       const was = Store.running();
       Store.clockIn(kind, id);
       if (was && was.rec.id !== id)
-        toast(`Clocked out of ${was.kind === "estimate" ? "EST-" + was.rec.no : "#" + was.rec.no} first`, "ok");
+        toast(`Clocked out of ${was.kind === "estimate" ? "EST-" + was.rec.no : "PO " + was.rec.no} first`, "ok");
       else toast("Clock running", "ok");
     } else {
       Store.clockOut(kind, id);
@@ -12204,7 +12223,7 @@ document.addEventListener("click", e => {
     if (!l) return;
     const j = Store.jobFromLead(l);
     Store.save(); render(); openJob(j.id);
-    toast(`Job #${j.no} from ${l.name} — pick a day`, "ok");
+    toast(`PO ${j.no} from ${l.name} — pick a day`, "ok");
     return;
   }
   const leadEst = hit("[data-lead-est]");
@@ -12245,7 +12264,7 @@ document.addEventListener("click", e => {
     const amt = Store.invoiceTotal(j);
     Store.setPayment(j, { status:"paid", amountPaid: amt });
     render();
-    toast(`${(j.payment.ref || "#" + j.no)} paid in full — ${money(amt)} in`, "ok");
+    toast(`${(j.payment.ref || "PO " + j.no)} paid in full — ${money(amt)} in`, "ok");
     return;
   }
   const invPay = hit("[data-inv-pay]");
@@ -12295,11 +12314,11 @@ document.addEventListener("click", e => {
     if (!other || !target) return;
     if (other.billWith === target.id){
       Store.billSeparately(other);
-      toast(`#${other.no} off this invoice`, "ok");
+      toast(`PO ${other.no} off this invoice`, "ok");
     } else {
       const why = Store.billTogether(other, target);
       if (why){ toast(why, "warn"); return; }
-      toast(`#${other.no} added`, "ok");
+      toast(`PO ${other.no} added`, "ok");
     }
     render();
     previewInvoice(target.id);   // the document below has to follow the ticks
@@ -12537,7 +12556,7 @@ document.addEventListener("click", e => {
   const delJob = hit("[data-del-job]");
   if (delJob){
     const j = Store.job(delJob.dataset.delJob);
-    if (!confirmed(`Delete job #${j.no} for ${custName(j.customerId)}?\n\nThis cannot be undone.`, () => delJob.click(), { yes: "Delete job" })) return;
+    if (!confirmed(`Delete PO ${j.no} for ${custName(j.customerId)}?\n\nThis cannot be undone.`, () => delJob.click(), { yes: "Delete job" })) return;
     Store.deleteJob(j.id); closeModal(); render(); toast("Job deleted");
     return;
   }
@@ -12623,8 +12642,8 @@ document.addEventListener("click", e => {
     if (!j) return;
     render(); openJob(j.id);
     toast(j.billWith
-      ? `Job #${j.no} \u2014 same work, bills with #${Store.job(j.billWith).no}. Pick a day.`
-      : `Job #${j.no} \u2014 billing on its own. Pick a day.`, "ok");
+      ? `PO ${j.no} \u2014 same work, bills with PO ${Store.job(j.billWith).no}. Pick a day.`
+      : `PO ${j.no} \u2014 billing on its own. Pick a day.`, "ok");
     return;
   }
 
@@ -12699,7 +12718,7 @@ document.addEventListener("click", e => {
     Store.setEstStatus(e, "approved");
     closeModal(); render(); openEstimate(eid);
     const job = e.jobId ? Store.job(e.jobId) : null;
-    toast(job ? `${Store.estOptLabel(e, o)} approved — job #${job.no} is on the board`
+    toast(job ? `${Store.estOptLabel(e, o)} approved — PO ${job.no} is on the board`
               : `${Store.estOptLabel(e, o)} approved`, "ok");
     return;
   }
@@ -12714,7 +12733,7 @@ document.addEventListener("click", e => {
     Store.setEstStatus(e, st);
     const made = st === "approved" && e.jobId ? Store.job(e.jobId) : null;
     render(); openEstimate(eid);
-    toast(made ? `Approved — job #${made.no} is on the board, waiting for a day`
+    toast(made ? `Approved — PO ${made.no} is on the board, waiting for a day`
                : `EST-${e.no} → ${EST_STATUS_LABEL[st]}`, "ok");
     return;
   }

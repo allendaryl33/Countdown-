@@ -113,8 +113,8 @@ const errs=[];
     await pg.waitForTimeout(400);
     const text = await pg.evaluate(() => document.body.innerText);
     const n = await pg.evaluate(c => String(Store.job(c).no), kid);
-    if (!text.includes("#" + n))
-      throw new Error('the jobs list does not show #' + n);
+    if (!text.includes("PO " + n))
+      throw new Error('the jobs list does not show PO ' + n);
   });
 
   await t('and it is one bill, not two', async () => {
@@ -160,8 +160,8 @@ const errs=[];
       p: (Store.job(a).log||[]).map(l=>l.text||l).join(' | '),
       k: (Store.job(c).log||[]).map(l=>l.text||l).join(' | ')
     }), [jid, kid]);
-    if (!/Another visit: job #/i.test(r.p)) throw new Error('day one says nothing: ' + r.p);
-    if (!/Return visit on job #/i.test(r.k)) throw new Error('day two says nothing: ' + r.k);
+    if (!/Another visit: PO /i.test(r.p)) throw new Error('day one says nothing: ' + r.p);
+    if (!/Return visit on PO /i.test(r.k)) throw new Error('day two says nothing: ' + r.k);
   });
 
   await t('a third visit hangs off the first job, not off the second', async () => {

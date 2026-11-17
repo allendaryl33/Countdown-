@@ -71,7 +71,7 @@ const APP=`file://${REPO_DIR}/index.html`, SHOTS=process.env.SP+'/shots', errs=[
   });
   await t('tapping the card body opens the full job', async () => {
     await ph.click('.stop-main'); await ph.waitForTimeout(400);
-    if (!(await ph.textContent('.modal-head')).includes('Job #')) throw new Error('job did not open');
+    if (!(await ph.textContent('.modal-head')).includes('PO ')) throw new Error('job did not open');
     await ph.click('.modal-foot [data-close]'); await ph.waitForTimeout(250);
   });
   await t('More sheet reaches the rest of the app', async () => {

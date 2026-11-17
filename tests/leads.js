@@ -153,7 +153,7 @@ const MAILER = { id:2, name:'Priya Raman', contact:'priya.raman@example.com',
     await pg.evaluate(() => closeModal()); await go();
     const tx = await body();
     if (!/Already dealt with/.test(tx)) throw new Error('no handled section');
-    if (!/job #/.test(tx)) throw new Error('does not say what it became');
+    if (!/PO /.test(tx)) throw new Error('does not say what it became');
     await pg.click('[data-lead-back="1"]'); await pg.waitForTimeout(350);
     if (!await pg.evaluate(() => Store.leadsOpen().some(x => x.id === '1')))
       throw new Error('put back did not work');

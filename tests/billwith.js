@@ -206,7 +206,7 @@ const errs=[];
       c: (Store.job(i.c).log || []).map(l => l.text || l).join(' | ')
     }));
     if (!/Billing with it/i.test(r.p)) throw new Error('the main job says nothing: ' + r.p);
-    if (!/Billed with job #/i.test(r.c)) throw new Error('the added job says nothing: ' + r.c);
+    if (!/Billed with PO /i.test(r.c)) throw new Error('the added job says nothing: ' + r.c);
   });
 
   /* The printed copy and the one she opens by link are the same bill, so

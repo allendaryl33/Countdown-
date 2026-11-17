@@ -33,7 +33,7 @@ const APP=`file://${REPO_DIR}/index.html`, errs=[];
     jid = await pg.evaluate(() => { const j = Store.data.jobs[0]; openJob(j.id); return j.id; }); await pg.waitForTimeout(300);
     await pg.click('[data-del-job]'); await pg.waitForTimeout(200);
     const q = await ask();
-    if (!/Delete job #\d+ for .+\?/.test(q) || !/cannot be undone/.test(q)) throw new Error('asked: '+q);
+    if (!/Delete PO \d+ for .+\?/.test(q) || !/cannot be undone/.test(q)) throw new Error('asked: '+q);
     const btns = await pg.$$eval('#ask-root [data-ask]', bs => bs.map(x => x.textContent.trim()));
     if (btns.join('|') !== 'Cancel|Delete job') throw new Error(btns.join('|'));
     const focus = await pg.evaluate(() => document.activeElement && document.activeElement.dataset.ask);
