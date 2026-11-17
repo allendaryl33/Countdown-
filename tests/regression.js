@@ -240,7 +240,7 @@ const errs = [];
     });
     if (c.shown + c.more !== c.real) throw new Error(JSON.stringify(c));
     await page.click('.mo-cell .minicard'); await page.waitForTimeout(350);
-    if (!(await page.textContent('.modal-head')).includes('Job #')) throw new Error('card should open the job');
+    if (!(await page.textContent('.modal-head')).includes('PO ')) throw new Error('card should open the job');
     await page.keyboard.press('Escape'); await page.waitForTimeout(250);
   });
   await page.screenshot({ path: SHOTS+'/r4-month.png' });

@@ -98,7 +98,14 @@ const errs=[];
     if (!descs.includes('made in the browser') || !descs.includes('made on the phone'))
       throw new Error('a job was lost — server has: ' + descs.slice(-3).join(' | ') + ' · B modal: ' + (await modal(B)).slice(0,300) + ' · B state: ' + await B.evaluate(() => Cloud.state + '/' + Cloud.detail));
     const nos = d.jobs.map(j => j.no);
-    if (d.counter < Math.max(...nos)) throw new Error('counter ' + d.counter + ' is behind job #' + Math.max(...nos));
+    // POs are dated now (261117-01); two made the same day on two devices must not share one
+    const made = d.jobs.filter(j => /made (in the browser|on the phone)/.test(j.description)).map(j => j.no);
+    if (new Set(made).size !== made.length) throw new Error('two jobs got the same PO: ' + made);
+    // both opened the first PO of the day before syncing: the one saved first keeps it,
+    // the other moves to the next and says why
+    const browser = d.jobs.find(j => j.description === 'made in the browser'), phone = d.jobs.find(j => j.description === 'made on the phone');
+    if (!/-01$/.test(browser.no)) throw new Error('the one saved first lost its number: ' + browser.no);
+    if (!phone.log.some(l => /also made on another device the same day/.test(l.text))) throw new Error('the moved one does not say why');
   });
   await t('a customer deleted on one device stays deleted if the other did not touch it', async () => {
     await A.evaluate(() => Cloud.syncNow()); await B.evaluate(() => Cloud.syncNow());
@@ -122,7 +129,7 @@ const errs=[];
       Store.save(); clearTimeout(Cloud.pushTimer); await Cloud.syncNow(); }, jid);
     await A.waitForTimeout(500);
     const m = await modal(A);
-    if (!/Job #\d+ · payment · amount paid/.test(m)) throw new Error('does not name it: ' + m.slice(0, 300));
+    if (!/PO [\w-]+ · payment · amount paid/.test(m)) throw new Error('does not name it: ' + m.slice(0, 300));
     if (!/2100/.test(m) || !/2030/.test(m)) throw new Error('does not show both values: ' + m.slice(0, 300));
     if (/website|address/i.test(m.replace(/e-Transfer address/,''))) throw new Error('asked about something only one side changed: ' + m.slice(0, 300));
   });

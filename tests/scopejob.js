@@ -64,7 +64,7 @@ const errs=[];
 
   await t('and it says plainly what will happen to the bill', async () => {
     const body = await txt();
-    if (!/change of scope on job #/i.test(body)) throw new Error('no explanation shown');
+    if (!/change of scope on PO /i.test(body)) throw new Error('no explanation shown');
     if (!/one bill/i.test(body)) throw new Error('it does not say she gets one bill: ' + body.slice(0,400));
   });
 
@@ -134,7 +134,7 @@ const errs=[];
     await pg.click('[data-bill-apart]'); await pg.waitForTimeout(450);
     const r = await pg.evaluate(k => ({ on: Store.job(k).billWith, panel: document.querySelector('#modal-root').innerText }), kid);
     if (r.on) throw new Error('still billed with ' + r.on);
-    if (!/#/.test(r.panel)) throw new Error('he was left with no panel open');
+    if (!/PO /.test(r.panel)) throw new Error('he was left with no panel open');
   });
 
   await t('and from the main job, which leaves him looking at the main job', async () => {
@@ -147,7 +147,7 @@ const errs=[];
     }), jid);
     if (r.on) throw new Error('unlinking from the main job did nothing');
     const no = await pg.evaluate(i => Store.job(i).no, jid);
-    if (!r.head.includes('#' + no)) throw new Error('he was thrown onto another job: ' + r.head);
+    if (!r.head.includes('PO ' + no)) throw new Error('he was thrown onto another job: ' + r.head);
   });
 
   /* ---- dragging one job onto another. See the note at the top. ---- */
