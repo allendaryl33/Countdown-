@@ -230,7 +230,7 @@ const errs=[];
     const open = await pg.evaluate(() => {
       const h = document.querySelector('#modal-root .modal-head');
       return h ? h.textContent.replace(/\s+/g,' ').trim() : ''; });
-    if (!/#\d/.test(open)) throw new Error('no job opened: ' + open);
+    if (!/PO \S/.test(open)) throw new Error('no job opened: ' + open);
     await pg.evaluate(() => closeModal());
     console.log('       ' + open.slice(0,70));
   });

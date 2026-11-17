@@ -134,7 +134,7 @@ const errs=[];
     await pg.click('[data-bill-apart]'); await pg.waitForTimeout(450);
     const r = await pg.evaluate(k => ({ on: Store.job(k).billWith, panel: document.querySelector('#modal-root').innerText }), kid);
     if (r.on) throw new Error('still billed with ' + r.on);
-    if (!/#/.test(r.panel)) throw new Error('he was left with no panel open');
+    if (!/PO /.test(r.panel)) throw new Error('he was left with no panel open');
   });
 
   await t('and from the main job, which leaves him looking at the main job', async () => {
@@ -147,7 +147,7 @@ const errs=[];
     }), jid);
     if (r.on) throw new Error('unlinking from the main job did nothing');
     const no = await pg.evaluate(i => Store.job(i).no, jid);
-    if (!r.head.includes('#' + no)) throw new Error('he was thrown onto another job: ' + r.head);
+    if (!r.head.includes('PO ' + no)) throw new Error('he was thrown onto another job: ' + r.head);
   });
 
   /* ---- dragging one job onto another. See the note at the top. ---- */

@@ -101,6 +101,11 @@ const errs=[];
     // POs are dated now (261117-01); two made the same day on two devices must not share one
     const made = d.jobs.filter(j => /made (in the browser|on the phone)/.test(j.description)).map(j => j.no);
     if (new Set(made).size !== made.length) throw new Error('two jobs got the same PO: ' + made);
+    // both opened the first PO of the day before syncing: the one saved first keeps it,
+    // the other moves to the next and says why
+    const browser = d.jobs.find(j => j.description === 'made in the browser'), phone = d.jobs.find(j => j.description === 'made on the phone');
+    if (!/-01$/.test(browser.no)) throw new Error('the one saved first lost its number: ' + browser.no);
+    if (!phone.log.some(l => /also made on another device the same day/.test(l.text))) throw new Error('the moved one does not say why');
   });
   await t('a customer deleted on one device stays deleted if the other did not touch it', async () => {
     await A.evaluate(() => Cloud.syncNow()); await B.evaluate(() => Cloud.syncNow());

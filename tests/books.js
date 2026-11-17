@@ -118,7 +118,7 @@ const APP=`file://${REPO_DIR}/index.html`, errs=[];
   });
   await t('Receipts: each costed line, rounded like a till, GST lines flagged, uncosted left out', async () => {
     rec = await grab('receipts');
-    const r = rec.rows, mine = r.filter(x => x[col(r,'PO')] === String(ids.aNo));
+    const r = rec.rows, mine = r.filter(x => x[col(r,'PO / estimate')] === String(ids.aNo));
     if (mine.length !== 2) throw new Error(JSON.stringify(mine));
     const pex = mine.find(x => /PEX/.test(x[col(r,'Item')])), gst = mine.find(x => x[col(r,'Item')] === 'GST');
     if (pex[col(r,'Line total')] !== '3.35' || pex[col(r,'Unit cost')] !== '1.115' || pex[col(r,'Date')] !== '2026-11-10') throw new Error(pex.join(' | '));

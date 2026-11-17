@@ -107,7 +107,6 @@ const APP=`file://${REPO_DIR}/index.html`, SHOTS=process.env.SP+'/shots', errs=[
     await pc.fill('#gl-tech','Allen Daryl');
     await pc.fill('#gl-techphone','7805550199');
     await pc.fill('#gl-rate','155');
-    await pc.fill('#gl-jobno','1200');
     await pc.click('[data-do-golive]');
     await pc.waitForTimeout(250); if (!await pc.$('[data-ask="yes"]')) throw new Error('it did not ask first'); await pc.click('[data-ask="yes"]'); await pc.waitForTimeout(600);
     const after = await pc.evaluate(() => ({
@@ -121,10 +120,9 @@ const APP=`file://${REPO_DIR}/index.html`, SHOTS=process.env.SP+'/shots', errs=[
     if (after.pb !== before.pb || after.wt !== before.wt) throw new Error('price book or templates lost');
     if (after.techs.join() !== 'Allen Daryl') throw new Error('techs: '+after.techs.join());
     if (after.rate !== 155) throw new Error('rate: '+after.rate);
-    if (after.counter !== 1200) throw new Error('job counter: '+after.counter);
     if (!after.live) throw new Error('liveSince not set');
     if (after.view !== 'today') throw new Error('did not land on Today');
-    console.log('       kept '+after.pb+' price items, '+after.wt+' templates; crew of 1; next job #'+(after.counter+1));
+    console.log('       kept '+after.pb+' price items, '+after.wt+' templates; crew of 1');
   });
   await t('empty shop renders everywhere without errors', async () => {
     for (const v of ['today','dashboard','schedule','jobs','customers','estimates','waivers','pricebook','data']){
@@ -142,8 +140,9 @@ const APP=`file://${REPO_DIR}/index.html`, SHOTS=process.env.SP+'/shots', errs=[
     await pc.fill('#f-desc','No hot water, 40gal gas tank.');
     await pc.click('[data-save-job]'); await pc.waitForTimeout(450);
     const j = await pc.evaluate(() => Store.data.jobs[0]);
-    if (!j || j.no !== 1201) throw new Error('job no: '+(j&&j.no));
-    console.log('       job #'+j.no+' created on an empty shop');
+    // jobs are dated POs now (Nov 17): the first one opened today is YYMMDD-01
+    if (!j || !/^\d{6}-01$/.test(String(j.no))) throw new Error('job no: '+(j&&j.no));
+    console.log('       PO '+j.no+' created on an empty shop');
   });
   await t('survives reload', async () => {
     await pc.reload(); await pc.waitForTimeout(500);

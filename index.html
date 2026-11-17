@@ -2004,9 +2004,37 @@ const Cloud = {
       onCloudConflict(remote, m);
     }
   },
+  /* Two devices each made a PO on the same day before syncing, and both
+     came out 261117-01. The one the other device already saved stands;
+     this device's new one (never synced, so not yet on any memo or receipt)
+     takes the next free number for its day, along with its return visits,
+     and the job says so. */
+  fixClashingPOs(data, theirs){
+    const there = new Set(((theirs && theirs.jobs) || []).map(j => j.id));
+    const byNo = new Map();
+    (data.jobs || []).forEach(j => { const k = String(j.no); byNo.set(k, (byNo.get(k) || []).concat([j])); });
+    const moved = [];
+    byNo.forEach((jobs, no) => {
+      if (jobs.length < 2 || !/^\d{6}-\d{2}$/.test(no)) return;
+      jobs.filter(j => !there.has(j.id)).forEach(j => {
+        const day = no.slice(0, 6);
+        let n = 0;
+        (data.jobs || []).forEach(x => { const m = String(x.no).match(/^(\d{6})-(\d{2})/); if (m && m[1] === day) n = Math.max(n, Number(m[2])); });
+        const fresh = `${day}-${String(n + 1).padStart(2, "0")}`;
+        data.counterPo = Math.max(Number(data.counterPo) || 0, Number(day) * 100 + n + 1);
+        (data.jobs || []).filter(v => v.visitOf === j.id).forEach(v => { v.no = fresh + (v.visitLetter || ""); });
+        j.no = fresh;
+        (j.log = j.log || []).push({ ts: Date.now(), text: `PO ${no} was also made on another device the same day — this one is now PO ${fresh}` });
+        moved.push(`${no} → ${fresh}`);
+      });
+    });
+    if (moved.length && typeof toast === "function")
+      toast(`Two devices made the same PO — renumbered this one: ${moved.join(", ")}`, "warn");
+  },
   /* The merged copy becomes this device's, built on the server's revision
      and owed to it: the next push carries both sides up. */
   applyMerged(data, remote){
+    this.fixClashingPOs(data, remote && remote.data);
     Store.data = data;
     Store.backfill();
     Store.saveLocal();
@@ -10609,10 +10637,9 @@ function openGoLive(){
         <div class="field"><label>Your hourly rate</label>
           <input class="input" id="gl-rate" type="number" min="0" step="5" value="${esc(st.laborRate)}">
           <div class="hint">Prices new jobs. Change it any time — past jobs keep their own rate.</div></div>
-        <div class="field"><label>First job number</label>
-          <input class="input" id="gl-jobno" type="number" min="1" step="1" value="1000">
-          <div class="hint">Job numbering starts one above this. Set it higher if you've already
-            invoiced work by hand.</div></div>
+        <div class="field"><label>Job numbers</label>
+          <div class="hint" style="margin-top:6px">Each job is a PO numbered by the day it's
+            opened — 261117-01, 261117-02 — so there's no starting number to pick.</div></div>
       </div>
 
       <div class="err" id="gl-err" style="display:none">Company name and your name are both needed.</div>
@@ -10640,7 +10667,7 @@ function doGoLive(){
     company,
     phone: $("#gl-phone").value.trim(),
     laborRate: $("#gl-rate").value,
-    startJobNo: $("#gl-jobno").value,
+    startJobNo: 1000,     // the old counter; POs are dated now and don't use it
     techName,
     techPhone: $("#gl-techphone").value.trim(),
     techSkill: $("#gl-skill").value.trim()
