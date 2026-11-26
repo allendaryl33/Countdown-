@@ -316,8 +316,12 @@ Two things follow:
 onto the job's `parts` (since Nov 9); each job shows "Lines by kind", and Time
 & Money has **"Billed, by kind"** across finished jobs (`Store.jobKindSplit`,
 which adds up to `jobTotal` exactly: billed hours are Labor, a flat job's price
-is its own bucket, untagged is "Not tagged"). Sub there is what he *charged*,
-not what he paid the sub — the app records no sub cost. `tests/subreport.js`.
+is its own bucket, untagged is "Not tagged"). Sub there is what he *charged*.
+What he *paid* a sub is a Materials line ticked Sub (`m.sub`, `Store.subPaid`)
+— the same list the bookkeeper's receipts export reads, which gains a "Paid
+to sub" column; no separate box, so there is one source. Margin is shown only
+where a job has both a Sub line billed and a line ticked paid; otherwise it
+says which half is missing. `tests/subreport.js`.
 Neither the signing payload nor a frozen approval carries a tag, which is why
 re-tagging can never change an estimate already out for signature.
 

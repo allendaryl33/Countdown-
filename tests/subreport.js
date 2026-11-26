@@ -62,15 +62,62 @@ const APP=`file://${REPO_DIR}/index.html`, errs=[];
     if (Math.abs(shown - billed) > 0.004 || Math.abs(billed - 4821) > 0.004) throw new Error(`shown ${tot}, billed ${billed}`);
   });
   await t('the jobs with Sub lines are listed, and tapping one opens it', async () => {
-    const n = await pg.$$eval('#view tr[data-job]', rs => rs.length);
+    const n = await pg.$$eval('.sub-report tr[data-job]', rs => rs.length);
     if (n !== 2) throw new Error(n + ' listed');
     await pg.click(`#view tr[data-job="${ids.a}"]`); await pg.waitForTimeout(300);
     const m = await pg.$eval('#modal-root .modal', e => e.innerText);
     if (!/Excavation by the sub/.test(m)) throw new Error('opened the wrong thing');
   });
-  await t('it says plainly that Sub is what you charged, not what you paid', async () => {
-    const txt = await pg.evaluate(() => document.querySelector('#view').innerText);
-    if (!/what you charged, not what\s+you paid the sub/.test(txt)) throw new Error('no caveat');
+  await t('with nothing ticked Sub in Materials, no margin is claimed', async () => {
+    const r = await pg.$eval(`#view tr[data-job="${ids.a}"]`, e => e.innerText.replace(/\s+/g,' '));
+    if (!/none ticked/.test(r) || /\$1,200\.00\s+\$1,200\.00/.test(r)) throw new Error(r);
+    const tot = await pg.$eval('[data-sub-total]', e => e.innerText.replace(/\s+/g,' '));
+    if (!/—$/.test(tot.trim())) throw new Error('a margin with no cost entered: ' + tot);
+  });
+
+  console.log('--- what he paid the sub, from Materials ---');
+  await t('a Materials line has a Sub tick, off to begin with, and tapping it sets it', async () => {
+    await pg.evaluate(i => { closeModal(); const a = Store.addMaterial('job', i.a, 'Tiling — Northside Tile', 1);
+      Store.setMaterial('job', i.a, a.id, { cost: 800, got: true });
+      Store.addMaterial('job', i.a, 'Shower valve', 1); Store.setMaterial('job', i.a, Store.job(i.a).materials[1].id, { cost: 240 });
+      openJob(i.a); }, ids);
+    await pg.waitForTimeout(300);
+    const btns = await pg.$$eval('[data-mat-sub]', bs => bs.map(b => b.getAttribute('aria-pressed')));
+    if (btns.join() !== 'false,false') throw new Error(btns.join());
+    const tileBtn = await pg.evaluate(i => `[data-mat-sub="job:${i.a}:${Store.job(i.a).materials[0].id}"]`, ids);
+    await pg.click(tileBtn); await pg.waitForTimeout(250);
+    const m = await pg.evaluate(i => Store.job(i.a).materials.map(x => !!x.sub), ids);
+    if (m.join() !== 'true,false') throw new Error(m.join());
+    if (await pg.$eval(tileBtn, b => b.getAttribute('aria-pressed')) !== 'true') throw new Error('does not show it is on');
+    const saved = await pg.evaluate(i => JSON.parse(localStorage.getItem('pcp.dispatch.v1')).jobs.find(j => j.id === i.a).materials[0].sub, ids);
+    if (saved !== true) throw new Error('not saved');
+  });
+  await t('the report shows paid to subs and the margin — the valve is a part, not counted', async () => {
+    await pg.evaluate(() => { closeModal(); render(); });
+    const r = await pg.$eval(`#view tr[data-job="${ids.a}"]`, e => e.innerText.replace(/\s+/g,' '));
+    if (!/\$1,200\.00\s+\$800\.00\s+\$400\.00/.test(r)) throw new Error(r);
+  });
+  await t('a job billed Sub with nothing ticked shows no margin, and the total only counts jobs with both', async () => {
+    const r = await pg.$eval(`#view tr[data-job="${ids.f}"]`, e => e.innerText.replace(/\s+/g,' '));
+    if (!/none ticked/.test(r)) throw new Error(r);
+    const tot = await pg.$eval('[data-sub-total]', e => e.innerText.replace(/\s+/g,' '));
+    if (!/\$1,550\.00\s+\$800\.00\s+\$400\.00/.test(tot)) throw new Error(tot);
+    if (!/only worked out on the\s+1 job/.test(await pg.evaluate(() => document.querySelector('#view').innerText))) throw new Error('does not say why');
+  });
+  await t('a sub paid on a job whose bill has no Sub line is listed, with no margin guessed', async () => {
+    await pg.evaluate(i => { const m = Store.addMaterial('job', i.c, 'Glass — Clearview', 1);
+      Store.setMaterial('job', i.c, m.id, { cost: 150, sub: true }); render(); }, ids);
+    const r = await pg.$eval(`#view tr[data-job="${ids.c}"]`, e => e.innerText.replace(/\s+/g,' '));
+    if (!/no Sub line/.test(r) || !/\$150\.00/.test(r) || !/—/.test(r)) throw new Error(r);
+  });
+  await t('the bookkeeper\'s receipts file marks the sub line, from the same list', async () => {
+    const rows = await pg.evaluate(() => Books.receipts('2000-01-01', '2100-01-01').csv)
+      .then(c => c.replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean).map(l => l.split(',').map(x => x.replace(/^"|"$/g, ''))));
+    const at = rows[0].indexOf('Paid to sub');
+    if (at < 0) throw new Error('no column: ' + rows[0].join('|'));
+    const tile = rows.find(r => /Northside Tile/.test(r.join())), valve = rows.find(r => /Shower valve/.test(r.join()));
+    if (!tile || tile[at] !== 'yes') throw new Error('tiling: ' + (tile || []).join('|'));
+    if (!valve || valve[at] !== '') throw new Error('valve: ' + (valve || []).join('|'));
   });
   await t('jobs not finished, or outside the window, are left out', async () => {
     await pg.evaluate(i => { closeModal(); Store.job(i.a).scheduledDate = addDays(todayStr(), -60); Store.save(); render(); }, ids);
