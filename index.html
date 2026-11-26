@@ -4687,6 +4687,18 @@ const Store = {
      stands — but an extra he agreed on site, entered as a priced part, has to
      reach the invoice. It used to be dropped: the flat price was returned and
      every line ignored, so a $500 upgrade was simply never billed. */
+  /* What a job billed, split by line tag, adding up to jobTotal exactly.
+     Hours billed are Labor. A flat job's agreed price is not a line and
+     has no tag, so it stands as its own bucket rather than being guessed
+     into one; its scope lines carry no price and add nothing. */
+  jobKindSplit(job){
+    const lines = (job.parts || []).slice();
+    if (this.jobIsFlat(job))
+      lines.push({ kind: "__flatprice", qty: 1, price: Number(job.flatPrice) });
+    else if (Number(job.laborHours))
+      lines.push({ kind: "labor", qty: job.laborHours, price: Number(job.laborRate) || this.data.settings.laborRate || 0 });
+    return kindSplit(lines);
+  },
   jobTotal(job){
     return this.jobIsFlat(job)
       ? Number(job.flatPrice) + this.jobPartsSum(job)
@@ -6662,6 +6674,21 @@ function viewTimeMoney(){
     .map(type => Object.assign({ type }, row(timed.filter(j => j.type === type))))
     .sort((a,b) => (a.rate ?? 1e9) - (b.rate ?? 1e9));
 
+  /* Billed, by line tag, over every finished job in the window — timed or
+     not, since this is about the bill and not the clock. */
+  const kinds = new Map(), subJobs = [];
+  done.forEach(j => {
+    Store.jobKindSplit(j).forEach(x => {
+      const k = kinds.get(x.kind) || { label: x.label, amt: 0, jobs: 0 };
+      k.amt += x.amt; k.jobs++; kinds.set(x.kind, k);
+      if (x.kind === "sub") subJobs.push({ j, amt: x.amt });
+    });
+  });
+  const kindOrder = LINE_KINDS.map(k => k.id).concat(["__flatprice", ""]);
+  const kindRows = [...kinds.entries()]
+    .sort((a,b) => (kindOrder.indexOf(a[0]) + 1 || 99) - (kindOrder.indexOf(b[0]) + 1 || 99));
+  const kindTotal = kindRows.reduce((s,[,k]) => s + k.amt, 0);
+
   // Quoting is a cost whether or not the quote lands.
   const sinceMs = days ? (parseYmd(since) ? parseYmd(since).getTime() : 0) : 0;
   const quotes = Store.data.estimates.filter(e => (e.createdAt || 0) >= sinceMs);
@@ -6754,6 +6781,33 @@ function viewTimeMoney(){
       price is sitting in the billed column. Put what you paid in the
       <em>"What the parts cost you"</em> box on a job and this table starts telling the truth.
     </div>` : ""}
+
+  <div class="section-title">Billed, by kind</div>
+  ${!kindRows.length ? `
+  <div class="card"><div class="empty">No finished jobs with money on them in this window.</div></div>` : `
+  <div class="card"><table class="kind-report">
+    <thead><tr><th>Kind</th><th class="num">Jobs</th><th class="num">Billed</th></tr></thead>
+    <tbody>
+      ${kindRows.map(([id, k]) => `<tr data-kind-row="${esc(id || "none")}">
+        <td class="${id ? "t-strong" : "t-sub"}">${esc(k.label)}</td>
+        <td class="num">${k.jobs}</td><td class="num">${esc(money(cents(k.amt)))}</td></tr>`).join("")}
+      <tr><td class="t-strong" style="text-align:right">Total</td><td></td>
+        <td class="num t-strong">${esc(money(cents(kindTotal)))}</td></tr>
+    </tbody>
+  </table></div>
+  ${subJobs.length ? `
+  <div class="card" style="margin-top:10px"><table>
+    <thead><tr><th>Jobs with Sub lines</th><th></th><th class="num">Sub billed</th></tr></thead>
+    <tbody>${subJobs.map(({ j, amt }) => `<tr class="clickable" data-job="${j.id}">
+      <td class="t-strong">PO ${esc(j.no)}</td><td>${esc(custName(j.customerId))} <span class="t-sub">· ${esc(j.type)}</span></td>
+      <td class="num">${esc(money(amt))}</td></tr>`).join("")}</tbody>
+  </table></div>` : ""}
+  <p class="t-sub" style="margin-top:8px;max-width:70ch">
+    This is what customers were billed for each kind of line — for Sub, what you charged, not what
+    you paid the sub.${kinds.has("") ? ` "Not tagged" is lines with no tag, including jobs made before
+    tags came across from estimates.` : ""}${kinds.has("__flatprice") ? ` A job quoted at one flat price
+    isn't split by line, so its price shows on its own.` : ""}
+  </p>`}
 
   <div class="section-title">Quoting</div>
   <div class="card"><div class="card-body">
@@ -13702,7 +13756,8 @@ function kindSplit(lines){
   const order = LINE_KINDS.map(k => k.id);
   return [...by.entries()]
     .sort((a,b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99))
-    .map(([k, amt]) => ({ kind: k, label: k ? (KIND_BY_ID[k] || { label: k }).label : "Not tagged", amt: cents(amt) }));
+    .map(([k, amt]) => ({ kind: k, label: k === "__flatprice" ? "Flat price for the whole job"
+      : k ? (KIND_BY_ID[k] || { label: k }).label : "Not tagged", amt: cents(amt) }));
 }
 function kindSplitHtml(lines){
   const sp = kindSplit(lines);
