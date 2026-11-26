@@ -8042,6 +8042,7 @@ document.addEventListener("keydown", e => {
 function openJob(id){
   const j = Store.job(id);
   if (!j) return;
+  renderQuiet();      // same reason as openEstimate: the row behind stays current
   rememberPlace({ kind:"job", id });
   const c = Store.customer(j.customerId);
   const next = NEXT_STATUS[j.status];
@@ -8527,6 +8528,10 @@ function saveJobFromForm(id){
 function openEstimate(id){
   const e = Store.estimate(id);
   if (!e) return;
+  /* The list behind redraws too. Adding a line or an add-on rebuilds this
+     window but used to leave the Estimates row showing the old total until
+     the window closed — wrong for a moment, which still reads as wrong. */
+  renderQuiet();
   rememberPlace({ kind:"estimate", id });
   const c = Store.estContact(e);
   const job = e.jobId ? Store.job(e.jobId) : null;
@@ -10984,7 +10989,9 @@ function openCustomerForm(id){
       <div class="field"><label>Site notes</label>
         <textarea class="input" id="c-notes" placeholder="Gate codes, dogs, parking, billing quirks — anything the tech should know.">${esc(c?c.notes:"")}</textarea></div>
     </div>
-    <div class="modal-foot"><div class="spacer"></div>
+    <div class="modal-foot">
+      ${c ? `<button class="btn danger" data-del-customer="${c.id}">Delete customer</button>` : ""}
+      <div class="spacer"></div>
       <button class="btn" data-close>Cancel</button>
       <button class="btn primary" data-save-customer="${c?c.id:""}">${c?"Save":"Add customer"}</button>
     </div>`);
@@ -13285,6 +13292,26 @@ document.addEventListener("click", e => {
   /* --- price book --- */
   const editPrice = hit("[data-edit-price]");
   if (editPrice) return openPriceForm(editPrice.dataset.editPrice);
+  /* A customer goes only once nothing hangs off them: deleting one with
+     jobs or estimates would leave those pointing at nobody, so it says how
+     many there are instead. */
+  const delCust = hit("[data-del-customer]");
+  if (delCust){
+    const c = Store.customer(delCust.dataset.delCustomer);
+    if (!c) return;
+    const nj = Store.data.jobs.filter(j => j.customerId === c.id).length;
+    const ne = Store.data.estimates.filter(e => e.customerId === c.id).length;
+    if (nj || ne){
+      toast(`${c.name} still has ${[nj ? nj + " job" + (nj === 1 ? "" : "s") : "", ne ? ne + " estimate" + (ne === 1 ? "" : "s") : ""]
+        .filter(Boolean).join(" and ")} — delete those first, or keep the customer.`, "warn");
+      return;
+    }
+    if (!confirmed(`Delete ${c.name}?\n\nNo jobs or estimates are on this customer. This cannot be undone.`, () => delCust.click(), { yes: "Delete customer" })) return;
+    Store.data.customers = Store.data.customers.filter(x => x.id !== c.id);
+    Store.save(); closeModal(); render(); toast(`${c.name} deleted`);
+    return;
+  }
+
   const delPrice = hit("[data-del-price]");
   if (delPrice){
     const i = Store.priceItem(delPrice.dataset.delPrice);
