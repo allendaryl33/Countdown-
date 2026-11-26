@@ -76,6 +76,10 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 .err{color:var(--red);font-size:13px;margin:6px 0 0;display:none}
 .err.on{display:block}
 .note{font-size:13px;color:var(--muted);margin:14px 0 0}
+.addons{border:1px dashed #c6d2de;border-radius:10px;padding:12px 14px;margin:16px 0 0}
+.addons b{display:block;font-size:14px}
+.addons .s{font-size:13px;color:var(--muted);margin:2px 0 8px}
+.addons .r{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:15px}
 .state{text-align:center;padding:40px 20px}
 .state .big{font-size:40px;margin-bottom:10px}
 .state h2{font-size:17px;text-transform:none;letter-spacing:0;color:var(--text);margin-bottom:6px}
@@ -182,6 +186,19 @@ function alreadyState(hit, co){
     `Nothing more to do \u2014 ${esc((co && co.name) || "we")} will be in touch.`, "ok");
 }
 
+/* Add-ons: priced in writing, only done if needed, and only with her OK
+   then. Not in the total and nothing to pick here — so it can't read as a
+   third choice beside the real options. */
+function addOnsBlock(p){
+  const list = (p && p.addOns) || [];
+  if (!list.length) return "";
+  return `<div class="addons"><b>Only if needed</b>
+    <div class="s">Not in the price above. If one of these turns out to be needed,
+      we'll ask you first and you'll sign for it separately.</div>
+    ${list.map(a => `<div class="r"><span>${esc(a.desc)}</span><strong>${esc(money(a.price))}</strong></div>`).join("")}
+  </div>`;
+}
+
 function chooser(d){
   const p = d.payload || {};
   const co = p.company || {};
@@ -214,6 +231,7 @@ function chooser(d){
         <div class="op">${esc(money(o.total))}</div>
       </button>`).join("")}
 
+      ${addOnsBlock(p)}
       <p class="note">Once one of these is approved and signed for, the others
       close off automatically \u2014 so there's no risk of being charged for
       more than the one you pick. Good for ${esc(p.validDays || 30)} days from
@@ -295,6 +313,7 @@ function render(d){
         ${p.taxLabel ? `<tr><td>${esc(p.taxLabel)}</td><td class="n">${esc(money(p.tax))}</td></tr>` : ""}
         <tr class="total"><td>Total</td><td class="n">${esc(money(p.total))}</td></tr>
       </table>
+      ${addOnsBlock(p)}
 
       <p class="note">Good for ${esc(p.validDays || 30)} days from the date above.
       Approving books the work at this price. Anything found once the wall is open
